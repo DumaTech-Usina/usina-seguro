@@ -17,12 +17,15 @@ no adapter correspondente — não em uma camada genérica.
 | Foreign keys | **Desligadas por padrão** | Sempre aplicadas | `PRAGMA foreign_keys = ON` em `sqlite-connection.ts` |
 | Tipagem de coluna | Afinidade dinâmica: aceita string em coluna numérica | Tipagem estrita | `CHECK` constraints explícitos onde a diferença importa |
 | Concorrência | Um escritor por vez; lock no banco inteiro | MVCC, lock por linha | **Ainda não exercitado.** Nenhum requisito atual depende de escrita concorrente |
-| Transação / isolamento | Sem `SERIALIZABLE` real por transação | Níveis de isolamento configuráveis | **Ainda não exercitado.** Ver abaixo |
+| Transação / isolamento | Sem `SERIALIZABLE` real por transação | Níveis de isolamento configuráveis | Atomicidade **exercitada**: `SqliteTransaction` usa `SAVEPOINT` (aninhável, ao contrário de `BEGIN`) e há teste de rollback. Níveis de isolamento continuam não exercitados — ver abaixo |
+| Data de calendário | Não existe tipo nativo | `date` | `AAAA-MM-DD` em `TEXT`; `CalendarDate` no domínio evita fuso |
 
 ## Aberto, deliberadamente
 
-Concorrência e isolamento **não** estão cobertos porque nenhum requisito desta
-foundation escreve de forma concorrente. Isso muda na conciliação (`REQ-080`–`REQ-086`),
+Concorrência e **níveis de isolamento** não estão cobertos porque nenhum requisito
+implementado até aqui escreve de forma concorrente. O que está coberto é a atomicidade
+de uma unidade de trabalho: registrar a apólice grava proposta e apólice juntas
+(`REQ-111`), e o savepoint garante que uma falha no meio não deixe metade escrita. Isso muda na conciliação (`REQ-080`–`REQ-086`),
 onde a idempotência da reimportação (`ITP-007`, `REJ-012`) depende de uma constraint de
 unicidade e do comportamento de `INSERT ... ON CONFLICT`. Quando esse slice chegar, a
 regra de unicidade precisa ser validada **também em PostgreSQL**, não só em SQLite.

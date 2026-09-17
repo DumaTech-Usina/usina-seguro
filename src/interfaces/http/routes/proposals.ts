@@ -35,9 +35,65 @@ const registerProposalSchema: FastifySchema = {
   },
 };
 
+const proposalIdParams = {
+  type: 'object',
+  required: ['id'],
+  properties: { id: { type: 'string' } },
+} as const;
+
+const transmitProposalSchema: FastifySchema = {
+  params: proposalIdParams,
+  body: {
+    type: 'object',
+    required: ['proposalNumber', 'workedCommission'],
+    additionalProperties: false,
+    properties: {
+      proposalNumber: { type: 'string' },
+      // Percentage as a decimal string, for the same reason money is (REQ-121).
+      workedCommission: { type: 'string' },
+    },
+  },
+};
+
+const rejectProposalSchema: FastifySchema = {
+  params: proposalIdParams,
+  body: {
+    type: 'object',
+    required: ['reason'],
+    additionalProperties: false,
+    // Presence only: an empty reason is rejected by the domain (REQ-045).
+    properties: { reason: { type: 'string' } },
+  },
+};
+
+interface ProposalIdParams {
+  id: string;
+}
+
 export function registerProposalRoutes(app: FastifyInstance, useCases: UseCases): void {
   app.post('/proposals', { schema: registerProposalSchema }, async (request, reply) => {
     const output = await useCases.registerProposal.execute(request.body as RegisterProposalInput);
     return reply.code(201).send(output);
+  });
+
+  // FP-01 step 4 (REQ-041): the outcome of transmitting is a change of state on
+  // the proposal, not a new resource, so it answers 200.
+  app.post('/proposals/:id/transmission', { schema: transmitProposalSchema }, async (request) => {
+    const { id } = request.params as ProposalIdParams;
+    const body = request.body as { proposalNumber: string; workedCommission: string };
+
+    return useCases.transmitProposal.execute({
+      proposalId: id,
+      proposalNumber: body.proposalNumber,
+      workedCommission: body.workedCommission,
+    });
+  });
+
+  // FP-01 step 6, refusal branch (REQ-045).
+  app.post('/proposals/:id/rejection', { schema: rejectProposalSchema }, async (request) => {
+    const { id } = request.params as ProposalIdParams;
+    const { reason } = request.body as { reason: string };
+
+    return useCases.rejectProposal.execute({ proposalId: id, reason });
   });
 }

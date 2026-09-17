@@ -6,3 +6,5 @@ coverage/
 *.sqlite-shm
 .env
 data/
+requisitos_refinados.md
+tree.md

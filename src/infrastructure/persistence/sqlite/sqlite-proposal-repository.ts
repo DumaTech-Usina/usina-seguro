@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type { ProposalRepository } from '../../../core/proposal/application/proposal-repository.ts';
 import { Money } from '../../../core/proposal/domain/money.ts';
+import { Percentage } from '../../../core/proposal/domain/percentage.ts';
 import { Proposal, type ProposalStatus } from '../../../core/proposal/domain/proposal.ts';
 
 interface ProposalRow {
@@ -14,6 +15,10 @@ interface ProposalRow {
   net_premium: string;
   registered_at: string;
   status: string;
+  proposal_number: string | null;
+  worked_commission: string | null;
+  transmitted_at: string | null;
+  rejection_reason: string | null;
 }
 
 export class SqliteProposalRepository implements ProposalRepository {
@@ -28,9 +33,15 @@ export class SqliteProposalRepository implements ProposalRepository {
       .prepare(
         `INSERT INTO proposal (
            id, client_id, broker_id, insurer_id, product_id,
-           payment_method_id, customer_accepted, net_premium, registered_at, status
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET status = excluded.status`,
+           payment_method_id, customer_accepted, net_premium, registered_at, status,
+           proposal_number, worked_commission, transmitted_at, rejection_reason
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           status            = excluded.status,
+           proposal_number   = excluded.proposal_number,
+           worked_commission = excluded.worked_commission,
+           transmitted_at    = excluded.transmitted_at,
+           rejection_reason  = excluded.rejection_reason`,
       )
       .run(
         proposal.id,
@@ -44,6 +55,10 @@ export class SqliteProposalRepository implements ProposalRepository {
         proposal.netPremium.toString(),
         proposal.registeredAt.toISOString(),
         proposal.status,
+        proposal.proposalNumber,
+        proposal.workedCommission?.toString() ?? null,
+        proposal.transmittedAt?.toISOString() ?? null,
+        proposal.rejectionReason,
       );
   }
 
@@ -68,7 +83,14 @@ export class SqliteProposalRepository implements ProposalRepository {
         netPremium: Money.fromString(row.net_premium),
         registeredAt: new Date(row.registered_at),
       },
-      row.status as ProposalStatus,
+      {
+        status: row.status as ProposalStatus,
+        proposalNumber: row.proposal_number,
+        workedCommission:
+          row.worked_commission === null ? null : Percentage.fromString(row.worked_commission),
+        transmittedAt: row.transmitted_at === null ? null : new Date(row.transmitted_at),
+        rejectionReason: row.rejection_reason,
+      },
     );
   }
 }

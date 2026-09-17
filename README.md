@@ -6,9 +6,12 @@ Fonte de verdade dos requisitos: [`requisitos_refinados.md`](./requisitos_refina
 Identificadores `REQ-xxx`, `CA-xxx`, `ITP-xxx` e `DEC-xxx` no código referenciam esse
 documento.
 
-> **Estado atual: foundation.** A única capacidade de negócio implementada é o registro
-> de proposta (`REQ-040`), presente para provar que a arquitetura funciona ponta a ponta.
-> Nada além disso foi implementado.
+> **Estado atual: slice `Proposta → Apólice → Parcela`.** O fluxo `FP-01` está
+> implementado até o registro da apólice com suas parcelas: registro da proposta
+> (`REQ-040`), transmissão à seguradora (`REQ-041`), desfecho de recusa (`REQ-045`) e
+> desfecho de aceite, que registra a apólice e as parcelas (`REQ-020`, `REQ-048`,
+> `REQ-049`, `REQ-111`). Comissionamento, conciliação e repasse **não** foram
+> implementados.
 
 ## Idioma
 
@@ -70,17 +73,61 @@ Prova de vida:
 ```bash
 curl http://127.0.0.1:3000/health
 # {"status":"ok"}
+```
 
+Fluxo `FP-01` completo:
+
+```bash
+# 1. Registrar a proposta (REQ-040)
 curl -X POST http://127.0.0.1:3000/proposals -H 'content-type: application/json' -d '{
   "clientId":"client-1","brokerId":"broker-1","insurerId":"insurer-1","productId":"auto",
-  "paymentMethodId":"bank-slip","customerAccepted":true,"netPremium":"1234.56"
+  "paymentMethodId":"bank-slip","customerAccepted":true,"netPremium":"1200.00"
 }'
-# 201 {"id":"...","status":"DRAFT","netPremium":"1234.56","registeredAt":"..."}
+# 201 {"id":"<proposta>","status":"DRAFT","netPremium":"1200.00","registeredAt":"..."}
 
-# Sem aceite do cliente (CA-001): regra e texto traduzido na resposta
+# 2. Transmitir à seguradora, com número e comissão trabalhada (REQ-041)
+curl -X POST http://127.0.0.1:3000/proposals/<proposta>/transmission \
+  -H 'content-type: application/json' \
+  -d '{"proposalNumber":"PRP-9001","workedCommission":"32.5"}'
+# 200 {"status":"TRANSMITTED","proposalNumber":"PRP-9001","workedCommission":"32.5",...}
+
+# 3a. Desfecho recusa: motivo obrigatório (REQ-045)
+curl -X POST http://127.0.0.1:3000/proposals/<proposta>/rejection \
+  -H 'content-type: application/json' -d '{"reason":"perfil de risco"}'
+# 200 {"status":"REJECTED","rejectionReason":"perfil de risco"}
+
+# 3b. Desfecho aceite: registra a apólice e as parcelas (REQ-048, REQ-020)
+curl -X POST http://127.0.0.1:3000/policies -H 'content-type: application/json' -d '{
+  "proposalId":"<proposta>","policyNumber":"APL-4711","premium":"1200.00",
+  "coverageStart":"2026-10-01","coverageEnd":"2027-09-30","renewalDate":"2027-09-30",
+  "installments":[
+    {"number":1,"amount":"600.00","dueDate":"2026-10-10"},
+    {"number":2,"amount":"600.00","dueDate":"2026-11-10"}
+  ]
+}'
+# 201 {"id":"<apolice>","policyNumber":"APL-4711","proposalNumber":"PRP-9001",
+#      "status":"ACTIVE","installments":[{"number":1,...,"status":"PENDING"},...]}
+
+# 4. Consultar: os dois números e o cronograma (CA-008)
+curl http://127.0.0.1:3000/policies/<apolice>
+```
+
+Rejeições, com a regra e o texto traduzido na resposta:
+
+```bash
+# Sem aceite do cliente (CA-001)
 # 422 {"error":"business_rule_violation","rule":"REQ-040",
 #      "messageKey":"proposal.customer_acceptance_required",
 #      "message":"Proposta exige aceite do cliente registrado."}
+
+# Segunda apólice para a mesma proposta (CA-007)
+# 422 {"rule":"REQ-049","message":"Proposta já possui apólice registrada."}
+
+# Apólice a partir de proposta recusada (CA-006)
+# 422 {"rule":"REQ-047","message":"Proposta recusada não origina apólice."}
+
+# Proposta ou apólice inexistente
+# 404 {"error":"not_found","message":"Proposta não encontrada: '...'."}
 ```
 
 ## Testes
@@ -117,9 +164,12 @@ src/
 ├── config/                  # único lugar que lê process.env
 ├── i18n/                    # único lugar com texto em português
 ├── core/                    # agnóstico de infraestrutura
-│   └── proposal/
-│       ├── domain/          # o que é verdade no negócio
-│       └── application/     # como a operação é orquestrada + contratos (ports)
+│   ├── proposal/
+│   │   ├── domain/          # o que é verdade no negócio
+│   │   └── application/     # como a operação é orquestrada + contratos (ports)
+│   └── policy/              # apólice e suas parcelas
+│       ├── domain/
+│       └── application/
 ├── infrastructure/          # implementações dos contratos
 │   └── persistence/{in-memory,sqlite}/
 └── interfaces/http/         # traduz HTTP ↔ caso de uso, nada mais
@@ -143,8 +193,16 @@ composition ─┘        ▲
 `core/` não importa infraestrutura, interfaces, i18n, framework, dependência externa
 **nem builtin do Node**. Isso é garantido por teste
 (`tests/architecture/core-dependencies.test.ts`), que quebra a suíte se alguém violar a
-regra. Por isso `RegisterProposal` recebe `newId` e `now` por injeção: são as duas fontes
+regra. Por isso os casos de uso recebem `newId` e `now` por injeção: são as duas fontes
 de não-determinismo do fluxo e ficam fora do core.
+
+Entre módulos de negócio existe **uma** dependência, `policy → proposal`, declarada e
+verificada pelo mesmo teste: a apólice só existe como desfecho de uma proposta
+(`REQ-048`), então o módulo de apólice carrega a proposta, conduz sua transição para
+`ACCEPTED` (`REQ-111`) e reaproveita o vocabulário que o módulo de proposta já declara
+(`Money`, `BusinessRuleViolation`, `RecordNotFound`). A direção inversa não existe — não
+há ciclo — e não foi criado `core/shared/` para hospedar esse vocabulário porque nenhum
+requisito o justifica.
 
 ### Persistência
 
@@ -162,7 +220,24 @@ ainda não foi exercitado estão em [`SQLITE-NOTES.md`](./SQLITE-NOTES.md).
 
 Valores monetários nunca passam por ponto flutuante binário (`REQ-120`): são `string`
 decimal na fronteira HTTP, `Money` (bigint em centavos) no domínio e `TEXT` no SQLite
-— `NUMERIC` no PostgreSQL.
+— `NUMERIC` no PostgreSQL. O percentual de comissão trabalhada segue a mesma regra por
+`REQ-121`, com um tipo próprio (`Percentage`) que preserva a escala informada em vez de
+arredondá-la para duas casas.
+
+Vigência, data de renovação e vencimento de parcela são **dias de calendário**, não
+instantes: `CalendarDate` guarda `AAAA-MM-DD` sem fuso, para que um vencimento não mude
+de dia conforme onde o processo roda.
+
+Registrar a apólice altera dois agregados por um único fato de negócio (a proposta vira
+`ACCEPTED` e a apólice nasce). Como `REQ-111` amarra os dois e `REQ-112`/`REJ-015`
+proíbem reabrir proposta, uma escrita pela metade deixaria um registro que nenhuma
+operação conserta. Daí o contrato `Transaction`
+(`core/policy/application/transaction.ts`): savepoint no SQLite, transação no
+PostgreSQL, execução direta no InMemory.
+
+Não há framework de migration (decisão da foundation): o `schema.sql` usa
+`CREATE TABLE IF NOT EXISTS`, então um arquivo SQLite criado **antes** deste slice não
+ganha as colunas novas. Em desenvolvimento, apague `./data/usina.sqlite` e deixe recriar.
 
 ## Decisões técnicas
 

@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Money } from '../../src/core/proposal/domain/money.ts';
+import { Percentage } from '../../src/core/proposal/domain/percentage.ts';
 import { Proposal } from '../../src/core/proposal/domain/proposal.ts';
 import { openSqliteConnection } from '../../src/infrastructure/persistence/sqlite/sqlite-connection.ts';
 import { SqliteProposalRepository } from '../../src/infrastructure/persistence/sqlite/sqlite-proposal-repository.ts';
@@ -81,6 +82,66 @@ describe('SqliteProposalRepository', () => {
     const reread = await new SqliteProposalRepository(db).findById('proposal-1');
 
     expect(reread?.netPremium.toString()).toBe('250.00');
+  });
+
+  it('round-trips what the transmission recorded (REQ-041)', async () => {
+    await repository.save(
+      proposal('proposal-1', '1500.75').transmit({
+        proposalNumber: 'PRP-9001',
+        workedCommission: Percentage.fromString('32.5'),
+        transmittedAt: new Date('2026-09-18T09:00:00.000Z'),
+      }),
+    );
+
+    const read = await repository.findById('proposal-1');
+
+    expect(read?.status).toBe('TRANSMITTED');
+    expect(read?.proposalNumber).toBe('PRP-9001');
+    expect(read?.workedCommission?.toString()).toBe('32.5');
+    expect(read?.transmittedAt?.toISOString()).toBe('2026-09-18T09:00:00.000Z');
+  });
+
+  it('stores the commission percentage as exact text, keeping its scale (REQ-121)', async () => {
+    await repository.save(
+      proposal('proposal-1', '1500.75').transmit({
+        proposalNumber: 'PRP-9001',
+        workedCommission: Percentage.fromString('32.500000'),
+        transmittedAt: new Date('2026-09-18T09:00:00.000Z'),
+      }),
+    );
+
+    const row = db
+      .prepare('SELECT typeof(worked_commission) AS type, worked_commission AS value FROM proposal')
+      .get() as { type: string; value: string };
+
+    expect(row.type).toBe('text');
+    expect(row.value).toBe('32.500000');
+  });
+
+  it('overwrites the outcome of a proposal already stored (REQ-045)', async () => {
+    const transmitted = proposal('proposal-1', '1500.75').transmit({
+      proposalNumber: 'PRP-9001',
+      workedCommission: Percentage.fromString('40'),
+      transmittedAt: new Date('2026-09-18T09:00:00.000Z'),
+    });
+    await repository.save(transmitted);
+    await repository.save(transmitted.reject('perfil de risco'));
+
+    const read = await repository.findById('proposal-1');
+
+    expect(read?.status).toBe('REJECTED');
+    expect(read?.rejectionReason).toBe('perfil de risco');
+    expect(read?.proposalNumber).toBe('PRP-9001');
+  });
+
+  it('leaves the insurer-issued columns empty until the transmission', async () => {
+    await repository.save(proposal('proposal-1', '1500.75'));
+
+    const row = db
+      .prepare('SELECT proposal_number, worked_commission, transmitted_at FROM proposal')
+      .get() as Record<string, unknown>;
+
+    expect(row).toEqual({ proposal_number: null, worked_commission: null, transmitted_at: null });
   });
 
   it('enforces the PRIMARY KEY the way PostgreSQL would', async () => {

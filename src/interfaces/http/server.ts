@@ -1,8 +1,9 @@
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { UseCases } from '../../composition-root.ts';
-import { BusinessRuleViolation } from '../../core/proposal/domain/errors.ts';
+import { BusinessRuleViolation, RecordNotFound } from '../../core/proposal/domain/errors.ts';
 import { translate } from '../../i18n/messages.ts';
 import { registerHealthRoute } from './routes/health.ts';
+import { registerPolicyRoutes } from './routes/policies.ts';
 import { registerProposalRoutes } from './routes/proposals.ts';
 
 export interface HttpServerOptions {
@@ -41,6 +42,15 @@ export function createHttpServer(
       });
     }
 
+    // No rule was broken: the record the operation refers to does not exist.
+    if (error instanceof RecordNotFound) {
+      return reply.code(404).send({
+        error: 'not_found',
+        messageKey: error.messageKey,
+        message: translate(error.messageKey, error.params),
+      });
+    }
+
     if (error.validation !== undefined) {
       return reply.code(400).send({ error: 'invalid_request', message: error.message });
     }
@@ -51,6 +61,7 @@ export function createHttpServer(
 
   registerHealthRoute(app);
   registerProposalRoutes(app, useCases);
+  registerPolicyRoutes(app, useCases);
 
   return app;
 }

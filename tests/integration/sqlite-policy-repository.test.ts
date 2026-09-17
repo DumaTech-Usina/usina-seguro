@@ -1,0 +1,219 @@
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { CalendarDate } from '../../src/core/policy/domain/calendar-date.ts';
+import { Installment } from '../../src/core/policy/domain/installment.ts';
+import { Policy } from '../../src/core/policy/domain/policy.ts';
+import { Money } from '../../src/core/proposal/domain/money.ts';
+import { Percentage } from '../../src/core/proposal/domain/percentage.ts';
+import { Proposal } from '../../src/core/proposal/domain/proposal.ts';
+import { openSqliteConnection } from '../../src/infrastructure/persistence/sqlite/sqlite-connection.ts';
+import { SqlitePolicyRepository } from '../../src/infrastructure/persistence/sqlite/sqlite-policy-repository.ts';
+import { SqliteProposalRepository } from '../../src/infrastructure/persistence/sqlite/sqlite-proposal-repository.ts';
+import { SqliteTransaction } from '../../src/infrastructure/persistence/sqlite/sqlite-transaction.ts';
+
+let directory: string;
+let file: string;
+let db: DatabaseSync;
+let proposals: SqliteProposalRepository;
+let policies: SqlitePolicyRepository;
+
+beforeEach(async () => {
+  directory = mkdtempSync(path.join(tmpdir(), 'usina-policy-'));
+  file = path.join(directory, 'usina.sqlite');
+  db = openSqliteConnection(file);
+  proposals = new SqliteProposalRepository(db);
+  policies = new SqlitePolicyRepository(db);
+  await proposals.save(transmittedProposal());
+});
+
+afterEach(() => {
+  db.close();
+  rmSync(directory, { recursive: true, force: true });
+});
+
+function transmittedProposal(): Proposal {
+  return Proposal.register({
+    id: 'proposal-1',
+    clientId: 'client-1',
+    brokerId: 'broker-1',
+    insurerId: 'insurer-1',
+    productId: 'product-1',
+    paymentMethodId: 'bank-slip',
+    customerAccepted: true,
+    netPremium: Money.fromString('1200.00'),
+    registeredAt: new Date('2026-09-17T12:00:00.000Z'),
+  }).transmit({
+    proposalNumber: 'PRP-9001',
+    workedCommission: Percentage.fromString('32.5'),
+    transmittedAt: new Date('2026-09-18T09:00:00.000Z'),
+  });
+}
+
+function policy(id = 'policy-1', proposalId = 'proposal-1', amounts = ['0.10', '0.20']): Policy {
+  return Policy.register({
+    id,
+    proposalId,
+    policyNumber: 'APL-4711',
+    premium: Money.fromString('1200.00'),
+    coverageStart: CalendarDate.fromString('2026-10-01'),
+    coverageEnd: CalendarDate.fromString('2027-09-30'),
+    renewalDate: CalendarDate.fromString('2027-09-30'),
+    registeredAt: new Date('2026-09-20T10:00:00.000Z'),
+    installments: amounts.map((amount, index) =>
+      Installment.create({
+        id: `${id}-installment-${index + 1}`,
+        policyId: id,
+        number: index + 1,
+        amount: Money.fromString(amount),
+        dueDate: CalendarDate.fromString(`2026-10-1${index}`),
+      }),
+    ),
+  });
+}
+
+describe('SqlitePolicyRepository', () => {
+  it('stores and restores the policy with its schedule', async () => {
+    await policies.save(policy());
+
+    const read = await policies.findById('policy-1');
+
+    expect(read?.policyNumber).toBe('APL-4711');
+    expect(read?.proposalId).toBe('proposal-1');
+    expect(read?.status).toBe('ACTIVE');
+    expect(read?.premium.toString()).toBe('1200.00');
+    expect(read?.coverageStart.toString()).toBe('2026-10-01');
+    expect(read?.coverageEnd.toString()).toBe('2027-09-30');
+    expect(read?.renewalDate.toString()).toBe('2027-09-30');
+    expect(read?.registeredAt.toISOString()).toBe('2026-09-20T10:00:00.000Z');
+    expect(read?.installments.map((item) => item.number)).toEqual([1, 2]);
+    expect(read?.installments.map((item) => item.status)).toEqual(['PENDING', 'PENDING']);
+  });
+
+  it('returns the schedule in order regardless of insertion order', async () => {
+    await policies.save(policy('policy-1', 'proposal-1', ['10.00', '20.00', '30.00']));
+
+    const read = await policies.findById('policy-1');
+
+    expect(read?.installments.map((item) => item.amount.toString())).toEqual([
+      '10.00',
+      '20.00',
+      '30.00',
+    ]);
+  });
+
+  it('returns null for an unknown id', async () => {
+    expect(await policies.findById('does-not-exist')).toBeNull();
+  });
+
+  it('stores premium and installment amounts as exact text, never as REAL (REQ-120)', async () => {
+    await policies.save(policy('policy-1', 'proposal-1', ['0.10', '9007199254740993.99']));
+
+    const types = db
+      .prepare('SELECT typeof(amount) AS type, amount FROM installment ORDER BY number')
+      .all() as Array<{ type: string; amount: string }>;
+
+    expect(types.map((row) => row.type)).toEqual(['text', 'text']);
+    expect(types[1]?.amount).toBe('9007199254740993.99');
+    expect(
+      (db.prepare('SELECT typeof(premium) AS type FROM policy').get() as { type: string }).type,
+    ).toBe('text');
+  });
+
+  it('keeps calendar dates as plain days, with no time zone attached', async () => {
+    await policies.save(policy());
+
+    const row = db.prepare('SELECT coverage_start, renewal_date FROM policy').get() as {
+      coverage_start: string;
+      renewal_date: string;
+    };
+
+    expect(row.coverage_start).toBe('2026-10-01');
+    expect(row.renewal_date).toBe('2027-09-30');
+  });
+
+  it('enforces one policy per proposal the way PostgreSQL would (REQ-049)', async () => {
+    await policies.save(policy());
+
+    // Raw insert: the domain guard is not in the way, the constraint must be.
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO policy (id, proposal_id, policy_number, premium,
+             coverage_start, coverage_end, renewal_date, registered_at, status)
+           VALUES ('policy-2', 'proposal-1', 'APL-9', '1.00',
+             '2026-10-01', '2027-09-30', '2027-09-30', '2026-09-20T10:00:00.000Z', 'ACTIVE')`,
+        )
+        .run(),
+    ).toThrow(/UNIQUE constraint failed/);
+  });
+
+  it('refuses an installment pointing at a policy that does not exist', async () => {
+    // Foreign keys are off by default in SQLite; the connection turns them on.
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO installment (id, policy_id, number, amount, due_date, status)
+           VALUES ('x', 'ghost-policy', 1, '1.00', '2026-10-10', 'PENDING')`,
+        )
+        .run(),
+    ).toThrow(/FOREIGN KEY constraint failed/);
+  });
+
+  it('writes the policy and its schedule atomically', async () => {
+    // Restored, not registered: the domain guards are bypassed on purpose so
+    // the second installment row breaks the CHECK constraint after the policy
+    // row is already written.
+    const valid = policy();
+    const broken = Policy.restore(
+      {
+        ...valid,
+        installments: [
+          valid.installments[0] as Installment,
+          Installment.restore(
+            {
+              id: 'policy-1-installment-2',
+              policyId: 'policy-1',
+              number: 0,
+              amount: Money.fromString('20.00'),
+              dueDate: CalendarDate.fromString('2026-11-10'),
+            },
+            'PENDING',
+          ),
+        ],
+      },
+      'ACTIVE',
+    );
+
+    await expect(policies.save(broken)).rejects.toThrow(/CHECK constraint failed/);
+
+    expect(db.prepare('SELECT count(*) AS n FROM policy').get()).toEqual({ n: 0 });
+    expect(db.prepare('SELECT count(*) AS n FROM installment').get()).toEqual({ n: 0 });
+  });
+
+  it('rolls back both aggregates when a unit of work fails', async () => {
+    const transaction = new SqliteTransaction(db);
+
+    await expect(
+      transaction.run(async () => {
+        await policies.save(policy());
+        throw new Error('something failed after the policy was written');
+      }),
+    ).rejects.toThrow('something failed after the policy was written');
+
+    expect(await policies.findById('policy-1')).toBeNull();
+    expect(db.prepare('SELECT count(*) AS n FROM installment').get()).toEqual({ n: 0 });
+  });
+
+  it('keeps the data after closing and reopening the connection', async () => {
+    await policies.save(policy());
+    db.close();
+
+    db = openSqliteConnection(file);
+    const reread = await new SqlitePolicyRepository(db).findById('policy-1');
+
+    expect(reread?.installments).toHaveLength(2);
+  });
+});

@@ -77,10 +77,15 @@ describe('core dependency rule', () => {
       }
     }
 
-    // There is a single module today. This test documents the boundary: when a
-    // real crossing appears it must be added here explicitly, together with the
-    // requirement that justifies it.
-    expect(crossings).toEqual([]);
+    // Crossings are allowed only when a requirement forces them, and each one
+    // is listed here with its justification.
+    //
+    // `policy -> proposal`: a policy only exists as the outcome of a proposal
+    // (REQ-048), so the policy module loads the proposal, drives its transition
+    // to ACCEPTED (REQ-111) and reuses the vocabulary the proposal module
+    // already declares (`Money`, `BusinessRuleViolation`, `RecordNotFound`).
+    // The reverse direction does not exist, so there is no cycle.
+    expect([...new Set(crossings)].sort()).toEqual(['policy -> proposal']);
   });
 
   it('the domain builds every violation from the message-key constant, never a literal', async () => {
@@ -94,14 +99,16 @@ describe('core dependency rule', () => {
         /new BusinessRuleViolation\(\s*[^,]+,\s*([^,)]+)/g,
       )) {
         const argument = (call[1] as string).trim();
-        if (!argument.startsWith('PROPOSAL_MESSAGES.')) {
+        if (!/^[A-Z][A-Z_]*_MESSAGES\./.test(argument)) {
           literals.push(`${path.relative(ROOT, file)}: ${argument}`);
         }
       }
     }
 
-    // The type system already forbids an arbitrary string here. This test keeps
-    // the guarantee if the constructor signature is ever widened.
+    // `BusinessRuleViolation.messageKey` is typed as `string`, because a union
+    // over every module's keys would make the modules import each other in a
+    // circle. This test is what replaces the narrow type inside the core; the
+    // i18n dictionary is what guarantees the key is translated.
     expect(literals).toEqual([]);
   });
 
