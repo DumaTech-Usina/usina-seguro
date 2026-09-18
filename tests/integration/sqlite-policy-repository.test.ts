@@ -150,6 +150,38 @@ describe('SqlitePolicyRepository', () => {
     ).toThrow(/UNIQUE constraint failed/);
   });
 
+  it('enforces one policy per policy number the way PostgreSQL would (REQ-082)', async () => {
+    await policies.save(policy());
+
+    // Raw insert: the use case refuses it first, the constraint is what holds
+    // if anything ever reaches the table around it. REQ-082 makes this number
+    // the conciliation key, so it has to identify one policy.
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO policy (id, proposal_id, policy_number, premium,
+             coverage_start, coverage_end, renewal_date, registered_at, status)
+           VALUES ('policy-2', 'proposal-2', 'APL-4711', '1.00',
+             '2026-10-01', '2027-09-30', '2027-09-30', '2026-09-20T10:00:00.000Z', 'ACTIVE')`,
+        )
+        .run(),
+    ).toThrow(/UNIQUE constraint failed/);
+  });
+
+  it('round-trips who confirmed the receipt of an installment and when (REQ-123)', async () => {
+    const confirmedAt = new Date('2026-10-11T12:00:00.000Z');
+    await policies.save(policy().payInstallment(1, { userId: 'financeiro-1', at: confirmedAt }));
+
+    const stored = await policies.findById('policy-1');
+    const first = stored?.installments[0];
+
+    expect(first?.status).toBe('PAID');
+    expect(first?.confirmation?.userId).toBe('financeiro-1');
+    expect(first?.confirmation?.at.toISOString()).toBe(confirmedAt.toISOString());
+    // The installment nobody confirmed carries no confirmation.
+    expect(stored?.installments[1]?.confirmation).toBeNull();
+  });
+
   it('refuses an installment pointing at a policy that does not exist', async () => {
     // Foreign keys are off by default in SQLite; the connection turns them on.
     expect(() =>

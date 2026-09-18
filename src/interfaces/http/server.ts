@@ -2,6 +2,7 @@ import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { UseCases } from '../../composition-root.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../../core/proposal/domain/errors.ts';
 import { translate } from '../../i18n/messages.ts';
+import { registerWebInterface } from '../web/web.ts';
 import { registerCommissionRoutes } from './routes/commissions.ts';
 import { registerHealthRoute } from './routes/health.ts';
 import { registerPolicyRoutes } from './routes/policies.ts';
@@ -71,6 +72,11 @@ export function createHttpServer(
     app.log.error(error);
     return reply.code(500).send({ error: 'internal_error' });
   });
+
+  // The operator's pages, under `/app/`. They consume the routes below over
+  // HTTP like any other client, so nothing about the API changes because they
+  // exist.
+  registerWebInterface(app);
 
   registerHealthRoute(app);
   registerProposalRoutes(app, useCases);

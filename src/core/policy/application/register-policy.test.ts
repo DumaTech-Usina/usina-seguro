@@ -102,8 +102,25 @@ describe('RegisterPolicy', () => {
       registeredAt: NOW.toISOString(),
     });
     expect(output.installments).toEqual([
-      { id: 'id-2', number: 1, amount: '600.00', dueDate: '2026-10-10', status: 'PENDING' },
-      { id: 'id-3', number: 2, amount: '600.00', dueDate: '2026-11-10', status: 'PENDING' },
+      {
+        id: 'id-2',
+        number: 1,
+        amount: '600.00',
+        dueDate: '2026-10-10',
+        status: 'PENDING',
+        // REQ-123: nobody has confirmed a receipt yet (IN-13).
+        confirmedBy: null,
+        confirmedAt: null,
+      },
+      {
+        id: 'id-3',
+        number: 2,
+        amount: '600.00',
+        dueDate: '2026-11-10',
+        status: 'PENDING',
+        confirmedBy: null,
+        confirmedAt: null,
+      },
     ]);
   });
 
@@ -152,6 +169,48 @@ describe('RegisterPolicy', () => {
     } catch (error) {
       expect((error as BusinessRuleViolation).rule).toBe('REQ-049');
     }
+  });
+
+  it('does not register a policy number another policy already uses (REQ-082, CA-018)', async () => {
+    const { proposals, policies, useCase } = scenario();
+    await proposals.save(transmitted());
+    await useCase.execute(input());
+
+    // A second business, with its own proposal, reusing the same number: the
+    // report line of FP-02 would no longer say which policy it belongs to.
+    const second = Proposal.register({
+      id: 'proposal-2',
+      clientId: 'client-2',
+      brokerId: 'broker-1',
+      insurerId: 'insurer-1',
+      productId: 'product-1',
+      paymentMethodId: 'bank-slip',
+      customerAccepted: true,
+      netPremium: Money.fromString('900.00'),
+      registeredAt: new Date('2026-09-17T12:00:00.000Z'),
+    }).transmit({
+      proposalNumber: 'PRP-9002',
+      workedCommission: Percentage.fromString('40'),
+      transmittedAt: new Date('2026-09-18T09:00:00.000Z'),
+    });
+    await proposals.save(second);
+
+    await expect(
+      useCase.execute(input({ proposalId: 'proposal-2', policyNumber: 'APL-4711' })),
+    ).rejects.toThrow(BusinessRuleViolation);
+
+    expect(await policies.findByProposalId('proposal-2')).toBeNull();
+    // REQ-112: the refused registration leaves the proposal where it was.
+    expect((await proposals.findById('proposal-2'))?.status).toBe('TRANSMITTED');
+  });
+
+  it('stores the policy number trimmed, so the conciliation key matches (REQ-082)', async () => {
+    const { proposals, policies, useCase } = scenario();
+    await proposals.save(transmitted());
+
+    await useCase.execute(input({ policyNumber: '  APL-4711  ' }));
+
+    expect(await policies.findByPolicyNumber('APL-4711')).not.toBeNull();
   });
 
   it('does not create a policy for a proposal that was never transmitted', async () => {

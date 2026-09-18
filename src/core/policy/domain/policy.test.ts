@@ -127,19 +127,28 @@ describe('Policy.register', () => {
 });
 
 describe('Policy.payInstallment', () => {
+  const confirmation = { userId: 'financeiro-1', at: new Date('2026-10-11T12:00:00.000Z') };
+
   function scheduled(): Policy {
     return Policy.register(validData({ installments: [installment(1), installment(2)] }));
   }
 
   it('confirms one installment of the schedule (IN-13)', () => {
-    const policy = scheduled().payInstallment(1);
+    const policy = scheduled().payInstallment(1, confirmation);
 
     expect(policy.installments[0]?.status).toBe('PAID');
     expect(policy.isFirstInstallmentPaid).toBe(true);
   });
 
+  it('carries the user and the moment of the confirmation (REQ-123)', () => {
+    const policy = scheduled().payInstallment(1, confirmation);
+
+    expect(policy.installments[0]?.confirmation?.userId).toBe('financeiro-1');
+    expect(policy.installments[0]?.confirmation?.at).toBe(confirmation.at);
+  });
+
   it('leaves the other installments untouched', () => {
-    const policy = scheduled().payInstallment(1);
+    const policy = scheduled().payInstallment(1, confirmation);
 
     expect(policy.installments[1]?.status).toBe('PENDING');
   });
@@ -149,10 +158,10 @@ describe('Policy.payInstallment', () => {
 
     expect(policy.isFirstInstallmentPaid).toBe(false);
     // A later installment paid does not release the transfer of REQ-091.
-    expect(policy.payInstallment(2).isFirstInstallmentPaid).toBe(false);
+    expect(policy.payInstallment(2, confirmation).isFirstInstallmentPaid).toBe(false);
   });
 
   it('reports an installment that is not in the schedule', () => {
-    expect(() => scheduled().payInstallment(99)).toThrow(RecordNotFound);
+    expect(() => scheduled().payInstallment(99, confirmation)).toThrow(RecordNotFound);
   });
 });

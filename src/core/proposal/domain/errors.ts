@@ -13,6 +13,7 @@ export const PROPOSAL_MESSAGES = {
   FIELD_REQUIRED: 'proposal.field_required',
   NET_PREMIUM_MUST_BE_POSITIVE: 'proposal.net_premium_must_be_positive',
   PROPOSAL_NUMBER_REQUIRED: 'proposal.proposal_number_required',
+  PROPOSAL_NUMBER_ALREADY_REGISTERED: 'proposal.proposal_number_already_registered',
   ONLY_DRAFT_CAN_BE_TRANSMITTED: 'proposal.only_draft_can_be_transmitted',
   ONLY_TRANSMITTED_CAN_BE_REJECTED: 'proposal.only_transmitted_can_be_rejected',
   REJECTION_REASON_REQUIRED: 'proposal.rejection_reason_required',

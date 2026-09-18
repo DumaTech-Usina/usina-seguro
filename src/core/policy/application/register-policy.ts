@@ -1,7 +1,12 @@
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
-import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
+import {
+  BusinessRuleViolation,
+  PROPOSAL_MESSAGES,
+  RecordNotFound,
+} from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { CalendarDate } from '../domain/calendar-date.ts';
+import { POLICY_MESSAGES } from '../domain/errors.ts';
 import { Installment } from '../domain/installment.ts';
 import { Policy } from '../domain/policy.ts';
 import type { AgreedCommissionCalculator } from './agreed-commission-calculator.ts';
@@ -67,6 +72,21 @@ export class RegisterPolicy {
     }
 
     const accepted = proposal.accept();
+
+    // REQ-082, CA-018: the conciliation key is the policy number, so it has to
+    // identify one policy. Without this, a report line naming a number two
+    // policies share is credited to whichever one the repository answers with.
+    // The check is here and not in `Policy.register` because it needs the
+    // other policies, which the aggregate cannot see.
+    const policyNumber = input.policyNumber.trim();
+    const registered = await this.deps.policies.findByPolicyNumber(policyNumber);
+
+    if (registered !== null) {
+      throw new BusinessRuleViolation('REQ-082', POLICY_MESSAGES.POLICY_NUMBER_ALREADY_REGISTERED, {
+        policyNumber,
+      });
+    }
+
     const policyId = this.deps.newId();
 
     const policy = Policy.register({

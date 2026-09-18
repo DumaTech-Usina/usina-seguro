@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Novo negócio — Usina do Seguro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/app/shared/base.css" />
+    <link rel="stylesheet" href="/app/proposals/new.css" />
+  </head>
+  <body class="shell" data-nav="proposals-new">
+    <main class="content">
+      <div class="content__inner">
+        <div class="page-head">
+          <div class="page-head__text">
+            <h1 class="text-display">Novo negócio</h1>
+            <p class="text-muted">
+              FP-01: registro da proposta, transmissão à seguradora e desfecho.
+            </p>
+          </div>
+        </div>
+
+        <section class="card">
+          <!-- Stepper: o passo corrente é marcado por new.js. -->
+          <div class="stepper" id="stepper">
+            <div class="step" data-step="1" data-state="current">
+              <span class="step__bullet">1</span>
+              <span>Proposta</span>
+            </div>
+            <div class="step__connector"></div>
+            <div class="step" data-step="2">
+              <span class="step__bullet">2</span>
+              <span>Transmissão</span>
+            </div>
+            <div class="step__connector"></div>
+            <div class="step" data-step="3">
+              <span class="step__bullet">3</span>
+              <span>Desfecho</span>
+            </div>
+          </div>
+        </section>
+
+        <!-- ------------------------------------------------ passo 1 -- -->
+        <section class="card" data-panel="1">
+          <div class="card__header">
+            <span class="material-symbols-outlined">description</span>
+            <h2 class="text-title">Dados da proposta</h2>
+          </div>
+          <form id="form-proposal">
+            <div class="card__body stack">
+              <div class="banner">
+                <span class="material-symbols-outlined">info</span>
+                <div class="banner__text">
+                  Cliente, corretor, seguradora e produto são informados por
+                  identificador: os cadastros de IN-01 ainda não fazem parte do sistema.
+                  Use os mesmos identificadores dos cadastros financeiros.
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div class="field">
+                  <input class="field__input" name="clientId" placeholder=" " required />
+                  <label class="field__label">Cliente</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="brokerId" placeholder=" " required />
+                  <label class="field__label">Corretor</label>
+                  <span class="field__hint">Define a tabela de comissão aplicada.</span>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="insurerId" placeholder=" " required />
+                  <label class="field__label">Seguradora</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="productId" placeholder=" " required />
+                  <label class="field__label">Produto / ramo</label>
+                  <span class="field__hint">
+                    Com a seguradora, seleciona o acordo comercial vigente.
+                  </span>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="paymentMethodId" placeholder=" " required />
+                  <label class="field__label">Forma de pagamento</label>
+                  <span class="field__hint">
+                    O mesmo identificador da regra de liberação cadastrada.
+                  </span>
+                </div>
+                <div class="field">
+                  <input
+                    class="field__input"
+                    name="netPremium"
+                    placeholder=" "
+                    inputmode="decimal"
+                    pattern="\d+(\.\d{1,2})?"
+                    required
+                  />
+                  <label class="field__label">Prêmio líquido</label>
+                  <span class="field__hint">Decimal com ponto, ex.: 1200.00</span>
+                </div>
+              </div>
+
+              <label class="switch">
+                <input type="checkbox" name="customerAccepted" />
+                <span>
+                  <strong>Aceite do cliente registrado</strong>
+                  <span class="text-muted"> — sem ele a proposta não existe.</span>
+                </span>
+              </label>
+            </div>
+            <div class="card__footer">
+              <button class="btn btn--filled" type="submit">Registrar proposta</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- ------------------------------------------------ passo 2 -- -->
+        <section class="card hidden" data-panel="2">
+          <div class="card__header">
+            <span class="material-symbols-outlined">send</span>
+            <h2 class="text-title">Transmissão à seguradora</h2>
+            <div class="card__header-actions" id="proposal-chip"></div>
+          </div>
+          <form id="form-transmission">
+            <div class="card__body stack">
+              <div class="form-grid">
+                <div class="field">
+                  <input class="field__input" name="proposalNumber" placeholder=" " required />
+                  <label class="field__label">Número da proposta</label>
+                  <span class="field__hint">Emitido pela seguradora.</span>
+                </div>
+                <div class="field">
+                  <input
+                    class="field__input"
+                    name="workedCommission"
+                    placeholder=" "
+                    inputmode="decimal"
+                    pattern="\d+(\.\d+)?"
+                    required
+                  />
+                  <label class="field__label">Comissão trabalhada (%)</label>
+                  <span class="field__hint">Informada no ato da transmissão.</span>
+                </div>
+              </div>
+            </div>
+            <div class="card__footer">
+              <button class="btn btn--filled" type="submit">Transmitir</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- ------------------------------------------------ passo 3 -- -->
+        <section class="card hidden" data-panel="3">
+          <div class="card__header">
+            <span class="material-symbols-outlined">fork_right</span>
+            <h2 class="text-title">Desfecho informado pela seguradora</h2>
+            <div class="card__header-actions" id="transmission-chip"></div>
+          </div>
+          <div class="card__body stack">
+            <div class="outcome-switch" role="tablist" aria-label="Desfecho">
+              <button class="outcome-switch__option" data-outcome="accept" role="tab" aria-selected="true">
+                <span class="material-symbols-outlined">task_alt</span>
+                Aceite — registrar apólice
+              </button>
+              <button class="outcome-switch__option" data-outcome="reject" role="tab" aria-selected="false">
+                <span class="material-symbols-outlined">block</span>
+                Recusa — registrar motivo
+              </button>
+            </div>
+
+            <!-- Aceite -->
+            <form id="form-policy">
+              <div class="stack">
+                <div class="form-grid">
+                  <div class="field">
+                    <input class="field__input" name="policyNumber" placeholder=" " required />
+                    <label class="field__label">Número da apólice</label>
+                    <span class="field__hint">Pode coincidir ou não com o da proposta.</span>
+                  </div>
+                  <div class="field">
+                    <input
+                      class="field__input"
+                      name="premium"
+                      placeholder=" "
+                      inputmode="decimal"
+                      pattern="\d+(\.\d{1,2})?"
+                      required
+                    />
+                    <label class="field__label">Prêmio da apólice</label>
+                    <span class="field__hint">Base do cálculo da comissão.</span>
+                  </div>
+                </div>
+                <div class="form-grid form-grid--three">
+                  <div class="field">
+                    <input class="field__input" type="date" name="coverageStart" required />
+                    <label class="field__label">Início da vigência</label>
+                  </div>
+                  <div class="field">
+                    <input class="field__input" type="date" name="coverageEnd" required />
+                    <label class="field__label">Fim da vigência</label>
+                  </div>
+                  <div class="field">
+                    <input class="field__input" type="date" name="renewalDate" required />
+                    <label class="field__label">Data de renovação</label>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="row row--between" style="margin-bottom: var(--space-3)">
+                    <span class="text-label">Cronograma de parcelas</span>
+                    <button class="btn btn--sm btn--outlined" type="button" id="add-installment">
+                      <span class="material-symbols-outlined">add</span>
+                      Adicionar parcela
+                    </button>
+                  </div>
+                  <div class="installments" id="installments"></div>
+                  <p class="text-muted" id="installments-total" style="margin-top: var(--space-3)"></p>
+                </div>
+              </div>
+              <div class="card__footer" style="margin: var(--space-6) calc(var(--space-6) * -1) calc(var(--space-6) * -1)">
+                <button class="btn btn--filled" type="submit">Registrar apólice</button>
+              </div>
+            </form>
+
+            <!-- Recusa -->
+            <form id="form-rejection" class="hidden">
+              <div class="stack">
+                <div class="banner banner--warning">
+                  <span class="material-symbols-outlined">warning</span>
+                  <div class="banner__text">
+                    A recusa encerra o ciclo comercial da proposta e é definitiva. O
+                    registro permanece consultável.
+                  </div>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="reason" placeholder=" " required />
+                  <label class="field__label">Motivo da recusa</label>
+                  <span class="field__hint">Obrigatório.</span>
+                </div>
+              </div>
+              <div class="card__footer" style="margin: var(--space-6) calc(var(--space-6) * -1) calc(var(--space-6) * -1)">
+                <button class="btn btn--filled" type="submit">Registrar recusa</button>
+              </div>
+            </form>
+          </div>
+        </section>
+
+        <!-- ---------------------------------------------- conclusão -- -->
+        <section class="card hidden" data-panel="done">
+          <div class="card__body" id="done-body"></div>
+        </section>
+      </div>
+    </main>
+
+    <script type="module" src="/app/shared/shell.js"></script>
+    <script type="module" src="/app/proposals/new.js"></script>
+  </body>
+</html>

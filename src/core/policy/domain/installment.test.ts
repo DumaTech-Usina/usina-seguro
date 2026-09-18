@@ -47,24 +47,40 @@ describe('Installment.create', () => {
   });
 
   describe('pay', () => {
+    const confirmation = { userId: 'financeiro-1', at: new Date('2026-10-11T12:00:00.000Z') };
+
     it('records the manual confirmation that the client paid (IN-13, REQ-092)', () => {
-      const paid = Installment.create(validData()).pay();
+      const paid = Installment.create(validData()).pay(confirmation);
 
       expect(paid.status).toBe('PAID');
       expect(paid.isPaid).toBe(true);
     });
 
+    it('records who confirmed the receipt and when (REQ-123, IN-13)', () => {
+      const paid = Installment.create(validData()).pay(confirmation);
+
+      expect(paid.confirmation?.userId).toBe('financeiro-1');
+      expect(paid.confirmation?.at).toBe(confirmation.at);
+    });
+
+    it('is rejected without the user who confirmed it (REQ-123)', () => {
+      expect(() => Installment.create(validData()).pay({ ...confirmation, userId: '  ' })).toThrow(
+        BusinessRuleViolation,
+      );
+    });
+
     it('leaves the original untouched', () => {
       const installment = Installment.create(validData());
-      installment.pay();
+      installment.pay(confirmation);
 
       expect(installment.status).toBe('PENDING');
+      expect(installment.confirmation).toBeNull();
     });
 
     it('refuses a second confirmation (REQ-124)', () => {
-      const paid = Installment.create(validData()).pay();
+      const paid = Installment.create(validData()).pay(confirmation);
 
-      expect(() => paid.pay()).toThrow(BusinessRuleViolation);
+      expect(() => paid.pay(confirmation)).toThrow(BusinessRuleViolation);
     });
   });
 });

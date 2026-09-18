@@ -51,6 +51,41 @@ describe('TransmitProposal', () => {
     expect(persisted?.workedCommission?.toString()).toBe('32.5');
   });
 
+  it('does not record a proposal number another proposal already uses (REQ-082, CA-019)', async () => {
+    const { proposals, useCase } = scenario();
+    await proposals.save(draft());
+    await useCase.execute({
+      proposalId: 'proposal-1',
+      proposalNumber: 'PRP-9001',
+      workedCommission: '32.5',
+    });
+
+    const second = Proposal.register({
+      id: 'proposal-2',
+      clientId: 'client-2',
+      brokerId: 'broker-1',
+      insurerId: 'insurer-1',
+      productId: 'product-1',
+      paymentMethodId: 'bank-slip',
+      customerAccepted: true,
+      netPremium: Money.fromString('1000.00'),
+      registeredAt: new Date('2026-09-17T12:00:00.000Z'),
+    });
+    await proposals.save(second);
+
+    // CA-019 reaches the policy through this number: two proposals sharing it
+    // would make the report line point at either one.
+    await expect(
+      useCase.execute({
+        proposalId: 'proposal-2',
+        proposalNumber: 'PRP-9001',
+        workedCommission: '32.5',
+      }),
+    ).rejects.toThrow(BusinessRuleViolation);
+
+    expect((await proposals.findById('proposal-2'))?.status).toBe('DRAFT');
+  });
+
   it('reports an unknown proposal as not found, not as a rule violation', async () => {
     const { useCase } = scenario();
 

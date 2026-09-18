@@ -41,6 +41,8 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'proposal.net_premium_must_be_positive': 'Prêmio líquido da proposta deve ser positivo.',
     'proposal.proposal_number_required':
       'Transmissão exige o número da proposta emitido pela seguradora.',
+    'proposal.proposal_number_already_registered':
+      "Número de proposta '{proposalNumber}' já registrado em outra proposta.",
     'proposal.only_draft_can_be_transmitted':
       'Somente proposta em rascunho pode ser transmitida. Estado atual: {status}.',
     'proposal.only_transmitted_can_be_rejected':
@@ -56,6 +58,8 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'percentage.invalid_format': "Percentual inválido: '{value}'. Use string decimal, ex.: '32.5'.",
     'percentage.out_of_range': "Percentual fora da faixa de 0 a 100: '{value}'.",
     'policy.policy_number_required': 'Apólice exige número de apólice.',
+    'policy.policy_number_already_registered':
+      "Número de apólice '{policyNumber}' já registrado em outra apólice.",
     'policy.premium_must_be_positive': 'Prêmio da apólice deve ser positivo.',
     'policy.coverage_end_must_follow_start':
       'Fim da vigência ({end}) deve ser posterior ao início ({start}).',
@@ -69,6 +73,8 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'policy.installment_not_found': "Parcela {number} não encontrada na apólice '{policyNumber}'.",
     'policy.only_pending_can_be_paid':
       'Somente parcela pendente pode ser confirmada como paga. Parcela {number} está {status}.',
+    'policy.payment_confirmation_user_required':
+      'Confirmação de pagamento da parcela {number} exige a identificação do usuário.',
 
     'commission.agreement_field_required': 'Acordo comercial exige o campo {field}.',
     'commission.intermediary_required':

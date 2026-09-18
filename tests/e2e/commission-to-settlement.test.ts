@@ -90,7 +90,12 @@ async function seedRegistries(): Promise<void> {
 interface PolicyBody {
   id: string;
   policyNumber: string;
-  installments: readonly { number: number; status: string }[];
+  installments: readonly {
+    number: number;
+    status: string;
+    confirmedBy: string | null;
+    confirmedAt: string | null;
+  }[];
 }
 
 interface CommissionBody {
@@ -251,12 +256,22 @@ describe('financial journey held by a bank slip', () => {
     });
   });
 
+  it('refuses a receipt confirmation that does not say who made it (REQ-123)', async () => {
+    const response = await post(`/policies/${policy.id}/installments/1/payment`, { userId: '  ' });
+
+    expect(response.status).toBe(422);
+    expect(await json(response)).toMatchObject({ rule: 'REQ-123' });
+  });
+
   it('releases once the client pays the first installment (IN-13, REQ-092)', async () => {
     const paid = await json<PolicyBody>(
-      await post(`/policies/${policy.id}/installments/1/payment`),
+      await post(`/policies/${policy.id}/installments/1/payment`, { userId: 'financeiro-1' }),
     );
     expect(paid.installments[0]?.status).toBe('PAID');
     expect(paid.installments[1]?.status).toBe('PENDING');
+    // REQ-123: the confirmation that releases the transfer says who and when.
+    expect(paid.installments[0]?.confirmedBy).toBe('financeiro-1');
+    expect(paid.installments[0]?.confirmedAt).not.toBeNull();
 
     const settlement = await json<SettlementBody>(
       await post(`/policies/${policy.id}/settlement/release`),

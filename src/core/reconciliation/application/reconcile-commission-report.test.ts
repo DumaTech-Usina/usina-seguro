@@ -207,6 +207,24 @@ describe('ReconcileCommissionReport', () => {
     expect(second.reconciled).toBe(0);
   });
 
+  it('does not open a second pendency for the same line (CA-021, EX-05, OUT-06)', async () => {
+    const { proposals, policies, commissions, pendencies, useCase } = scenario();
+    await registeredPolicy(proposals, policies, commissions);
+
+    const report = {
+      competence: '2026-10',
+      lines: [{ policyNumber: 'APL-999', proposalNumber: 'PRP-999', producerCommission: '12.34' }],
+    };
+
+    await useCase.execute(report);
+    const second = await useCase.execute(report);
+
+    // The line is still pending: nothing matched it this time either.
+    expect(second.lines[0]?.outcome).toBe('PENDING');
+    // But OUT-06 shows one pendency to work through, not one per import.
+    expect(await pendencies.listOpen()).toHaveLength(1);
+  });
+
   it('carries on past a divergent line to the rest of the report (REQ-077)', async () => {
     const { proposals, policies, commissions, pendencies, useCase } = scenario();
     await registeredPolicy(proposals, policies, commissions);

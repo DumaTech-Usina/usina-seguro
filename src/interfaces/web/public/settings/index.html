@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cadastros — Usina do Seguro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/app/shared/base.css" />
+    <link rel="stylesheet" href="/app/settings/index.css" />
+  </head>
+  <body class="shell" data-nav="settings">
+    <main class="content">
+      <div class="content__inner">
+        <div class="page-head">
+          <div class="page-head__text">
+            <h1 class="text-display">Cadastros</h1>
+            <p class="text-muted">
+              Os parâmetros que o cálculo lê. São dados, não código: mudam sem deploy.
+            </p>
+          </div>
+        </div>
+
+        <div class="banner">
+          <span class="material-symbols-outlined">info</span>
+          <div class="banner__text">
+            Ainda não existe endpoint de listagem para estes cadastros, então esta tela
+            grava mas não lista o que já foi gravado. Registrar novamente a mesma chave
+            substitui o valor anterior.
+          </div>
+        </div>
+
+        <!-- Acordo comercial (IN-02, IN-03, IN-04). -->
+        <section class="card">
+          <div class="card__header">
+            <span class="material-symbols-outlined">handshake</span>
+            <h2 class="text-title">Acordo comercial</h2>
+          </div>
+          <form id="form-agreement">
+            <div class="card__body stack">
+              <p class="text-muted">
+                O percentual varia por seguradora e por produto, e vale a partir de uma
+                data. Um novo acordo é um novo registro: cálculos já feitos guardam os
+                percentuais que usaram.
+              </p>
+              <div class="form-grid">
+                <div class="field">
+                  <input class="field__input" name="insurerId" placeholder=" " required />
+                  <label class="field__label">Seguradora</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="productId" placeholder=" " required />
+                  <label class="field__label">Produto / ramo</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" type="date" name="effectiveFrom" required />
+                  <label class="field__label">Vigente a partir de</label>
+                </div>
+                <div class="field">
+                  <input
+                    class="field__input"
+                    name="insurerRate"
+                    placeholder=" "
+                    inputmode="decimal"
+                    pattern="\d+(\.\d+)?"
+                    required
+                  />
+                  <label class="field__label">% pago pela seguradora</label>
+                  <span class="field__hint">Sobre o prêmio da apólice.</span>
+                </div>
+              </div>
+
+              <label class="switch">
+                <input type="checkbox" id="has-intermediary" />
+                <span>
+                  <strong>A cadeia tem intermediária</strong>
+                  <span class="text-muted"> — ex.: a seguradora paga a ela, que repassa à Usina.</span>
+                </span>
+              </label>
+
+              <div class="form-grid form-grid--three hidden" id="intermediary-fields">
+                <div class="field">
+                  <input class="field__input" name="intermediaryId" placeholder=" " />
+                  <label class="field__label">Intermediária</label>
+                </div>
+                <div class="field">
+                  <input
+                    class="field__input"
+                    name="intermediaryRate"
+                    placeholder=" "
+                    inputmode="decimal"
+                    pattern="\d+(\.\d+)?"
+                  />
+                  <label class="field__label">% que chega à Usina</label>
+                </div>
+                <div class="field">
+                  <select class="field__input" name="brokerBase">
+                    <option value="INTERMEDIARY">Valor recebido pela intermediária</option>
+                    <option value="USINA">Valor recebido pela Usina</option>
+                  </select>
+                  <label class="field__label">Base do corretor</label>
+                </div>
+              </div>
+            </div>
+            <div class="card__footer">
+              <button class="btn btn--filled" type="submit">Registrar acordo</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Tabela do corretor (IN-05). -->
+        <section class="card">
+          <div class="card__header">
+            <span class="material-symbols-outlined">badge</span>
+            <h2 class="text-title">Tabela de comissão do corretor</h2>
+          </div>
+          <form id="form-broker-rate">
+            <div class="card__body">
+              <div class="form-grid">
+                <div class="field">
+                  <input class="field__input" name="brokerId" placeholder=" " required />
+                  <label class="field__label">Corretor</label>
+                </div>
+                <div class="field">
+                  <input
+                    class="field__input"
+                    name="rate"
+                    placeholder=" "
+                    inputmode="decimal"
+                    pattern="\d+(\.\d+)?"
+                    required
+                  />
+                  <label class="field__label">% do corretor</label>
+                  <span class="field__hint">Aplicado sobre a base definida pela cadeia.</span>
+                </div>
+              </div>
+            </div>
+            <div class="card__footer">
+              <button class="btn btn--filled" type="submit">Registrar tabela</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- Regra de liberação por forma de pagamento (IN-06). -->
+        <section class="card">
+          <div class="card__header">
+            <span class="material-symbols-outlined">rule</span>
+            <h2 class="text-title">Liberação por forma de pagamento</h2>
+          </div>
+          <form id="form-release-rule">
+            <div class="card__body stack">
+              <p class="text-muted">
+                Define se o repasse ao corretor nasce liberado ou se espera a confirmação
+                do pagamento da primeira parcela pelo cliente. Nenhuma forma de pagamento
+                tem regra embutida no sistema — inclusive o Pix, cuja regra ainda não foi
+                decidida pelo negócio.
+              </p>
+              <div class="form-grid">
+                <div class="field">
+                  <input class="field__input" name="paymentMethodId" placeholder=" " required />
+                  <label class="field__label">Forma de pagamento</label>
+                  <span class="field__hint">O mesmo identificador usado na proposta.</span>
+                </div>
+                <div class="field">
+                  <select class="field__input" name="release" required>
+                    <option value="IMMEDIATE">Liberação imediata</option>
+                    <option value="REQUIRES_RECEIPT_CONFIRMATION">
+                      Exige confirmação do recebimento
+                    </option>
+                  </select>
+                  <label class="field__label">Regra</label>
+                </div>
+              </div>
+            </div>
+            <div class="card__footer">
+              <button class="btn btn--filled" type="submit">Registrar regra</button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </main>
+
+    <script type="module" src="/app/shared/shell.js"></script>
+    <script type="module" src="/app/settings/index.js"></script>
+  </body>
+</html>

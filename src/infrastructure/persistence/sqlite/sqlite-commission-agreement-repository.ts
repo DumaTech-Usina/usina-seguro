@@ -38,6 +38,13 @@ export class SqliteCommissionAgreementRepository implements CommissionAgreementR
            chain_kind, intermediary_id, intermediary_rate, broker_base, registered_at
          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(insurer_id, product_id, effective_from) DO UPDATE SET
+           -- Re-registering the same validity replaces the whole record, id and
+           -- registration moment included: the caller was told the new id, and
+           -- keeping the old one would answer with a record nobody described.
+           -- Nothing points at this id: a calculation copies the rates it used
+           -- (REJ-011), it does not reference the agreement.
+           id                = excluded.id,
+           registered_at     = excluded.registered_at,
            insurer_rate      = excluded.insurer_rate,
            chain_kind        = excluded.chain_kind,
            intermediary_id   = excluded.intermediary_id,

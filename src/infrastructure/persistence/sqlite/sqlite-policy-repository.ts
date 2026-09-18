@@ -25,6 +25,8 @@ interface InstallmentRow {
   amount: string;
   due_date: string;
   status: string;
+  confirmed_at: string | null;
+  confirmed_by: string | null;
 }
 
 export class SqlitePolicyRepository implements PolicyRepository {
@@ -62,9 +64,13 @@ export class SqlitePolicyRepository implements PolicyRepository {
         );
 
       const installment = this.db.prepare(
-        `INSERT INTO installment (id, policy_id, number, amount, due_date, status)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET status = excluded.status`,
+        `INSERT INTO installment (
+           id, policy_id, number, amount, due_date, status, confirmed_at, confirmed_by
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           status       = excluded.status,
+           confirmed_at = excluded.confirmed_at,
+           confirmed_by = excluded.confirmed_by`,
       );
 
       for (const item of policy.installments) {
@@ -75,6 +81,9 @@ export class SqlitePolicyRepository implements PolicyRepository {
           item.amount.toString(),
           item.dueDate.toString(),
           item.status,
+          // REQ-123: who confirmed the receipt, and when (IN-13).
+          item.confirmation?.at.toISOString() ?? null,
+          item.confirmation?.userId ?? null,
         );
       }
     });
@@ -125,6 +134,9 @@ export class SqlitePolicyRepository implements PolicyRepository {
               dueDate: CalendarDate.fromString(item.due_date),
             },
             item.status as InstallmentStatus,
+            item.confirmed_at === null
+              ? null
+              : { userId: item.confirmed_by ?? '', at: new Date(item.confirmed_at) },
           ),
         ),
       },

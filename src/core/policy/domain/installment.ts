@@ -21,6 +21,18 @@ import { POLICY_MESSAGES } from './errors.ts';
  */
 export type InstallmentStatus = 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELLED';
 
+/**
+ * REQ-123: the manual confirmation that the client paid (IN-13, REQ-092) is
+ * one of the operations that change a financial outcome — it is what releases
+ * the broker transfer of REQ-091 — so the record says who confirmed it and
+ * when. There is no bank integration (REQ-013): this record is the only
+ * source, and without the user there is nobody to ask about it later.
+ */
+export interface InstallmentPaymentConfirmation {
+  readonly userId: string;
+  readonly at: Date;
+}
+
 export interface InstallmentData {
   readonly id: string;
   readonly policyId: string;
@@ -49,14 +61,21 @@ export class Installment {
   readonly amount: Money;
   readonly dueDate: CalendarDate;
   readonly status: InstallmentStatus;
+  /** REQ-123: who confirmed the client paid, and when. */
+  readonly confirmation: InstallmentPaymentConfirmation | null;
 
-  private constructor(data: InstallmentData, status: InstallmentStatus) {
+  private constructor(
+    data: InstallmentData,
+    status: InstallmentStatus,
+    confirmation: InstallmentPaymentConfirmation | null,
+  ) {
     this.id = data.id;
     this.policyId = data.policyId;
     this.number = data.number;
     this.amount = data.amount;
     this.dueDate = data.dueDate;
     this.status = status;
+    this.confirmation = confirmation;
   }
 
   static create(data: InstallmentData): Installment {
@@ -74,12 +93,16 @@ export class Installment {
       );
     }
 
-    return new Installment(data, 'PENDING');
+    return new Installment(data, 'PENDING', null);
   }
 
   /** Rebuilds a persisted installment without re-applying the rules (REQ-124). */
-  static restore(data: InstallmentData, status: InstallmentStatus): Installment {
-    return new Installment(data, status);
+  static restore(
+    data: InstallmentData,
+    status: InstallmentStatus,
+    confirmation: InstallmentPaymentConfirmation | null = null,
+  ): Installment {
+    return new Installment(data, status, confirmation);
   }
 
   get isPaid(): boolean {
@@ -93,7 +116,7 @@ export class Installment {
    * Confirming twice is refused: the confirmation releases the transfer of
    * REQ-091 and REQ-124 forbids overwriting a financial record.
    */
-  pay(): Installment {
+  pay(confirmation: InstallmentPaymentConfirmation): Installment {
     if (this.status !== 'PENDING') {
       throw new BusinessRuleViolation('REQ-092', POLICY_MESSAGES.ONLY_PENDING_CAN_BE_PAID, {
         number: String(this.number),
@@ -101,6 +124,17 @@ export class Installment {
       });
     }
 
-    return new Installment(this, 'PAID');
+    if (confirmation.userId.trim() === '') {
+      throw new BusinessRuleViolation(
+        'REQ-123',
+        POLICY_MESSAGES.PAYMENT_CONFIRMATION_USER_REQUIRED,
+        { number: String(this.number) },
+      );
+    }
+
+    return new Installment(this, 'PAID', {
+      userId: confirmation.userId.trim(),
+      at: confirmation.at,
+    });
   }
 }

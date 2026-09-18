@@ -46,7 +46,9 @@ export interface ReconcileCommissionReportInput {
  * - `DIVERGENT`: matched, values disagree (REQ-076). Not an error (REQ-077).
  * - `DUPLICATE`: the policy was already reconciled for this competence, so
  *   nothing was written (REQ-086, CA-021, REJ-012).
- * - `PENDING`: no policy matched; a pendency was opened (REQ-083, EX-01).
+ * - `PENDING`: no policy matched; the pendency of REQ-083 and EX-01 is open.
+ *   A second import of the same line reports it again and opens no second
+ *   pendency (CA-021, EX-05).
  * - `NO_COMMISSION`: the policy exists but has no commission to compare
  *   against, because no commercial agreement was in force when it was
  *   registered. It is not a pendency of REQ-083 — the policy was found.
@@ -151,17 +153,27 @@ export class ReconcileCommissionReport {
     const policy = await this.findPolicy(policyNumber, proposalNumber);
 
     if (policy === null) {
-      // REQ-083, REJ-013: no policy, no entry. The line becomes a pendency.
-      await this.deps.pendencies.save(
-        ReconciliationPendency.open({
-          id: this.deps.newId(),
-          competence,
-          proposalNumber,
-          policyNumber,
-          reportedCommission: reported,
-          registeredAt: this.deps.now(),
-        }),
+      // REQ-083, REJ-013: no policy, no entry. The line becomes a pendency —
+      // one, not one per import: CA-021 and EX-05 say re-importing the same
+      // report does not duplicate what it produced, and OUT-06 is a list a
+      // human works through.
+      const opened = await this.deps.pendencies.findByCompetenceAndProposalNumber(
+        competence,
+        proposalNumber,
       );
+
+      if (opened === null) {
+        await this.deps.pendencies.save(
+          ReconciliationPendency.open({
+            id: this.deps.newId(),
+            competence,
+            proposalNumber,
+            policyNumber,
+            reportedCommission: reported,
+            registeredAt: this.deps.now(),
+          }),
+        );
+      }
 
       return {
         proposalNumber,

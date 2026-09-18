@@ -180,6 +180,30 @@ describe('policy to agreed commission (FP-01 step 7)', () => {
   });
 });
 
+describe('commercial agreement registry (IN-02, REQ-065)', () => {
+  it('replaces the whole record when the same validity is registered again', async () => {
+    const replacement = await application.useCases.registerCommissionAgreement.execute({
+      insurerId: 'insurer-1',
+      productId: 'auto',
+      effectiveFrom: '2026-01-01',
+      insurerRate: '45',
+    });
+
+    // The id answered to the caller is the id the row carries: the rates and
+    // the identity of the record cannot come apart.
+    await application.shutdown();
+    const db = new DatabaseSync(file);
+    const rows = db
+      .prepare('SELECT id, insurer_rate FROM commission_agreement WHERE insurer_id = ?')
+      .all('insurer-1') as unknown as { id: string; insurer_rate: string }[];
+    db.close();
+
+    expect(rows).toEqual([{ id: replacement.id, insurer_rate: '45' }]);
+
+    application = open();
+  });
+});
+
 describe('commission to reconciliation (FP-02)', () => {
   it('matches by the policy number and records the real value (REQ-082, CA-018)', async () => {
     const policy = await registerPolicy();
@@ -266,6 +290,32 @@ describe('commission to reconciliation (FP-02)', () => {
     expect(commission.status).toBe('FORECAST');
   });
 
+  it('does not duplicate the pendency when the same report is imported again (CA-021, EX-05)', async () => {
+    const report = {
+      competence: '2026-10',
+      lines: [
+        { policyNumber: 'APL-GHOST', proposalNumber: 'PRP-GHOST', producerCommission: '12.34' },
+      ],
+    };
+
+    await application.useCases.reconcileCommissionReport.execute(report);
+    await application.useCases.reconcileCommissionReport.execute(report);
+
+    // OUT-06 is a list a human works through: the same unmatched line coming
+    // back is the same pendency, not a new one.
+    expect(await application.useCases.listReconciliationPendencies.execute()).toHaveLength(1);
+
+    await application.shutdown();
+    const db = new DatabaseSync(file);
+    const count = db.prepare('SELECT COUNT(*) AS total FROM reconciliation_pendency').get() as {
+      total: number;
+    };
+    db.close();
+    expect(count.total).toBe(1);
+
+    application = open();
+  });
+
   it('does not duplicate entries when the same report is imported again (CA-021, EX-05)', async () => {
     const policy = await registerPolicy();
     const report = {
@@ -342,7 +392,11 @@ describe('reconciliation to settlement (FP-03)', () => {
       application.useCases.releaseSettlement.execute({ policyId: policy.id }),
     ).rejects.toThrow(BusinessRuleViolation);
 
-    await application.useCases.payInstallment.execute({ policyId: policy.id, number: 1 });
+    await application.useCases.payInstallment.execute({
+      policyId: policy.id,
+      number: 1,
+      userId: 'financeiro-1',
+    });
     const released = await application.useCases.releaseSettlement.execute({
       policyId: policy.id,
     });

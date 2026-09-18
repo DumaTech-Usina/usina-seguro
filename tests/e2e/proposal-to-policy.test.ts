@@ -243,6 +243,33 @@ describe('FP-01 over HTTP: proposal, transmission, policy, installments', () => 
     expect(response.status).toBe(400);
   });
 
+  it('does not let two policies share the conciliation key (REQ-082, CA-018)', async () => {
+    const first = await registerProposal();
+    await transmit(first, 'PRP-8000');
+    await post('/policies', policyBody(first, 'APL-8001'));
+
+    const second = await registerProposal();
+    await transmit(second, 'PRP-8001');
+    const response = await post('/policies', policyBody(second, 'APL-8001'));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      rule: 'REQ-082',
+      message: "Número de apólice 'APL-8001' já registrado em outra apólice.",
+    });
+  });
+
+  it('does not let two proposals share the number the report matches (REQ-082, CA-019)', async () => {
+    const first = await registerProposal();
+    await transmit(first, 'PRP-8200');
+
+    const second = await registerProposal();
+    const response = await transmit(second, 'PRP-8200');
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ rule: 'REQ-082' });
+  });
+
   it('answers 404 for a proposal that does not exist', async () => {
     const response = await transmit('does-not-exist');
 

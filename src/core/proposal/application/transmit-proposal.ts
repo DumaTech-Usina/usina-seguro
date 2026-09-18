@@ -1,4 +1,4 @@
-import { PROPOSAL_MESSAGES, RecordNotFound } from '../domain/errors.ts';
+import { BusinessRuleViolation, PROPOSAL_MESSAGES, RecordNotFound } from '../domain/errors.ts';
 import { Percentage } from '../domain/percentage.ts';
 import type { ProposalRepository } from './proposal-repository.ts';
 
@@ -41,6 +41,21 @@ export class TransmitProposal {
 
     if (proposal === null) {
       throw new RecordNotFound(PROPOSAL_MESSAGES.NOT_FOUND, { id: input.proposalId });
+    }
+
+    // REQ-082, CA-019: a report line that brings only the proposal number
+    // reaches the policy through this number, so it has to identify one
+    // proposal. The uniqueness needs the other proposals, which the aggregate
+    // cannot see, so the check lives here.
+    const proposalNumber = input.proposalNumber.trim();
+    const registered = await this.deps.proposals.findByProposalNumber(proposalNumber);
+
+    if (registered !== null && registered.id !== proposal.id) {
+      throw new BusinessRuleViolation(
+        'REQ-082',
+        PROPOSAL_MESSAGES.PROPOSAL_NUMBER_ALREADY_REGISTERED,
+        { proposalNumber },
+      );
     }
 
     const transmitted = proposal.transmit({

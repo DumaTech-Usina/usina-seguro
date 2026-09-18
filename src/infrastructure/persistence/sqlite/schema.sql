@@ -17,8 +17,10 @@ CREATE TABLE IF NOT EXISTS proposal (
   registered_at      TEXT    NOT NULL,
   status             TEXT    NOT NULL,
   -- Known only from the transmission on (REQ-041): the insurer issues the
-  -- number and the worked commission is informed in that act.
-  proposal_number    TEXT,
+  -- number and the worked commission is informed in that act. UNIQUE because
+  -- REQ-082/CA-019 reach the policy through it: NULLs stay distinct, so a
+  -- proposal still in DRAFT is unaffected.
+  proposal_number    TEXT    UNIQUE,
   -- Percentage as exact decimal text, with the informed scale (REQ-121).
   worked_commission  TEXT,
   transmitted_at     TEXT,
@@ -32,7 +34,10 @@ CREATE TABLE IF NOT EXISTS policy (
   -- enforces it through the proposal state; the constraint is the storage-level
   -- guarantee, and PostgreSQL enforces the same one.
   proposal_id     TEXT    NOT NULL UNIQUE REFERENCES proposal (id),
-  policy_number   TEXT    NOT NULL,
+  -- REQ-082 / CA-018: the conciliation key. The use case refuses a number
+  -- already registered; the constraint is the storage-level guarantee, and
+  -- PostgreSQL enforces the same one.
+  policy_number   TEXT    NOT NULL UNIQUE,
   premium         TEXT    NOT NULL,
   -- Calendar dates (REQ-020): 'YYYY-MM-DD', no time and no time zone.
   coverage_start  TEXT    NOT NULL,
@@ -51,6 +56,11 @@ CREATE TABLE IF NOT EXISTS installment (
   amount      TEXT    NOT NULL,
   due_date    TEXT    NOT NULL,
   status      TEXT    NOT NULL,
+  -- REQ-123: the manual confirmation of receipt (IN-13, REQ-092) is one of the
+  -- operations that must record who and when; it is what releases the transfer
+  -- of REQ-091.
+  confirmed_at   TEXT,
+  confirmed_by   TEXT,
   UNIQUE (policy_id, number)
 );
 
@@ -128,7 +138,11 @@ CREATE TABLE IF NOT EXISTS reconciliation_pendency (
   proposal_number     TEXT NOT NULL,
   policy_number       TEXT,
   reported_commission TEXT NOT NULL,
-  registered_at       TEXT NOT NULL
+  registered_at       TEXT NOT NULL,
+  -- CA-021 / EX-05: importing the same report again must not duplicate what it
+  -- produced, the pendency included. The use case looks the line up before
+  -- opening a second one; the constraint is the storage-level guarantee.
+  UNIQUE (competence, proposal_number)
 );
 
 -- Release rule per payment method (IN-06, REQ-090). Data, not code, so

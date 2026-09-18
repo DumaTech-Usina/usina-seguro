@@ -8,6 +8,7 @@
  */
 export const POLICY_MESSAGES = {
   POLICY_NUMBER_REQUIRED: 'policy.policy_number_required',
+  POLICY_NUMBER_ALREADY_REGISTERED: 'policy.policy_number_already_registered',
   PREMIUM_MUST_BE_POSITIVE: 'policy.premium_must_be_positive',
   COVERAGE_END_MUST_FOLLOW_START: 'policy.coverage_end_must_follow_start',
   INSTALLMENTS_REQUIRED: 'policy.installments_required',
@@ -17,6 +18,7 @@ export const POLICY_MESSAGES = {
   NOT_FOUND: 'policy.not_found',
   INSTALLMENT_NOT_FOUND: 'policy.installment_not_found',
   ONLY_PENDING_CAN_BE_PAID: 'policy.only_pending_can_be_paid',
+  PAYMENT_CONFIRMATION_USER_REQUIRED: 'policy.payment_confirmation_user_required',
   INVALID_DATE_FORMAT: 'policy.invalid_date_format',
 } as const;
 

@@ -115,7 +115,7 @@ async function setup(world: ReturnType<typeof scenario>, options: SetupOptions):
   });
 
   if (options.firstInstallmentPaid === true) {
-    policy = policy.payInstallment(1);
+    policy = policy.payInstallment(1, { userId: 'financeiro-1', at: NOW });
   }
 
   await world.policies.save(policy);
@@ -278,7 +278,7 @@ describe('ReleaseSettlement', () => {
 
     const policy = await world.policies.findById('policy-1');
     // biome-ignore lint/style/noNonNullAssertion: set up above.
-    await world.policies.save(policy!.payInstallment(1));
+    await world.policies.save(policy!.payInstallment(1, { userId: 'financeiro-1', at: NOW }));
 
     const released = await world.releaseSettlement.execute({ policyId: 'policy-1' });
 
@@ -297,7 +297,7 @@ describe('ReleaseSettlement', () => {
 
     const policy = await world.policies.findById('policy-1');
     // biome-ignore lint/style/noNonNullAssertion: set up above.
-    await world.policies.save(policy!.payInstallment(2));
+    await world.policies.save(policy!.payInstallment(2, { userId: 'financeiro-1', at: NOW }));
 
     await expect(world.releaseSettlement.execute({ policyId: 'policy-1' })).rejects.toThrow(
       BusinessRuleViolation,

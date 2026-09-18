@@ -36,20 +36,33 @@ export class SqliteReconciliationPendencyRepository implements ReconciliationPen
       );
   }
 
+  async findByCompetenceAndProposalNumber(
+    competence: string,
+    proposalNumber: string,
+  ): Promise<ReconciliationPendency | null> {
+    const row = this.db
+      .prepare('SELECT * FROM reconciliation_pendency WHERE competence = ? AND proposal_number = ?')
+      .get(competence, proposalNumber) as PendencyRow | undefined;
+
+    return row === undefined ? null : toPendency(row);
+  }
+
   async listOpen(): Promise<readonly ReconciliationPendency[]> {
     const rows = this.db
       .prepare('SELECT * FROM reconciliation_pendency ORDER BY registered_at DESC, id')
       .all() as unknown as PendencyRow[];
 
-    return rows.map((row) =>
-      ReconciliationPendency.restore({
-        id: row.id,
-        competence: row.competence,
-        proposalNumber: row.proposal_number,
-        policyNumber: row.policy_number,
-        reportedCommission: Money.fromString(row.reported_commission),
-        registeredAt: new Date(row.registered_at),
-      }),
-    );
+    return rows.map(toPendency);
   }
+}
+
+function toPendency(row: PendencyRow): ReconciliationPendency {
+  return ReconciliationPendency.restore({
+    id: row.id,
+    competence: row.competence,
+    proposalNumber: row.proposal_number,
+    policyNumber: row.policy_number,
+    reportedCommission: Money.fromString(row.reported_commission),
+    registeredAt: new Date(row.registered_at),
+  });
 }

@@ -2,7 +2,7 @@ import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/err
 import type { Money } from '../../proposal/domain/money.ts';
 import type { CalendarDate } from './calendar-date.ts';
 import { POLICY_MESSAGES } from './errors.ts';
-import type { Installment } from './installment.ts';
+import type { Installment, InstallmentPaymentConfirmation } from './installment.ts';
 
 /**
  * Documented policy states (section 10.3).
@@ -119,7 +119,10 @@ export class Policy {
       }
     });
 
-    return new Policy(data, 'ACTIVE');
+    // Stored trimmed because REQ-082 makes this the conciliation key: a report
+    // line is matched against it after the same trim, so a stray space here
+    // would make the policy unreachable.
+    return new Policy({ ...data, policyNumber: data.policyNumber.trim() }, 'ACTIVE');
   }
 
   /** Rebuilds a persisted policy without re-applying the rules (REQ-124). */
@@ -137,12 +140,13 @@ export class Policy {
   }
 
   /**
-   * IN-13: records that the client paid one installment of the schedule.
+   * IN-13: records that the client paid one installment of the schedule, with
+   * the user and the moment REQ-123 requires.
    *
    * The policy drives it because the installments are part of the policy
    * (REQ-020) and are never written on their own.
    */
-  payInstallment(number: number): Policy {
+  payInstallment(number: number, confirmation: InstallmentPaymentConfirmation): Policy {
     const target = this.installments.find((installment) => installment.number === number);
 
     if (target === undefined) {
@@ -152,7 +156,7 @@ export class Policy {
       });
     }
 
-    const paid = target.pay();
+    const paid = target.pay(confirmation);
 
     return new Policy(
       {

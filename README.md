@@ -158,7 +158,9 @@ curl -X POST http://127.0.0.1:3000/policies/<apolice>/settlement
 # 201 {"status":"AWAITING_CONFIRMATION","amount":"240.00","brokerId":"broker-1"}
 
 # 4. Confirmação manual do pagamento da 1ª parcela pelo cliente (IN-13, REQ-092).
-curl -X POST http://127.0.0.1:3000/policies/<apolice>/installments/1/payment
+#    REQ-123 exige registrar quem confirmou: a confirmação é o que libera o repasse.
+curl -X POST http://127.0.0.1:3000/policies/<apolice>/installments/1/payment \
+  -H 'content-type: application/json' -d '{"userId":"financeiro-1"}'
 
 curl -X POST http://127.0.0.1:3000/policies/<apolice>/settlement/release
 # 200 {"status":"RELEASED",...}
@@ -191,9 +193,64 @@ Rejeições, com a regra e o texto traduzido na resposta:
 # Ajuste de comissão sem justificativa (CA-015, REJ-010)
 # 422 {"rule":"REQ-067","message":"Ajuste de comissão por apólice exige justificativa."}
 
+# Número de apólice repetido — é a chave de conciliação (REQ-082, CA-018)
+# 422 {"rule":"REQ-082",
+#      "message":"Número de apólice 'APL-4711' já registrado em outra apólice."}
+
+# Confirmação de recebimento sem usuário (REQ-123)
+# 422 {"rule":"REQ-123",
+#      "message":"Confirmação de pagamento da parcela 1 exige a identificação do usuário."}
+
 # Proposta ou apólice inexistente
 # 404 {"error":"not_found","message":"Proposta não encontrada: '...'."}
 ```
+
+## Interface web
+
+As telas sobem no **mesmo processo e na mesma porta** da API, sob o prefixo `/app`:
+
+```bash
+npm start
+# http://127.0.0.1:3000  → redireciona para /app/
+```
+
+A raiz redireciona para a interface. A API continua onde estava, nas suas rotas
+nomeadas (`/proposals`, `/policies`, `/health`, …).
+
+O que existe hoje:
+
+| Tela | Rota | Estado |
+|------|------|--------|
+| Início | `/app/` | Pronta |
+| Novo negócio (`FP-01` completo) | `/app/proposals/new.html` | Pronta |
+| Apólice: parcelas, comissão acordada × real, repasse | `/app/policies/detail.html?id=…` | Pronta |
+| Cadastros (`IN-02`..`IN-06`) | `/app/settings/` | Pronta |
+| Propostas, Apólices, Comissões, Conciliação, Repasses | — | **Placeholder**: o arquivo existe com um comentário do que será implementado e de qual endpoint falta (`OUT-01`, `OUT-03`..`OUT-07`). Aparecem como *em breve* na navegação |
+
+Comece pelos **cadastros**: sem acordo comercial e tabela do corretor a apólice nasce
+sem comissão, e a tela mostra isso explicitamente em vez de inventar um valor.
+
+**Sem build.** Não há bundler, transpilador nem framework: o que é servido é o que está
+em disco — HTML, CSS e ES modules nativos. Por isso o código de browser é `.js` e não
+`.ts`: o Node remove tipos do que *ele* executa, e o navegador recebe o arquivo como
+está. O Biome linta e formata esses `.js` junto com o resto.
+
+Três regras valem dentro de `interfaces/web/`:
+
+- **nenhuma regra de negócio.** A tela oferece a ação e mostra a recusa; quem decide se
+  a transição é admissível é o domínio. `shared/status.js` guarda o único vocabulário de
+  domínio que a interface conhece — rótulo e cor de um estado, nunca uma decisão;
+- **nenhum texto de erro próprio.** O servidor já devolve a mensagem traduzida por
+  `src/i18n`; a tela exibe a frase que recebeu, com o `REQ-xxx` ao lado;
+- **`REQ-120` não para na fronteira HTTP.** Nada de `parseFloat`: `shared/money.js`
+  formata sobre o texto e a única soma exibida (o total do cronograma, meramente
+  informativo) roda em `BigInt`.
+
+**Exceção de i18n, deliberada:** rótulo de tela vive no próprio HTML, não em
+`src/i18n/messages.ts`. O dicionário é tipado sobre as chaves *de domínio*, e um texto de
+botão não é regra de negócio — do mesmo jeito que os erros de configuração ficam em
+inglês por serem lidos por operador. O que **nunca** acontece é a tela reescrever uma
+mensagem de domínio.
 
 ## Testes
 
@@ -246,7 +303,13 @@ src/
 │       └── application/
 ├── infrastructure/          # implementações dos contratos
 │   └── persistence/{in-memory,sqlite}/
-└── interfaces/http/         # traduz HTTP ↔ caso de uso, nada mais
+└── interfaces/
+    ├── http/                # traduz HTTP ↔ caso de uso, nada mais
+    └── web/                 # as telas do operador, servidas em /app
+        ├── web.ts           # registra o static; não conhece caso de uso
+        └── public/
+            ├── shared/      # design system, cliente HTTP, formatação, estados
+            └── <capacidade>/ # uma pasta por módulo do core, .html/.css/.js por página
 ```
 
 Não existem `src/utils/`, `core/shared/`, `core/common/` nem `core/financial/`: nenhum
@@ -327,6 +390,12 @@ Vigência, data de renovação e vencimento de parcela são **dias de calendári
 instantes: `CalendarDate` guarda `AAAA-MM-DD` sem fuso, para que um vencimento não mude
 de dia conforme onde o processo roda.
 
+As duas chaves de conciliação de `REQ-082` — número da apólice e número da proposta —
+**identificam um registro só**. Sem isso, uma linha do relatório de `FP-02` casaria com
+qualquer uma das apólices que repetissem o número, e o valor real cairia na apólice
+errada. A recusa fica no caso de uso (que enxerga os outros registros) e a constraint
+`UNIQUE` no schema é a garantia de armazenamento, como já acontece com `REQ-049`.
+
 Registrar a apólice altera três registros por um único fato de negócio (a proposta vira
 `ACCEPTED`, a apólice nasce e a comissão acordada é calculada — `FP-01` passo 7). Como
 `REQ-111` amarra os dois primeiros e `REQ-112`/`REJ-015` proíbem reabrir proposta, uma
@@ -356,6 +425,9 @@ ganha as colunas novas. Em desenvolvimento, apague `./data/usina.sqlite` e deixe
 | Sem framework de migration | Um `schema.sql` por driver. Migration entra quando houver schema em produção para evoluir |
 | Percentuais e cadeia de comissão como **cadastro**, não como código | `REQ-061`, `REQ-065` e `REQ-125` exigem mudar percentual, cadeia, base e regra de liberação sem deploy. Nenhuma forma de pagamento é nomeada no código |
 | Arredondamento meio para cima, no centavo, ao aplicar percentual | O cálculo inteiro roda em `bigint` (`REQ-120`) e usa a escala informada do percentual (`REQ-121`), mas o resultado precisa cair num centavo. Nenhum requisito define o modo; a regra fica declarada em um só lugar, `Money.applyRate` |
+| Frontend como MPA sem build, servido pelo próprio monolito | `erasableSyntaxOnly` e "um comando, um processo, zero build" são decisões já tomadas; Next/Vite as reverteria para ganhar ergonomia que cinco telas de back office não pedem. Uma pasta por capacidade, `.html`/`.css`/`.js` por página, ES modules nativos para o que é comum |
+| Design system escrito à mão, no vocabulário do Material | Elevação, grid de 4px, campo *outlined*, chip de estado — o padrão que o operador já conhece, sem arrastar biblioteca de componentes e bundler atrás. `<dialog>` nativo dá foco preso e ESC de graça |
+| `@fastify/static` como segunda dependência de runtime | Servir arquivo à mão traria *path traversal* e content-type para dentro do nosso código |
 | Percentuais **copiados** para o registro da comissão | `REJ-011`: editar o acordo não pode alterar cálculo já feito. Guardar o acordo por referência exigiria reler o cadastro na hora de exibir, e o painel de `REQ-076` deixaria de ser auditável |
 
 ## Decisões de negócio em aberto

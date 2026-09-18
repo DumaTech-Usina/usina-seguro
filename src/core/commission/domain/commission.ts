@@ -246,7 +246,10 @@ export class Commission {
       realReceivable: next.realReceivable,
       reconciledCompetence: next.reconciledCompetence,
       reconciledAt: next.reconciledAt,
-      resolution: next.isDivergent ? next.resolution : null,
+      // The resolution stays: REQ-124 and REJ-014 forbid erasing a financial
+      // record, and REQ-085/CA-026 make this one the audit trail of who closed
+      // the divergence and why. Reclassifying the commission does not unsay it.
+      resolution: next.resolution,
     });
   }
 

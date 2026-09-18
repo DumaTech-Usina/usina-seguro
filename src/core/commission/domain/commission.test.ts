@@ -127,6 +127,24 @@ describe('Commission', () => {
       ).toThrow(BusinessRuleViolation);
     });
 
+    it('does not erase the resolution of a divergence already closed (REQ-124, REJ-014)', () => {
+      const resolved = forecast()
+        .reconcile('2026-10', Money.fromString('45.00'), RECONCILED_AT)
+        .resolveDivergence({
+          justification: 'seguradora confirmou 45.00',
+          userId: 'user-2',
+          at: RECONCILED_AT,
+        });
+
+      // The agreed side is then adjusted to the value the insurer confirmed.
+      const overridden = resolved.applyOverride({ ...override, payable: null });
+
+      expect(overridden.isDivergent).toBe(false);
+      // CA-026 keeps who closed the divergence, when and why, on the record.
+      expect(overridden.resolution?.userId).toBe('user-2');
+      expect(overridden.resolution?.justification).toBe('seguradora confirmou 45.00');
+    });
+
     it('re-answers the comparison of REQ-076 on a commission already apurada', () => {
       const reconciled = forecast().reconcile('2026-10', Money.fromString('45.00'), RECONCILED_AT);
       expect(reconciled.status).toBe('DIVERGENT');

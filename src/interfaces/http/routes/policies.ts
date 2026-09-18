@@ -65,6 +65,13 @@ const payInstallmentSchema: FastifySchema = {
       number: { type: 'string', pattern: '^[0-9]+$' },
     },
   },
+  body: {
+    type: 'object',
+    required: ['userId'],
+    additionalProperties: false,
+    // Presence only: an empty user is rejected by the domain (REQ-123).
+    properties: { userId: { type: 'string' } },
+  },
 };
 
 export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): void {
@@ -88,7 +95,13 @@ export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): 
     { schema: payInstallmentSchema },
     async (request) => {
       const { id, number } = request.params as { id: string; number: string };
-      return useCases.payInstallment.execute({ policyId: id, number: Number(number) });
+      const { userId } = request.body as { userId: string };
+
+      return useCases.payInstallment.execute({
+        policyId: id,
+        number: Number(number),
+        userId,
+      });
     },
   );
 }

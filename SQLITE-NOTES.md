@@ -40,6 +40,13 @@ comportamento de negócio. Ainda assim, **essa constraint precisa ser validada e
 PostgreSQL** quando o adapter existir: é a diferença entre um domínio correto e um
 domínio correto *sob concorrência*, que é justamente o que não foi exercitado.
 
+O mesmo vale para as outras unicidades que o caso de uso decide e o schema garante:
+`policy.policy_number` e `proposal.proposal_number` (as chaves de `REQ-082`) e
+`reconciliation_pendency (competence, proposal_number)` (`CA-021`). Nos dois bancos um
+`UNIQUE` sobre coluna anulável trata `NULL`s como distintos, então uma proposta ainda em
+`DRAFT`, sem número, não colide com outra — mas isso também precisa ser conferido no
+adapter PostgreSQL.
+
 ## `node:sqlite`
 
 O driver é o módulo nativo do Node (>= 22.6), não uma dependência compilada. A API é

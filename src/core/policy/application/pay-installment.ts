@@ -7,16 +7,19 @@ import { type PolicyView, toPolicyView } from './policy-view.ts';
 export interface PayInstallmentInput {
   readonly policyId: string;
   readonly number: number;
+  /** REQ-123: who confirmed the client paid. */
+  readonly userId: string;
 }
 
 export interface PayInstallmentDependencies {
   readonly proposals: ProposalRepository;
   readonly policies: PolicyRepository;
+  readonly now: () => Date;
 }
 
 /**
  * IN-13, REQ-092, FP-03 step 3: a user of the Usina confirms the client paid
- * an installment.
+ * an installment. REQ-123 requires the record to say who did it and when.
  *
  * It lives in the policy module because the schedule belongs to the policy
  * (REQ-020). The settlement module reads the outcome through the policy
@@ -37,7 +40,10 @@ export class PayInstallment {
       throw new RecordNotFound(POLICY_MESSAGES.NOT_FOUND, { id: input.policyId });
     }
 
-    const paid = policy.payInstallment(input.number);
+    const paid = policy.payInstallment(input.number, {
+      userId: input.userId,
+      at: this.deps.now(),
+    });
     await this.deps.policies.save(paid);
 
     const proposal = await this.deps.proposals.findById(paid.proposalId);

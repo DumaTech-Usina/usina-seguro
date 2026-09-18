@@ -8,6 +8,18 @@ export class InMemoryReconciliationPendencyRepository implements ReconciliationP
     this.records.push(pendency);
   }
 
+  async findByCompetenceAndProposalNumber(
+    competence: string,
+    proposalNumber: string,
+  ): Promise<ReconciliationPendency | null> {
+    return (
+      this.records.find(
+        (pendency) =>
+          pendency.competence === competence && pendency.proposalNumber === proposalNumber,
+      ) ?? null
+    );
+  }
+
   async listOpen(): Promise<readonly ReconciliationPendency[]> {
     return [...this.records].sort((a, b) => b.registeredAt.getTime() - a.registeredAt.getTime());
   }

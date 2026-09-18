@@ -1,0 +1,55 @@
+/* Only what this page adds to the design system. */
+
+.policy-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.policy-head__numbers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.policy-head__number {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 500;
+}
+
+.comparison {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.audit-note {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-left: 3px solid var(--outline);
+  background: var(--surface-variant);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+}
+
+.audit-note--resolved {
+  border-left-color: var(--info);
+}
+
+.audit-note--override {
+  border-left-color: var(--primary);
+}
+
+.audit-note__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+@media (max-width: 900px) {
+  .comparison {
+    grid-template-columns: 1fr;
+  }
+}

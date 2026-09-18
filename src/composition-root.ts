@@ -128,7 +128,7 @@ export function composeApplication(config: Config): Application {
         now,
       }),
       getPolicy: new GetPolicy({ proposals, policies }),
-      payInstallment: new PayInstallment({ proposals, policies }),
+      payInstallment: new PayInstallment({ proposals, policies, now }),
       registerCommissionAgreement: new RegisterCommissionAgreement({ agreements, newId, now }),
       registerBrokerCommissionRate: new RegisterBrokerCommissionRate({ brokerRates, now }),
       getCommission: new GetCommission({ commissions }),
