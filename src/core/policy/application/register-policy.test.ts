@@ -6,24 +6,43 @@ import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/err
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal } from '../../proposal/domain/proposal.ts';
+import type {
+  AgreedCommissionCalculator,
+  AgreedCommissionRequest,
+} from './agreed-commission-calculator.ts';
 import { RegisterPolicy, type RegisterPolicyInput } from './register-policy.ts';
 
 const NOW = new Date('2026-09-20T10:00:00.000Z');
 
+/**
+ * Stands in for the commission module (FP-01 step 7). The policy module is
+ * tested against the port it declared, not against a real calculation: what
+ * the agreed commission is worth is a rule of the other module.
+ */
+class RecordingCommissionCalculator implements AgreedCommissionCalculator {
+  readonly requests: AgreedCommissionRequest[] = [];
+
+  async calculateFor(request: AgreedCommissionRequest): Promise<void> {
+    this.requests.push(request);
+  }
+}
+
 function scenario() {
   const proposals = new InMemoryProposalRepository();
   const policies = new InMemoryPolicyRepository();
+  const agreedCommission = new RecordingCommissionCalculator();
   let sequence = 0;
 
   const useCase = new RegisterPolicy({
     proposals,
     policies,
     transaction: new ImmediateTransaction(),
+    agreedCommission,
     newId: () => `id-${++sequence}`,
     now: () => NOW,
   });
 
-  return { proposals, policies, useCase };
+  return { proposals, policies, agreedCommission, useCase };
 }
 
 function draft(): Proposal {
@@ -159,5 +178,32 @@ describe('RegisterPolicy', () => {
 
     expect((await proposals.findById('proposal-1'))?.status).toBe('TRANSMITTED');
     expect(await policies.findById('id-1')).toBeNull();
+  });
+
+  it('asks for the agreed commission once the policy is created (FP-01 step 7)', async () => {
+    const { proposals, agreedCommission, useCase } = scenario();
+    await proposals.save(transmitted());
+
+    const policy = await useCase.execute(input());
+
+    expect(agreedCommission.requests).toHaveLength(1);
+    expect(agreedCommission.requests[0]).toEqual({
+      policyId: policy.id,
+      proposalId: 'proposal-1',
+      // REQ-051: the policy premium is what the other module calculates on.
+      premium: Money.fromString('1200.00'),
+      calculatedAt: NOW,
+    });
+  });
+
+  it('asks for nothing when the policy is refused (REQ-070, CA-009)', async () => {
+    const { proposals, agreedCommission, useCase } = scenario();
+    await proposals.save(transmitted());
+
+    await expect(useCase.execute(input({ installments: [] }))).rejects.toThrow(
+      BusinessRuleViolation,
+    );
+
+    expect(agreedCommission.requests).toEqual([]);
   });
 });

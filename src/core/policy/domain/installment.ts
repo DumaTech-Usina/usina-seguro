@@ -12,10 +12,12 @@ import { POLICY_MESSAGES } from './errors.ts';
  *         └─► CANCELLED
  * ```
  *
- * Only the initial state is reachable here. Payment confirmation is manual and
- * belongs to the transfer flow (REQ-091, REQ-092, ITP-008); `OVERDUE` depends
- * on a rule nobody has stated (who marks it, against which clock). The states
- * stay in the union because they are part of the documented machine.
+ * `PENDING` and `PAID` are reachable: IN-13 and REQ-092 make the confirmation
+ * of the client's payment a manual act by a user of the Usina, and REQ-091
+ * makes it the condition that releases the broker transfer. `OVERDUE` depends
+ * on a rule nobody has stated (who marks it, against which clock) and
+ * `CANCELLED` on the policy cancellation of REQ-053, which is not modelled.
+ * Both stay in the union because they are part of the documented machine.
  */
 export type InstallmentStatus = 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELLED';
 
@@ -78,5 +80,27 @@ export class Installment {
   /** Rebuilds a persisted installment without re-applying the rules (REQ-124). */
   static restore(data: InstallmentData, status: InstallmentStatus): Installment {
     return new Installment(data, status);
+  }
+
+  get isPaid(): boolean {
+    return this.status === 'PAID';
+  }
+
+  /**
+   * IN-13, REQ-092, ITP-008: a user of the Usina confirms the client paid.
+   * There is no bank integration (REQ-013), so this record is the only source.
+   *
+   * Confirming twice is refused: the confirmation releases the transfer of
+   * REQ-091 and REQ-124 forbids overwriting a financial record.
+   */
+  pay(): Installment {
+    if (this.status !== 'PENDING') {
+      throw new BusinessRuleViolation('REQ-092', POLICY_MESSAGES.ONLY_PENDING_CAN_BE_PAID, {
+        number: String(this.number),
+        status: this.status,
+      });
+    }
+
+    return new Installment(this, 'PAID');
   }
 }

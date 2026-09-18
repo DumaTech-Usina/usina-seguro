@@ -54,6 +54,19 @@ const getPolicySchema: FastifySchema = {
   },
 };
 
+const payInstallmentSchema: FastifySchema = {
+  params: {
+    type: 'object',
+    required: ['id', 'number'],
+    properties: {
+      id: { type: 'string' },
+      // Coercion is off for the whole server (REQ-120), so a path segment
+      // stays a string and the use case converts it.
+      number: { type: 'string', pattern: '^[0-9]+$' },
+    },
+  },
+};
+
 export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): void {
   // FP-01 step 6, acceptance branch (REQ-048): the insurer effectuated the
   // proposal and the policy is recorded with its installments.
@@ -67,4 +80,15 @@ export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): 
     const { id } = request.params as { id: string };
     return useCases.getPolicy.execute(id);
   });
+
+  // IN-13, REQ-092, FP-03 step 3: a user confirms the client paid. REQ-091
+  // makes the first installment the condition that releases the transfer.
+  app.post(
+    '/policies/:id/installments/:number/payment',
+    { schema: payInstallmentSchema },
+    async (request) => {
+      const { id, number } = request.params as { id: string; number: string };
+      return useCases.payInstallment.execute({ policyId: id, number: Number(number) });
+    },
+  );
 }

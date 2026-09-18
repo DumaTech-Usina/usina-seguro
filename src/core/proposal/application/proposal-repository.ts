@@ -13,4 +13,11 @@ import type { Proposal } from '../domain/proposal.ts';
 export interface ProposalRepository {
   save(proposal: Proposal): Promise<void>;
   findById(id: string): Promise<Proposal | null>;
+  /**
+   * REQ-082: the commission report identifies the business by the number the
+   * insurer issued, and the policy is reached from the proposal it originated
+   * (REQ-050). Only a transmitted proposal has a number, so an unknown one
+   * answers null rather than an error.
+   */
+  findByProposalNumber(proposalNumber: string): Promise<Proposal | null>;
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BusinessRuleViolation } from '../../proposal/domain/errors.ts';
+import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { CalendarDate } from './calendar-date.ts';
 import { Installment } from './installment.ts';
@@ -123,5 +123,36 @@ describe('Policy.register', () => {
     const policy = Policy.restore(validData(), 'CANCELLED');
 
     expect(policy.status).toBe('CANCELLED');
+  });
+});
+
+describe('Policy.payInstallment', () => {
+  function scheduled(): Policy {
+    return Policy.register(validData({ installments: [installment(1), installment(2)] }));
+  }
+
+  it('confirms one installment of the schedule (IN-13)', () => {
+    const policy = scheduled().payInstallment(1);
+
+    expect(policy.installments[0]?.status).toBe('PAID');
+    expect(policy.isFirstInstallmentPaid).toBe(true);
+  });
+
+  it('leaves the other installments untouched', () => {
+    const policy = scheduled().payInstallment(1);
+
+    expect(policy.installments[1]?.status).toBe('PENDING');
+  });
+
+  it('answers REQ-091 about the first installment specifically', () => {
+    const policy = scheduled();
+
+    expect(policy.isFirstInstallmentPaid).toBe(false);
+    // A later installment paid does not release the transfer of REQ-091.
+    expect(policy.payInstallment(2).isFirstInstallmentPaid).toBe(false);
+  });
+
+  it('reports an installment that is not in the schedule', () => {
+    expect(() => scheduled().payInstallment(99)).toThrow(RecordNotFound);
   });
 });

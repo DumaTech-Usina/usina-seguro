@@ -10,4 +10,11 @@ import type { Policy } from '../domain/policy.ts';
 export interface PolicyRepository {
   save(policy: Policy): Promise<void>;
   findById(id: string): Promise<Policy | null>;
+  /** REQ-082, CA-018: the conciliation key is the policy number. */
+  findByPolicyNumber(policyNumber: string): Promise<Policy | null>;
+  /**
+   * REQ-082, CA-019: when the report brings only the proposal number, the
+   * policy is resolved through the link the proposal originated (REQ-050).
+   */
+  findByProposalId(proposalId: string): Promise<Policy | null>;
 }

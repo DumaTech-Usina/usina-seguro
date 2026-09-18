@@ -1,7 +1,9 @@
 import { BusinessRuleViolation, PROPOSAL_MESSAGES } from './errors.ts';
 
 /**
- * Commission percentage (REQ-041: worked commission informed at transmission).
+ * Commission percentage (REQ-041: worked commission informed at transmission;
+ * REQ-065, REQ-093: the rates of the commercial agreement and of the broker
+ * table).
  *
  * REQ-121 requires the percentage to be kept with the precision needed to
  * reproduce the apportioned value without a rounding that diverges from what
@@ -13,9 +15,10 @@ import { BusinessRuleViolation, PROPOSAL_MESSAGES } from './errors.ts';
  * `Money` is not reused: it is a BRL amount with a fixed scale of 2, and a
  * percentage is neither an amount nor limited to two decimals.
  *
- * No arithmetic is exposed yet. Applying a percentage to an amount requires a
- * rounding rule, and no requirement defines one; that decision belongs to the
- * commission slice (REQ-062..REQ-069), not here.
+ * The percentage does not apply itself to an amount: the rounding happens in
+ * `Money`, which is the type that owns the scale the result has to fit. What is
+ * exposed here is the exact fraction behind the text, so no step of the
+ * calculation goes through binary floating point.
  */
 const DECIMAL_STRING = /^\d+(\.\d+)?$/;
 
@@ -47,6 +50,29 @@ export class Percentage {
     }
 
     return new Percentage(text);
+  }
+
+  /**
+   * The exact value as `numerator / 10 ** scale`, e.g. '32.5' becomes
+   * `{ numerator: 325n, scale: 1 }`.
+   *
+   * REQ-121 requires the informed precision to survive the calculation, so the
+   * fraction is exact and the caller decides where to round (see
+   * `Money.applyRate`).
+   */
+  asFraction(): { readonly numerator: bigint; readonly scale: number } {
+    const [whole = '0', fraction = ''] = this.value.split('.');
+    return { numerator: BigInt(whole + fraction), scale: fraction.length };
+  }
+
+  equals(other: Percentage): boolean {
+    const mine = this.asFraction();
+    const theirs = other.asFraction();
+    const scale = Math.max(mine.scale, theirs.scale);
+    return (
+      mine.numerator * 10n ** BigInt(scale - mine.scale) ===
+      theirs.numerator * 10n ** BigInt(scale - theirs.scale)
+    );
   }
 
   toString(): string {

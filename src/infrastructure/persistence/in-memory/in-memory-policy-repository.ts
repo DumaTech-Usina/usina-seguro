@@ -19,4 +19,22 @@ export class InMemoryPolicyRepository implements PolicyRepository {
   async findById(id: string): Promise<Policy | null> {
     return this.records.get(id) ?? null;
   }
+
+  async findByPolicyNumber(policyNumber: string): Promise<Policy | null> {
+    return this.find((policy) => policy.policyNumber === policyNumber);
+  }
+
+  async findByProposalId(proposalId: string): Promise<Policy | null> {
+    return this.find((policy) => policy.proposalId === proposalId);
+  }
+
+  private find(matches: (policy: Policy) => boolean): Policy | null {
+    for (const policy of this.records.values()) {
+      if (matches(policy)) {
+        return policy;
+      }
+    }
+
+    return null;
+  }
 }

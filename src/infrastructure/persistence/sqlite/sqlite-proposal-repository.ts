@@ -67,30 +67,39 @@ export class SqliteProposalRepository implements ProposalRepository {
       | ProposalRow
       | undefined;
 
-    if (row === undefined) {
-      return null;
-    }
-
-    return Proposal.restore(
-      {
-        id: row.id,
-        clientId: row.client_id,
-        brokerId: row.broker_id,
-        insurerId: row.insurer_id,
-        productId: row.product_id,
-        paymentMethodId: row.payment_method_id,
-        customerAccepted: row.customer_accepted === 1,
-        netPremium: Money.fromString(row.net_premium),
-        registeredAt: new Date(row.registered_at),
-      },
-      {
-        status: row.status as ProposalStatus,
-        proposalNumber: row.proposal_number,
-        workedCommission:
-          row.worked_commission === null ? null : Percentage.fromString(row.worked_commission),
-        transmittedAt: row.transmitted_at === null ? null : new Date(row.transmitted_at),
-        rejectionReason: row.rejection_reason,
-      },
-    );
+    return row === undefined ? null : toProposal(row);
   }
+
+  /** REQ-082: the report identifies the business by the insurer's number. */
+  async findByProposalNumber(proposalNumber: string): Promise<Proposal | null> {
+    const row = this.db
+      .prepare('SELECT * FROM proposal WHERE proposal_number = ?')
+      .get(proposalNumber) as ProposalRow | undefined;
+
+    return row === undefined ? null : toProposal(row);
+  }
+}
+
+function toProposal(row: ProposalRow): Proposal {
+  return Proposal.restore(
+    {
+      id: row.id,
+      clientId: row.client_id,
+      brokerId: row.broker_id,
+      insurerId: row.insurer_id,
+      productId: row.product_id,
+      paymentMethodId: row.payment_method_id,
+      customerAccepted: row.customer_accepted === 1,
+      netPremium: Money.fromString(row.net_premium),
+      registeredAt: new Date(row.registered_at),
+    },
+    {
+      status: row.status as ProposalStatus,
+      proposalNumber: row.proposal_number,
+      workedCommission:
+        row.worked_commission === null ? null : Percentage.fromString(row.worked_commission),
+      transmittedAt: row.transmitted_at === null ? null : new Date(row.transmitted_at),
+      rejectionReason: row.rejection_reason,
+    },
+  );
 }

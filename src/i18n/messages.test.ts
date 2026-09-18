@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { COMMISSION_MESSAGES } from '../core/commission/domain/errors.ts';
 import { POLICY_MESSAGES } from '../core/policy/domain/errors.ts';
 import { PROPOSAL_MESSAGES } from '../core/proposal/domain/errors.ts';
+import { RECONCILIATION_MESSAGES } from '../core/reconciliation/domain/errors.ts';
+import { SETTLEMENT_MESSAGES } from '../core/settlement/domain/errors.ts';
 import { translate } from './messages.ts';
 
 describe('translate', () => {
@@ -25,7 +28,15 @@ describe('translate', () => {
   });
 
   it('has a translation for every key the domain can emit', () => {
-    for (const key of [...Object.values(PROPOSAL_MESSAGES), ...Object.values(POLICY_MESSAGES)]) {
+    const keys = [
+      ...Object.values(PROPOSAL_MESSAGES),
+      ...Object.values(POLICY_MESSAGES),
+      ...Object.values(COMMISSION_MESSAGES),
+      ...Object.values(RECONCILIATION_MESSAGES),
+      ...Object.values(SETTLEMENT_MESSAGES),
+    ];
+
+    for (const key of keys) {
       expect(translate(key)).not.toBe(key);
     }
   });

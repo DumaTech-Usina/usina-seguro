@@ -19,16 +19,26 @@ no adapter correspondente — não em uma camada genérica.
 | Concorrência | Um escritor por vez; lock no banco inteiro | MVCC, lock por linha | **Ainda não exercitado.** Nenhum requisito atual depende de escrita concorrente |
 | Transação / isolamento | Sem `SERIALIZABLE` real por transação | Níveis de isolamento configuráveis | Atomicidade **exercitada**: `SqliteTransaction` usa `SAVEPOINT` (aninhável, ao contrário de `BEGIN`) e há teste de rollback. Níveis de isolamento continuam não exercitados — ver abaixo |
 | Data de calendário | Não existe tipo nativo | `date` | `AAAA-MM-DD` em `TEXT`; `CalendarDate` no domínio evita fuso |
+| Vigência do acordo comercial | Ordenação de `TEXT` | Ordenação de `date` | `effective_from <= ? ORDER BY ... DESC LIMIT 1`. ISO-8601 ordena lexicograficamente igual a cronologicamente, então a mesma expressão vale nos dois (`REQ-065`) |
+| Percentual de comissão | Mesmo problema de `REAL` | `NUMERIC` | `TEXT` com a escala informada (`REQ-121`). A aritmética não acontece no banco: `Money.applyRate` opera em `bigint` no domínio |
+| Enum | Não existe | `enum` / `CHECK` | `CHECK (... IN (...))` explícito em cadeia de comissão, base do corretor e regra de liberação |
 
 ## Aberto, deliberadamente
 
-Concorrência e **níveis de isolamento** não estão cobertos porque nenhum requisito
+Concorrência e **níveis de isolamento** continuam não cobertos porque nenhum requisito
 implementado até aqui escreve de forma concorrente. O que está coberto é a atomicidade
-de uma unidade de trabalho: registrar a apólice grava proposta e apólice juntas
-(`REQ-111`), e o savepoint garante que uma falha no meio não deixe metade escrita. Isso muda na conciliação (`REQ-080`–`REQ-086`),
-onde a idempotência da reimportação (`ITP-007`, `REJ-012`) depende de uma constraint de
-unicidade e do comportamento de `INSERT ... ON CONFLICT`. Quando esse slice chegar, a
-regra de unicidade precisa ser validada **também em PostgreSQL**, não só em SQLite.
+de uma unidade de trabalho: registrar a apólice grava proposta, apólice e comissão
+acordada juntas (`REQ-111`, `FP-01` passo 7) e a importação do relatório aplica o
+arquivo inteiro ou nada — em ambos os casos o savepoint garante que uma falha no meio
+não deixe metade escrita, e há teste de rollback para os dois.
+
+A idempotência da reimportação (`REQ-086`, `REJ-012`) está implementada como **regra de
+domínio**: a comissão guarda a competência em que foi conciliada e recusa a mesma duas
+vezes. A tabela `commission` tem `UNIQUE (policy_id)` como garantia de armazenamento, e
+não se usou `INSERT ... ON CONFLICT` para decidir a regra — o dialeto ficaria dentro do
+comportamento de negócio. Ainda assim, **essa constraint precisa ser validada em
+PostgreSQL** quando o adapter existir: é a diferença entre um domínio correto e um
+domínio correto *sob concorrência*, que é justamente o que não foi exercitado.
 
 ## `node:sqlite`
 

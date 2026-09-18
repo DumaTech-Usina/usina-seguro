@@ -59,7 +59,48 @@ describe('core dependency rule', () => {
   });
 
   it('no business module imports another business module without a declared need', async () => {
-    const crossings: string[] = [];
+    // Crossings are allowed only when a requirement forces them, and each one
+    // is listed here with its justification.
+    //
+    // Every module also reuses the vocabulary the proposal module declares
+    // (`Money`, `Percentage`, `BusinessRuleViolation`, `RecordNotFound`),
+    // which is where it lives because the proposal is the module everything
+    // else already depends on. That is stated once here rather than repeated
+    // in each entry.
+    const declared = [
+      // A policy only exists as the outcome of a proposal (REQ-048): the
+      // policy module loads it and drives its transition to ACCEPTED (REQ-111).
+      'policy -> proposal',
+      // FP-01 step 7: the commission is calculated once the policy exists. The
+      // commission module implements the port the policy module declares
+      // (`AgreedCommissionCalculator`) and reads `CalendarDate`, so the arrow
+      // points this way and the policy module never names a commission.
+      'commission -> policy',
+      // REQ-065 selects the agreement by insurer and product and IN-05 selects
+      // the broker table by broker. All three live on the proposal (REQ-022),
+      // not on the policy.
+      'commission -> proposal',
+      // FP-02 step 3: a matched line produces the real commission of REQ-075,
+      // so the reconciliation drives the commission through its own states.
+      'reconciliation -> commission',
+      // REQ-082: the conciliation key is the policy number, and the unit of
+      // work reuses the `Transaction` contract the policy module declares.
+      'reconciliation -> policy',
+      // REQ-082, CA-019: a line that brings only the proposal number reaches
+      // the policy through the link of REQ-050.
+      'reconciliation -> proposal',
+      // REQ-093: the transfer is worth what the commission says it is worth,
+      // override of REQ-066 included.
+      'settlement -> commission',
+      // REQ-091: the transfer of a payment method that requires confirmation
+      // waits on the first installment of the policy schedule.
+      'settlement -> policy',
+      // REQ-090 keys the release rule by the payment method, and REQ-096 pays
+      // the broker: both live on the proposal.
+      'settlement -> proposal',
+    ];
+
+    const crossings = new Set<string>();
 
     for (const file of await coreFiles(CORE)) {
       const module = path.relative(CORE, file).split(path.sep)[0];
@@ -72,20 +113,51 @@ describe('core dependency rule', () => {
 
         const targetModule = path.relative(CORE, target).split(path.sep)[0];
         if (targetModule !== module) {
-          crossings.push(`${module} -> ${targetModule}`);
+          crossings.add(`${module} -> ${targetModule}`);
         }
       }
     }
 
-    // Crossings are allowed only when a requirement forces them, and each one
-    // is listed here with its justification.
-    //
-    // `policy -> proposal`: a policy only exists as the outcome of a proposal
-    // (REQ-048), so the policy module loads the proposal, drives its transition
-    // to ACCEPTED (REQ-111) and reuses the vocabulary the proposal module
-    // already declares (`Money`, `BusinessRuleViolation`, `RecordNotFound`).
-    // The reverse direction does not exist, so there is no cycle.
-    expect([...new Set(crossings)].sort()).toEqual(['policy -> proposal']);
+    expect([...crossings].sort()).toEqual([...declared].sort());
+  });
+
+  it('the dependencies between business modules have no cycle', async () => {
+    // The list above grows with each slice, and reading nine arrows is no
+    // longer enough to see that none of them closes a loop. A topological sort
+    // answers it: if every module can be removed once nothing depends on it
+    // any more, the graph is acyclic.
+    const dependencies = new Map<string, Set<string>>();
+
+    for (const file of await coreFiles(CORE)) {
+      const module = path.relative(CORE, file).split(path.sep)[0] as string;
+      const targets = dependencies.get(module) ?? new Set<string>();
+
+      for (const specifier of importsOf(file)) {
+        if (!specifier.startsWith('.')) continue;
+
+        const target = path.resolve(path.dirname(file), specifier);
+        if (!target.startsWith(CORE)) continue;
+
+        const targetModule = path.relative(CORE, target).split(path.sep)[0] as string;
+        if (targetModule !== module) targets.add(targetModule);
+      }
+
+      dependencies.set(module, targets);
+    }
+
+    const remaining = new Map(dependencies);
+
+    while (remaining.size > 0) {
+      const settled = [...remaining]
+        .filter(([, targets]) => [...targets].every((target) => !remaining.has(target)))
+        .map(([module]) => module);
+
+      // Nothing left to remove while modules remain means they depend on each
+      // other, directly or through a chain.
+      expect(settled, `cycle between: ${[...remaining.keys()].join(', ')}`).not.toEqual([]);
+
+      for (const module of settled) remaining.delete(module);
+    }
   });
 
   it('the domain builds every violation from the message-key constant, never a literal', async () => {

@@ -15,6 +15,8 @@ export const POLICY_MESSAGES = {
   INSTALLMENT_AMOUNT_MUST_BE_POSITIVE: 'policy.installment_amount_must_be_positive',
   INSTALLMENT_BELONGS_TO_ANOTHER_POLICY: 'policy.installment_belongs_to_another_policy',
   NOT_FOUND: 'policy.not_found',
+  INSTALLMENT_NOT_FOUND: 'policy.installment_not_found',
+  ONLY_PENDING_CAN_BE_PAID: 'policy.only_pending_can_be_paid',
   INVALID_DATE_FORMAT: 'policy.invalid_date_format',
 } as const;
 

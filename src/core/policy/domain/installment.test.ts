@@ -45,4 +45,26 @@ describe('Installment.create', () => {
 
     expect(installment.status).toBe('PAID');
   });
+
+  describe('pay', () => {
+    it('records the manual confirmation that the client paid (IN-13, REQ-092)', () => {
+      const paid = Installment.create(validData()).pay();
+
+      expect(paid.status).toBe('PAID');
+      expect(paid.isPaid).toBe(true);
+    });
+
+    it('leaves the original untouched', () => {
+      const installment = Installment.create(validData());
+      installment.pay();
+
+      expect(installment.status).toBe('PENDING');
+    });
+
+    it('refuses a second confirmation (REQ-124)', () => {
+      const paid = Installment.create(validData()).pay();
+
+      expect(() => paid.pay()).toThrow(BusinessRuleViolation);
+    });
+  });
 });

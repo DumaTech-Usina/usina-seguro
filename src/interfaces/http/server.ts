@@ -2,9 +2,12 @@ import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import type { UseCases } from '../../composition-root.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../../core/proposal/domain/errors.ts';
 import { translate } from '../../i18n/messages.ts';
+import { registerCommissionRoutes } from './routes/commissions.ts';
 import { registerHealthRoute } from './routes/health.ts';
 import { registerPolicyRoutes } from './routes/policies.ts';
 import { registerProposalRoutes } from './routes/proposals.ts';
+import { registerReconciliationRoutes } from './routes/reconciliations.ts';
+import { registerSettlementRoutes } from './routes/settlements.ts';
 
 export interface HttpServerOptions {
   readonly logger: boolean;
@@ -55,6 +58,16 @@ export function createHttpServer(
       return reply.code(400).send({ error: 'invalid_request', message: error.message });
     }
 
+    // Fastify's own client errors: a body that is not valid JSON, an empty
+    // body under a JSON content type, an unsupported media type. They are
+    // malformed requests like a schema failure, and answering 500 would blame
+    // the server for what the caller sent.
+    if (error.statusCode !== undefined && error.statusCode >= 400 && error.statusCode < 500) {
+      return reply
+        .code(error.statusCode)
+        .send({ error: 'invalid_request', message: error.message });
+    }
+
     app.log.error(error);
     return reply.code(500).send({ error: 'internal_error' });
   });
@@ -62,6 +75,9 @@ export function createHttpServer(
   registerHealthRoute(app);
   registerProposalRoutes(app, useCases);
   registerPolicyRoutes(app, useCases);
+  registerCommissionRoutes(app, useCases);
+  registerReconciliationRoutes(app, useCases);
+  registerSettlementRoutes(app, useCases);
 
   return app;
 }

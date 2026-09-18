@@ -1,4 +1,4 @@
-import { BusinessRuleViolation } from '../../proposal/domain/errors.ts';
+import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/errors.ts';
 import type { Money } from '../../proposal/domain/money.ts';
 import type { CalendarDate } from './calendar-date.ts';
 import { POLICY_MESSAGES } from './errors.ts';
@@ -125,5 +125,43 @@ export class Policy {
   /** Rebuilds a persisted policy without re-applying the rules (REQ-124). */
   static restore(data: PolicyRegistrationData, status: PolicyStatus): Policy {
     return new Policy(data, status);
+  }
+
+  /**
+   * REQ-091: the transfer for a payment method that requires confirmation is
+   * released against the **first** installment, so the schedule has to answer
+   * about it specifically.
+   */
+  get isFirstInstallmentPaid(): boolean {
+    return this.installments.some((installment) => installment.number === 1 && installment.isPaid);
+  }
+
+  /**
+   * IN-13: records that the client paid one installment of the schedule.
+   *
+   * The policy drives it because the installments are part of the policy
+   * (REQ-020) and are never written on their own.
+   */
+  payInstallment(number: number): Policy {
+    const target = this.installments.find((installment) => installment.number === number);
+
+    if (target === undefined) {
+      throw new RecordNotFound(POLICY_MESSAGES.INSTALLMENT_NOT_FOUND, {
+        number: String(number),
+        policyNumber: this.policyNumber,
+      });
+    }
+
+    const paid = target.pay();
+
+    return new Policy(
+      {
+        ...this,
+        installments: this.installments.map((installment) =>
+          installment.number === number ? paid : installment,
+        ),
+      },
+      this.status,
+    );
   }
 }

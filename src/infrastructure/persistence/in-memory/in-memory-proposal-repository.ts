@@ -17,4 +17,14 @@ export class InMemoryProposalRepository implements ProposalRepository {
   async findById(id: string): Promise<Proposal | null> {
     return this.records.get(id) ?? null;
   }
+
+  async findByProposalNumber(proposalNumber: string): Promise<Proposal | null> {
+    for (const proposal of this.records.values()) {
+      if (proposal.proposalNumber === proposalNumber) {
+        return proposal;
+      }
+    }
+
+    return null;
+  }
 }

@@ -1,4 +1,5 @@
 import { BusinessRuleViolation, PROPOSAL_MESSAGES } from './errors.ts';
+import type { Percentage } from './percentage.ts';
 
 /**
  * Monetary amount in BRL with fixed decimal precision (REQ-120).
@@ -7,9 +8,10 @@ import { BusinessRuleViolation, PROPOSAL_MESSAGES } from './errors.ts';
  * binary floating point. The canonical representation for persistence and
  * transport is the 2-decimal string from `toString()`, never `number`.
  *
- * The scale is fixed at 2 because the only confirmed use today is an amount in
- * BRL (net premium, REQ-022). Commission percentages require a different
- * precision (REQ-121) and will be modelled when the commission module exists.
+ * The scale is fixed at 2 because every confirmed amount is in BRL (net
+ * premium REQ-022, policy premium REQ-020, commission and broker transfer
+ * REQ-068, REQ-069, REQ-093). Percentages keep their own precision in
+ * `Percentage` (REQ-121).
  */
 const DECIMAL_PLACES = 2;
 const DECIMAL_STRING = /^-?\d+(\.\d{1,2})?$/;
@@ -41,6 +43,24 @@ export class Money {
     return new Money(negative ? -cents : cents);
   }
 
+  /**
+   * Applies a commission rate to this amount (REQ-062..REQ-069, REQ-093).
+   *
+   * The whole operation runs on integers: cents times the percentage's exact
+   * numerator, divided by `100 * 10 ** scale`. Nothing goes through binary
+   * floating point (REQ-120) and the informed precision of the rate is used in
+   * full (REQ-121).
+   *
+   * The result has to land on a cent, and no requirement states a rounding
+   * rule, so the conventional one for BRL amounts is used: half away from
+   * zero. It is stated here, in one place, rather than reappearing in each
+   * step of the chain.
+   */
+  applyRate(rate: Percentage): Money {
+    const { numerator, scale } = rate.asFraction();
+    return new Money(divideHalfUp(this.cents * numerator, 100n * 10n ** BigInt(scale)));
+  }
+
   isPositive(): boolean {
     return this.cents > 0n;
   }
@@ -61,4 +81,13 @@ export class Money {
   toJSON(): string {
     return this.toString();
   }
+}
+
+/** Integer division rounding halves away from zero. */
+function divideHalfUp(numerator: bigint, denominator: bigint): bigint {
+  const negative = numerator < 0n;
+  const absolute = negative ? -numerator : numerator;
+  const quotient = absolute / denominator;
+  const rounded = (absolute % denominator) * 2n >= denominator ? quotient + 1n : quotient;
+  return negative ? -rounded : rounded;
 }

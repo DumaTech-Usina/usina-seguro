@@ -81,9 +81,21 @@ export class SqlitePolicyRepository implements PolicyRepository {
   }
 
   async findById(id: string): Promise<Policy | null> {
-    const row = this.db.prepare('SELECT * FROM policy WHERE id = ?').get(id) as
-      | PolicyRow
-      | undefined;
+    return this.load('SELECT * FROM policy WHERE id = ?', id);
+  }
+
+  /** REQ-082, CA-018: the conciliation key is the policy number. */
+  async findByPolicyNumber(policyNumber: string): Promise<Policy | null> {
+    return this.load('SELECT * FROM policy WHERE policy_number = ?', policyNumber);
+  }
+
+  /** REQ-082, CA-019: reached through the link of REQ-050. */
+  async findByProposalId(proposalId: string): Promise<Policy | null> {
+    return this.load('SELECT * FROM policy WHERE proposal_id = ?', proposalId);
+  }
+
+  private async load(sql: string, parameter: string): Promise<Policy | null> {
+    const row = this.db.prepare(sql).get(parameter) as PolicyRow | undefined;
 
     if (row === undefined) {
       return null;
@@ -91,7 +103,7 @@ export class SqlitePolicyRepository implements PolicyRepository {
 
     const installments = this.db
       .prepare('SELECT * FROM installment WHERE policy_id = ? ORDER BY number')
-      .all(id) as unknown as InstallmentRow[];
+      .all(row.id) as unknown as InstallmentRow[];
 
     return Policy.restore(
       {

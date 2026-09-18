@@ -4,6 +4,7 @@ import { Money } from '../../proposal/domain/money.ts';
 import { CalendarDate } from '../domain/calendar-date.ts';
 import { Installment } from '../domain/installment.ts';
 import { Policy } from '../domain/policy.ts';
+import type { AgreedCommissionCalculator } from './agreed-commission-calculator.ts';
 import type { PolicyRepository } from './policy-repository.ts';
 import { type PolicyView, toPolicyView } from './policy-view.ts';
 import type { Transaction } from './transaction.ts';
@@ -35,6 +36,8 @@ export interface RegisterPolicyDependencies {
   readonly proposals: ProposalRepository;
   readonly policies: PolicyRepository;
   readonly transaction: Transaction;
+  /** FP-01 step 7: the agreed commission follows the policy being created. */
+  readonly agreedCommission: AgreedCommissionCalculator;
   readonly newId: () => string;
   readonly now: () => Date;
 }
@@ -86,10 +89,19 @@ export class RegisterPolicy {
       ),
     });
 
-    // One business fact, two aggregates: see `Transaction`.
+    // One business fact, three writes: see `Transaction`. The agreed
+    // commission joins the same unit of work because FP-01 step 7 ties it to
+    // the policy being created — a policy stored without it would show an
+    // empty agreed side on the panel REQ-076 requires.
     await this.deps.transaction.run(async () => {
       await this.deps.policies.save(policy);
       await this.deps.proposals.save(accepted);
+      await this.deps.agreedCommission.calculateFor({
+        policyId: policy.id,
+        proposalId: accepted.id,
+        premium: policy.premium,
+        calculatedAt: policy.registeredAt,
+      });
     });
 
     return toPolicyView(policy, accepted);
