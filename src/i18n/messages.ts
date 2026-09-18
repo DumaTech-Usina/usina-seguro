@@ -69,6 +69,7 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'policy.installment_amount_must_be_positive': 'Valor da parcela {number} deve ser positivo.',
     'policy.installment_belongs_to_another_policy': 'Parcela {number} pertence a outra apólice.',
     'policy.not_found': "Apólice não encontrada: '{id}'.",
+    'policy.not_found_for_proposal': "Proposta '{proposalId}' ainda não possui apólice registrada.",
     'policy.invalid_date_format': "Data inválida: '{value}'. Use o formato AAAA-MM-DD.",
     'policy.installment_not_found': "Parcela {number} não encontrada na apólice '{policyNumber}'.",
     'policy.only_pending_can_be_paid':

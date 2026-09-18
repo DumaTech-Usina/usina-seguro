@@ -59,6 +59,16 @@ export const api = {
       body: { reason },
     }),
 
+  // FP-01 step 5 (REQ-043, OUT-01/OUT-02): the proposals still being followed.
+  // `status` is the state to filter by, or nothing for all of them.
+  listProposals: (status) =>
+    request(
+      status === undefined ? '/proposals' : `/proposals?status=${encodeURIComponent(status)}`,
+    ),
+  getProposal: (id) => request(`/proposals/${encodeURIComponent(id)}`),
+  /** The policy this proposal originated, at most one (REQ-049, REQ-050). */
+  getPolicyByProposal: (id) => request(`/proposals/${encodeURIComponent(id)}/policy`),
+
   // FP-01 step 6 and the policy the operator works on afterwards.
   registerPolicy: (input) => request('/policies', { method: 'POST', body: input }),
   getPolicy: (id) => request(`/policies/${encodeURIComponent(id)}`),

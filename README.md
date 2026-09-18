@@ -7,7 +7,8 @@ Identificadores `REQ-xxx`, `CA-xxx`, `ITP-xxx` e `DEC-xxx` no código referencia
 documento.
 
 > **Estado atual: `Proposta → Apólice → Parcela → Comissão → Conciliação → Repasse`.**
-> `FP-01` vai do registro da proposta (`REQ-040`) ao cálculo da comissão acordada no
+> `FP-01` vai do registro da proposta (`REQ-040`), passa pelo rastreio das propostas em
+> aberto (`REQ-043`, `OUT-01`, passo 5) e chega ao cálculo da comissão acordada no
 > momento em que a apólice nasce (`REQ-048`, `REQ-075`, passo 7). `FP-02` concilia o
 > relatório de comissionamento contra as apólices (`REQ-082`, `REQ-083`, `REQ-086`) e
 > `FP-03` conduz o repasse ao corretor até o registro do pagamento (`REQ-090`–`REQ-095`).
@@ -95,12 +96,20 @@ curl -X POST http://127.0.0.1:3000/proposals/<proposta>/transmission \
   -d '{"proposalNumber":"PRP-9001","workedCommission":"32.5"}'
 # 200 {"status":"TRANSMITTED","proposalNumber":"PRP-9001","workedCommission":"32.5",...}
 
-# 3a. Desfecho recusa: motivo obrigatório (REQ-045)
+# 3. Em aberto, rastreável (REQ-043, OUT-01, passo 5)
+curl 'http://127.0.0.1:3000/proposals?status=TRANSMITTED'
+# 200 [{"id":"<proposta>","status":"TRANSMITTED","proposalNumber":"PRP-9001",
+#       "workedCommission":"32.5","netPremium":"1200.00",...}]
+#
+# Sem filtro lista todas; `status=REJECTED` é o relatório de recusadas (OUT-02).
+curl http://127.0.0.1:3000/proposals/<proposta>
+
+# 4a. Desfecho recusa: motivo obrigatório (REQ-045)
 curl -X POST http://127.0.0.1:3000/proposals/<proposta>/rejection \
   -H 'content-type: application/json' -d '{"reason":"perfil de risco"}'
 # 200 {"status":"REJECTED","rejectionReason":"perfil de risco"}
 
-# 3b. Desfecho aceite: registra a apólice e as parcelas (REQ-048, REQ-020)
+# 4b. Desfecho aceite: registra a apólice e as parcelas (REQ-048, REQ-020)
 curl -X POST http://127.0.0.1:3000/policies -H 'content-type: application/json' -d '{
   "proposalId":"<proposta>","policyNumber":"APL-4711","premium":"1200.00",
   "coverageStart":"2026-10-01","coverageEnd":"2027-09-30","renewalDate":"2027-09-30",
@@ -112,8 +121,11 @@ curl -X POST http://127.0.0.1:3000/policies -H 'content-type: application/json' 
 # 201 {"id":"<apolice>","policyNumber":"APL-4711","proposalNumber":"PRP-9001",
 #      "status":"ACTIVE","installments":[{"number":1,...,"status":"PENDING"},...]}
 
-# 4. Consultar: os dois números e o cronograma (CA-008)
+# 5. Consultar: os dois números e o cronograma (CA-008)
 curl http://127.0.0.1:3000/policies/<apolice>
+
+# A apólice que a proposta originou, para quem partiu do rastreio (REQ-049, REQ-050)
+curl http://127.0.0.1:3000/proposals/<proposta>/policy
 ```
 
 Fluxo financeiro `FP-02` / `FP-03`:
@@ -222,10 +234,17 @@ O que existe hoje:
 | Tela | Rota | Estado |
 |------|------|--------|
 | Início | `/app/` | Pronta |
-| Novo negócio (`FP-01` completo) | `/app/proposals/new.html` | Pronta |
+| Nova proposta (`FP-01` passos 3 e 4) | `/app/proposals/new.html` | Pronta |
+| Propostas, por estado (`OUT-01`, `OUT-02`, passo 5) | `/app/proposals/` | Pronta |
+| Proposta: dados e desfecho — aceite vira apólice, recusa exige motivo (passo 6) | `/app/proposals/detail.html?id=…` | Pronta |
 | Apólice: parcelas, comissão acordada × real, repasse | `/app/policies/detail.html?id=…` | Pronta |
 | Cadastros (`IN-02`..`IN-06`) | `/app/settings/` | Pronta |
-| Propostas, Apólices, Comissões, Conciliação, Repasses | — | **Placeholder**: o arquivo existe com um comentário do que será implementado e de qual endpoint falta (`OUT-01`, `OUT-03`..`OUT-07`). Aparecem como *em breve* na navegação |
+| Apólices, Comissões, Conciliação, Repasses | — | **Placeholder**: o arquivo existe com um comentário do que será implementado e de qual endpoint falta (`OUT-03`..`OUT-07`). Aparecem como *em breve* na navegação |
+
+O caminho completo pela interface: **nova proposta → transmitir → a proposta aparece em
+_Propostas / Em aberto_ → abrir → registrar a apólice (ou a recusa) → abrir a apólice**.
+`FP-01` separa esses atos no tempo de propósito: a seguradora responde depois, e o
+desfecho é registrado na própria proposta, não no formulário de cadastro.
 
 Comece pelos **cadastros**: sem acordo comercial e tabela do corretor a apólice nasce
 sem comissão, e a tela mostra isso explicitamente em vez de inventar um valor.
@@ -267,7 +286,15 @@ npm run check             # typecheck + lint + todos os testes
 | **unit** | `src/**/*.test.ts` (junto ao código) | Regra de negócio isolada, com InMemory/fakes. Sem I/O |
 | **architecture** | `tests/architecture/` (roda em `unit`) | Regra de dependência do `core` e fronteira de i18n, verificadas — não só documentadas |
 | **integration** | `tests/integration/` | Componentes reais entre si, incluindo persistência SQLite em arquivo |
-| **e2e** | `tests/e2e/` | Sistema pela interface externa real: porta efêmera, HTTP, SQLite em disco |
+| **e2e** | `tests/e2e/` | Sistema pela interface externa real: porta efêmera, HTTP, SQLite em disco — inclusive **pelas telas** (`web-fp01-flow.test.ts`) |
+
+O teste de fluxo da interface (`tests/e2e/web-fp01-flow.test.ts`) carrega **os mesmos
+arquivos que o navegador baixa** em um DOM (`jsdom`), contra o servidor real: preenche o
+formulário, dispara o envio, e confere os dois lados — o que a tela passou a mostrar e o
+que o backend passou a guardar. `vitest.config.ts` resolve o prefixo `/app/` para
+`src/interfaces/web/public/`, então não há cópia nem build; `jsdom` é a única dependência
+de desenvolvimento acrescentada por isso, e nada dela chega ao processo que roda em
+produção.
 
 ## Qualidade
 

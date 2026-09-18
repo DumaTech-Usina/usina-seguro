@@ -12,11 +12,14 @@ import { OverrideCommission } from './core/commission/application/override-commi
 import { RegisterBrokerCommissionRate } from './core/commission/application/register-broker-commission-rate.ts';
 import { RegisterCommissionAgreement } from './core/commission/application/register-commission-agreement.ts';
 import { ResolveCommissionDivergence } from './core/commission/application/resolve-commission-divergence.ts';
+import { GetPolicyByProposal } from './core/policy/application/get-policy-by-proposal.ts';
 import { GetPolicy } from './core/policy/application/get-policy.ts';
 import { PayInstallment } from './core/policy/application/pay-installment.ts';
 import type { PolicyRepository } from './core/policy/application/policy-repository.ts';
 import { RegisterPolicy } from './core/policy/application/register-policy.ts';
 import type { Transaction } from './core/policy/application/transaction.ts';
+import { GetProposal } from './core/proposal/application/get-proposal.ts';
+import { ListProposals } from './core/proposal/application/list-proposals.ts';
 import type { ProposalRepository } from './core/proposal/application/proposal-repository.ts';
 import { RegisterProposal } from './core/proposal/application/register-proposal.ts';
 import { RejectProposal } from './core/proposal/application/reject-proposal.ts';
@@ -60,8 +63,11 @@ export interface UseCases {
   readonly registerProposal: RegisterProposal;
   readonly transmitProposal: TransmitProposal;
   readonly rejectProposal: RejectProposal;
+  readonly getProposal: GetProposal;
+  readonly listProposals: ListProposals;
   readonly registerPolicy: RegisterPolicy;
   readonly getPolicy: GetPolicy;
+  readonly getPolicyByProposal: GetPolicyByProposal;
   readonly payInstallment: PayInstallment;
   readonly registerCommissionAgreement: RegisterCommissionAgreement;
   readonly registerBrokerCommissionRate: RegisterBrokerCommissionRate;
@@ -119,6 +125,8 @@ export function composeApplication(config: Config): Application {
       registerProposal: new RegisterProposal({ proposals, newId, now }),
       transmitProposal: new TransmitProposal({ proposals, now }),
       rejectProposal: new RejectProposal({ proposals }),
+      getProposal: new GetProposal({ proposals }),
+      listProposals: new ListProposals({ proposals }),
       registerPolicy: new RegisterPolicy({
         proposals,
         policies,
@@ -128,6 +136,7 @@ export function composeApplication(config: Config): Application {
         now,
       }),
       getPolicy: new GetPolicy({ proposals, policies }),
+      getPolicyByProposal: new GetPolicyByProposal({ proposals, policies }),
       payInstallment: new PayInstallment({ proposals, policies, now }),
       registerCommissionAgreement: new RegisterCommissionAgreement({ agreements, newId, now }),
       registerBrokerCommissionRate: new RegisterBrokerCommissionRate({ brokerRates, now }),

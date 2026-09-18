@@ -88,6 +88,14 @@ export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): 
     return useCases.getPolicy.execute(id);
   });
 
+  // FP-01 step 6 seen from the proposal being tracked (REQ-043): the policy it
+  // originated, at most one (REQ-049). The path belongs to the proposal, the
+  // answer belongs to this module, which is why it is registered here.
+  app.get('/proposals/:id/policy', { schema: getPolicySchema }, async (request) => {
+    const { id } = request.params as { id: string };
+    return useCases.getPolicyByProposal.execute(id);
+  });
+
   // IN-13, REQ-092, FP-03 step 3: a user confirms the client paid. REQ-091
   // makes the first installment the condition that releases the transfer.
   app.post(

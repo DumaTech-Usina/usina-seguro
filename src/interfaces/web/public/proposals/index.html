@@ -1,15 +1,58 @@
-<!--
-  Propostas em aberto (OUT-01)
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Propostas — Usina do Seguro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/app/shared/base.css" />
+    <link rel="stylesheet" href="/app/proposals/index.css" />
+  </head>
+  <body class="shell" data-nav="proposals">
+    <main class="content">
+      <div class="content__inner">
+        <div class="page-head">
+          <div class="page-head__text">
+            <h1 class="text-display">Propostas</h1>
+            <p class="text-muted">
+              FP-01 passo 5: as propostas transmitidas e ainda sem desfecho, rastreáveis
+              até o aceite ou a recusa.
+            </p>
+          </div>
+          <div class="page-head__actions">
+            <a class="btn btn--filled" href="/app/proposals/new.html">
+              <span class="material-symbols-outlined">note_add</span>
+              Nova proposta
+            </a>
+          </div>
+        </div>
 
-  Lista das propostas transmitidas e ainda sem desfecho, que REQ-043 exige poder
-  rastrear. Colunas: numero da proposta, cliente, corretor, seguradora, premio
-  liquido, comissao trabalhada e ha quanto tempo esta em aberto.
+        <!-- Filtro por estado. Os estados são os da seção 10.2; o rótulo vem
+             de shared/status.js, que é o único vocabulário de domínio da tela. -->
+        <div class="filters" id="filters" role="tablist" aria-label="Estado da proposta"></div>
 
-  Acoes por linha: abrir o desfecho (aceite -> apolice, recusa -> motivo), que hoje
-  vivem no passo 3 de /app/proposals/new.html.
+        <section class="card">
+          <div class="card__body card__body--flush" id="list">
+            <div class="card__body stack">
+              <div class="skeleton" style="width: 40%"></div>
+              <div class="skeleton" style="width: 70%"></div>
+              <div class="skeleton" style="width: 55%"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
 
-  Tambem cobre OUT-02, o relatorio de recusadas (REQ-045), como um filtro por
-  estado sobre a mesma tabela.
-
-  Bloqueio: GET /proposals (listagem e filtro por estado) nao existe.
--->
+    <script type="module" src="/app/shared/shell.js"></script>
+    <script type="module" src="/app/proposals/index.js"></script>
+  </body>
+</html>

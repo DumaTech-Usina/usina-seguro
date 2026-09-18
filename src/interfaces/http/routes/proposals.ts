@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
+import type { ListProposalsInput } from '../../../core/proposal/application/list-proposals.ts';
 import type { RegisterProposalInput } from '../../../core/proposal/application/register-proposal.ts';
 
 /**
@@ -66,11 +67,44 @@ const rejectProposalSchema: FastifySchema = {
   },
 };
 
+/**
+ * Shape only. The set of states is the domain's (section 10.2) and the schema
+ * repeats it so an unknown value is a 400 instead of an empty listing that
+ * looks like "nothing to do".
+ */
+const listProposalsSchema: FastifySchema = {
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      status: {
+        type: 'string',
+        enum: ['DRAFT', 'TRANSMITTED', 'ACCEPTED', 'REJECTED', 'CANCELLED'],
+      },
+    },
+  },
+};
+
+const getProposalSchema: FastifySchema = { params: proposalIdParams };
+
 interface ProposalIdParams {
   id: string;
 }
 
 export function registerProposalRoutes(app: FastifyInstance, useCases: UseCases): void {
+  // FP-01 step 5 (REQ-043): the proposals still open, or the refused ones of
+  // OUT-02, depending on the state asked for. No filter lists every proposal.
+  app.get('/proposals', { schema: listProposalsSchema }, async (request) => {
+    // The schema already restricted the query to a known state or nothing.
+    return useCases.listProposals.execute(request.query as ListProposalsInput);
+  });
+
+  // REQ-043, REQ-046: a proposal stays consultable, outcome or not.
+  app.get('/proposals/:id', { schema: getProposalSchema }, async (request) => {
+    const { id } = request.params as ProposalIdParams;
+    return useCases.getProposal.execute(id);
+  });
+
   app.post('/proposals', { schema: registerProposalSchema }, async (request, reply) => {
     const output = await useCases.registerProposal.execute(request.body as RegisterProposalInput);
     return reply.code(201).send(output);

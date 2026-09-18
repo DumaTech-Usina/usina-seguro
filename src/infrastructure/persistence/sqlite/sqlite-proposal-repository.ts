@@ -1,5 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { ProposalRepository } from '../../../core/proposal/application/proposal-repository.ts';
+import type {
+  ProposalListFilter,
+  ProposalRepository,
+} from '../../../core/proposal/application/proposal-repository.ts';
 import { Money } from '../../../core/proposal/domain/money.ts';
 import { Percentage } from '../../../core/proposal/domain/percentage.ts';
 import { Proposal, type ProposalStatus } from '../../../core/proposal/domain/proposal.ts';
@@ -77,6 +80,21 @@ export class SqliteProposalRepository implements ProposalRepository {
       .get(proposalNumber) as ProposalRow | undefined;
 
     return row === undefined ? null : toProposal(row);
+  }
+
+  /**
+   * REQ-043, OUT-01. `registered_at` is an ISO-8601 UTC string, so ordering it
+   * as text orders it chronologically; the id breaks a tie so two proposals
+   * registered in the same millisecond keep a stable position between reads.
+   */
+  async list(filter: ProposalListFilter): Promise<readonly Proposal[]> {
+    const rows = (filter.status === undefined
+      ? this.db.prepare('SELECT * FROM proposal ORDER BY registered_at DESC, id DESC').all()
+      : this.db
+          .prepare('SELECT * FROM proposal WHERE status = ? ORDER BY registered_at DESC, id DESC')
+          .all(filter.status)) as unknown as ProposalRow[];
+
+    return rows.map(toProposal);
   }
 }
 

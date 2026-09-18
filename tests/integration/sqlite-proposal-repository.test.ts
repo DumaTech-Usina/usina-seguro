@@ -26,7 +26,11 @@ afterEach(() => {
   rmSync(directory, { recursive: true, force: true });
 });
 
-function proposal(id: string, premium: string): Proposal {
+function proposal(
+  id: string,
+  premium: string,
+  registeredAt = '2026-09-17T12:00:00.000Z',
+): Proposal {
   return Proposal.register({
     id,
     clientId: 'client-1',
@@ -36,7 +40,7 @@ function proposal(id: string, premium: string): Proposal {
     paymentMethodId: 'bank-slip',
     customerAccepted: true,
     netPremium: Money.fromString(premium),
-    registeredAt: new Date('2026-09-17T12:00:00.000Z'),
+    registeredAt: new Date(registeredAt),
   });
 }
 
@@ -142,6 +146,46 @@ describe('SqliteProposalRepository', () => {
       .get() as Record<string, unknown>;
 
     expect(row).toEqual({ proposal_number: null, worked_commission: null, transmitted_at: null });
+  });
+
+  it('lists the open proposals newest first (REQ-043, OUT-01)', async () => {
+    await repository.save(proposal('older', '100.00', '2026-09-15T12:00:00.000Z'));
+    await repository.save(
+      proposal('open-older', '200.00', '2026-09-16T12:00:00.000Z').transmit({
+        proposalNumber: 'PRP-1',
+        workedCommission: Percentage.fromString('30'),
+        transmittedAt: new Date('2026-09-16T13:00:00.000Z'),
+      }),
+    );
+    await repository.save(
+      proposal('open-newer', '300.00', '2026-09-18T12:00:00.000Z').transmit({
+        proposalNumber: 'PRP-2',
+        workedCommission: Percentage.fromString('40'),
+        transmittedAt: new Date('2026-09-18T13:00:00.000Z'),
+      }),
+    );
+
+    const open = await repository.list({ status: 'TRANSMITTED' });
+    const all = await repository.list({});
+
+    expect(open.map((record) => record.id)).toEqual(['open-newer', 'open-older']);
+    expect(all.map((record) => record.id)).toEqual(['open-newer', 'open-older', 'older']);
+  });
+
+  it('restores a listed proposal as fully as a single read does', async () => {
+    await repository.save(
+      proposal('proposal-1', '1500.75').transmit({
+        proposalNumber: 'PRP-9001',
+        workedCommission: Percentage.fromString('32.5'),
+        transmittedAt: new Date('2026-09-18T09:00:00.000Z'),
+      }),
+    );
+
+    const [listed] = await repository.list({ status: 'TRANSMITTED' });
+
+    expect(listed?.netPremium.toString()).toBe('1500.75');
+    expect(listed?.workedCommission?.toString()).toBe('32.5');
+    expect(listed?.transmittedAt?.toISOString()).toBe('2026-09-18T09:00:00.000Z');
   });
 
   it('enforces the PRIMARY KEY the way PostgreSQL would', async () => {

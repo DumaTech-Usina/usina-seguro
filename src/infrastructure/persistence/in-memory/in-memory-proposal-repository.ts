@@ -1,4 +1,7 @@
-import type { ProposalRepository } from '../../../core/proposal/application/proposal-repository.ts';
+import type {
+  ProposalListFilter,
+  ProposalRepository,
+} from '../../../core/proposal/application/proposal-repository.ts';
 import type { Proposal } from '../../../core/proposal/domain/proposal.ts';
 
 /**
@@ -26,5 +29,12 @@ export class InMemoryProposalRepository implements ProposalRepository {
     }
 
     return null;
+  }
+
+  /** REQ-043, OUT-01. Same order the SQLite driver answers: newest first. */
+  async list(filter: ProposalListFilter): Promise<readonly Proposal[]> {
+    return [...this.records.values()]
+      .filter((proposal) => filter.status === undefined || proposal.status === filter.status)
+      .sort((a, b) => b.registeredAt.getTime() - a.registeredAt.getTime());
   }
 }

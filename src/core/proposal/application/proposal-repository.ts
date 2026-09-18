@@ -1,4 +1,11 @@
-import type { Proposal } from '../domain/proposal.ts';
+import type { Proposal, ProposalStatus } from '../domain/proposal.ts';
+
+/**
+ * What narrows a listing. Absent means "every proposal".
+ */
+export interface ProposalListFilter {
+  readonly status?: ProposalStatus;
+}
 
 /**
  * Persistence contract for proposals, declared by the side that needs it.
@@ -20,4 +27,12 @@ export interface ProposalRepository {
    * answers null rather than an error.
    */
   findByProposalNumber(proposalNumber: string): Promise<Proposal | null>;
+  /**
+   * REQ-043, OUT-01: the proposals to follow, most recently registered first.
+   *
+   * The order is part of the contract and not an accident of the driver: a
+   * worklist that reshuffles between two reads is unusable, and both
+   * implementations are tested against it.
+   */
+  list(filter: ProposalListFilter): Promise<readonly Proposal[]>;
 }

@@ -22,13 +22,19 @@ const NAV = [
       { id: 'home', label: 'Início', icon: 'home', href: '/app/', ready: true },
       {
         id: 'proposals-new',
-        label: 'Novo negócio',
+        label: 'Nova proposta',
         icon: 'note_add',
         href: '/app/proposals/new.html',
         ready: true,
       },
-      // OUT-01 (REQ-043): needs a listing endpoint that does not exist yet.
-      { id: 'proposals', label: 'Propostas', icon: 'description', href: '#', ready: false },
+      // OUT-01 (REQ-043) and OUT-02 (REQ-045), as a filter over the same list.
+      {
+        id: 'proposals',
+        label: 'Propostas',
+        icon: 'description',
+        href: '/app/proposals/',
+        ready: true,
+      },
       // OUT-03: same.
       { id: 'policies', label: 'Apólices', icon: 'shield', href: '#', ready: false },
     ],

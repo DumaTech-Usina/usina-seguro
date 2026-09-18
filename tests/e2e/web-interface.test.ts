@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -73,6 +73,22 @@ describe('web interface under /app', () => {
     expect(registries.status).toBe(200);
   });
 
+  it('serves every page of the FP-01 flow', async () => {
+    // What an operator walks through: register and transmit, follow the open
+    // proposals (REQ-043), record the outcome, open the policy.
+    for (const page of [
+      '/app/proposals/new.html',
+      '/app/proposals/',
+      '/app/proposals/detail.html',
+      '/app/policies/detail.html',
+    ]) {
+      const response = await fetch(`${baseUrl}${page}`);
+
+      expect(response.status, page).toBe(200);
+      expect(response.headers.get('content-type'), page).toContain('text/html');
+    }
+  });
+
   it('serves the shared modules as JavaScript, so `import` works', async () => {
     const response = await fetch(`${baseUrl}/app/shared/api.js`);
 
@@ -87,6 +103,30 @@ describe('web interface under /app', () => {
 
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toContain('text/css');
+  });
+
+  it('serves every asset the pages reference', async () => {
+    // There is no bundler to catch a stale path: what is served is what is
+    // written. A renamed or deleted stylesheet only shows up as a page that
+    // silently loses its styles, or a module that never runs.
+    const root = path.resolve(import.meta.dirname, '../../src/interfaces/web/public');
+    const pages = readdirSync(root, { recursive: true, encoding: 'utf8' }).filter((entry) =>
+      entry.endsWith('.html'),
+    );
+
+    expect(pages.length).toBeGreaterThan(0);
+
+    for (const page of pages) {
+      const html = readFileSync(path.join(root, page), 'utf8');
+      const referenced = [...html.matchAll(/(?:src|href)="(\/app\/[^"]+)"/g)].map(
+        (match) => match[1],
+      );
+
+      for (const asset of referenced) {
+        const response = await fetch(`${baseUrl}${asset}`);
+        expect(response.status, `${page} -> ${asset}`).toBe(200);
+      }
+    }
   });
 
   it('does not serve anything outside the prefix', async () => {

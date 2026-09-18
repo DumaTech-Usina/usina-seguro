@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Novo negócio — Usina do Seguro</title>
+    <title>Nova proposta — Usina do Seguro</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -15,16 +15,16 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/app/shared/base.css" />
-    <link rel="stylesheet" href="/app/proposals/new.css" />
   </head>
   <body class="shell" data-nav="proposals-new">
     <main class="content">
       <div class="content__inner">
         <div class="page-head">
           <div class="page-head__text">
-            <h1 class="text-display">Novo negócio</h1>
+            <h1 class="text-display">Nova proposta</h1>
             <p class="text-muted">
-              FP-01: registro da proposta, transmissão à seguradora e desfecho.
+              FP-01 passos 3 e 4: registro da proposta e transmissão à seguradora. O
+              desfecho é registrado depois, na proposta transmitida.
             </p>
           </div>
         </div>
@@ -40,11 +40,6 @@
             <div class="step" data-step="2">
               <span class="step__bullet">2</span>
               <span>Transmissão</span>
-            </div>
-            <div class="step__connector"></div>
-            <div class="step" data-step="3">
-              <span class="step__bullet">3</span>
-              <span>Desfecho</span>
             </div>
           </div>
         </section>
@@ -155,102 +150,6 @@
               <button class="btn btn--filled" type="submit">Transmitir</button>
             </div>
           </form>
-        </section>
-
-        <!-- ------------------------------------------------ passo 3 -- -->
-        <section class="card hidden" data-panel="3">
-          <div class="card__header">
-            <span class="material-symbols-outlined">fork_right</span>
-            <h2 class="text-title">Desfecho informado pela seguradora</h2>
-            <div class="card__header-actions" id="transmission-chip"></div>
-          </div>
-          <div class="card__body stack">
-            <div class="outcome-switch" role="tablist" aria-label="Desfecho">
-              <button class="outcome-switch__option" data-outcome="accept" role="tab" aria-selected="true">
-                <span class="material-symbols-outlined">task_alt</span>
-                Aceite — registrar apólice
-              </button>
-              <button class="outcome-switch__option" data-outcome="reject" role="tab" aria-selected="false">
-                <span class="material-symbols-outlined">block</span>
-                Recusa — registrar motivo
-              </button>
-            </div>
-
-            <!-- Aceite -->
-            <form id="form-policy">
-              <div class="stack">
-                <div class="form-grid">
-                  <div class="field">
-                    <input class="field__input" name="policyNumber" placeholder=" " required />
-                    <label class="field__label">Número da apólice</label>
-                    <span class="field__hint">Pode coincidir ou não com o da proposta.</span>
-                  </div>
-                  <div class="field">
-                    <input
-                      class="field__input"
-                      name="premium"
-                      placeholder=" "
-                      inputmode="decimal"
-                      pattern="\d+(\.\d{1,2})?"
-                      required
-                    />
-                    <label class="field__label">Prêmio da apólice</label>
-                    <span class="field__hint">Base do cálculo da comissão.</span>
-                  </div>
-                </div>
-                <div class="form-grid form-grid--three">
-                  <div class="field">
-                    <input class="field__input" type="date" name="coverageStart" required />
-                    <label class="field__label">Início da vigência</label>
-                  </div>
-                  <div class="field">
-                    <input class="field__input" type="date" name="coverageEnd" required />
-                    <label class="field__label">Fim da vigência</label>
-                  </div>
-                  <div class="field">
-                    <input class="field__input" type="date" name="renewalDate" required />
-                    <label class="field__label">Data de renovação</label>
-                  </div>
-                </div>
-
-                <div>
-                  <div class="row row--between" style="margin-bottom: var(--space-3)">
-                    <span class="text-label">Cronograma de parcelas</span>
-                    <button class="btn btn--sm btn--outlined" type="button" id="add-installment">
-                      <span class="material-symbols-outlined">add</span>
-                      Adicionar parcela
-                    </button>
-                  </div>
-                  <div class="installments" id="installments"></div>
-                  <p class="text-muted" id="installments-total" style="margin-top: var(--space-3)"></p>
-                </div>
-              </div>
-              <div class="card__footer" style="margin: var(--space-6) calc(var(--space-6) * -1) calc(var(--space-6) * -1)">
-                <button class="btn btn--filled" type="submit">Registrar apólice</button>
-              </div>
-            </form>
-
-            <!-- Recusa -->
-            <form id="form-rejection" class="hidden">
-              <div class="stack">
-                <div class="banner banner--warning">
-                  <span class="material-symbols-outlined">warning</span>
-                  <div class="banner__text">
-                    A recusa encerra o ciclo comercial da proposta e é definitiva. O
-                    registro permanece consultável.
-                  </div>
-                </div>
-                <div class="field">
-                  <input class="field__input" name="reason" placeholder=" " required />
-                  <label class="field__label">Motivo da recusa</label>
-                  <span class="field__hint">Obrigatório.</span>
-                </div>
-              </div>
-              <div class="card__footer" style="margin: var(--space-6) calc(var(--space-6) * -1) calc(var(--space-6) * -1)">
-                <button class="btn btn--filled" type="submit">Registrar recusa</button>
-              </div>
-            </form>
-          </div>
         </section>
 
         <!-- ---------------------------------------------- conclusão -- -->

@@ -29,7 +29,7 @@
           <div class="page-head__actions">
             <a class="btn btn--filled" href="/app/proposals/new.html">
               <span class="material-symbols-outlined">note_add</span>
-              Novo negócio
+              Nova proposta
             </a>
           </div>
         </div>
@@ -38,9 +38,10 @@
           <span class="material-symbols-outlined">info</span>
           <div class="banner__text">
             Esta entrega cobre o fluxo <strong>FP-01</strong> de ponta a ponta — da
-            proposta ao desfecho — e os cadastros que alimentam o cálculo da comissão.
-            As telas de listagem dependem de endpoints que ainda não existem e aparecem
-            marcadas como <em>em breve</em> na navegação.
+            proposta ao desfecho, passando pelo acompanhamento das propostas em aberto —
+            e os cadastros que alimentam o cálculo da comissão. As demais telas de
+            listagem dependem de endpoints que ainda não existem e aparecem marcadas
+            como <em>em breve</em> na navegação.
           </div>
         </div>
 
@@ -64,13 +65,19 @@
                 </span>
               </div>
               <div class="definition">
-                <span class="text-label">3. Desfecho</span>
+                <span class="text-label">3. Em aberto</span>
+                <span class="text-body">
+                  Rastreável até a seguradora responder, na lista de propostas.
+                </span>
+              </div>
+              <div class="definition">
+                <span class="text-label">4. Desfecho</span>
                 <span class="text-body">
                   Aceite gera a apólice e a comissão acordada; recusa exige motivo.
                 </span>
               </div>
               <div class="definition">
-                <span class="text-label">4. Apólice</span>
+                <span class="text-label">5. Apólice</span>
                 <span class="text-body">
                   Parcelas, comissão acordada × real e o repasse ao corretor.
                 </span>
@@ -83,16 +90,32 @@
           <section class="card">
             <div class="card__header">
               <span class="material-symbols-outlined">note_add</span>
-              <h2 class="text-title">Registrar um negócio</h2>
+              <h2 class="text-title">Registrar uma proposta</h2>
             </div>
             <div class="card__body">
               <p class="text-muted">
-                Percorre proposta, transmissão e desfecho em três passos e termina na
-                apólice criada.
+                Registro e transmissão à seguradora. Depois disso a proposta fica em
+                aberto, aguardando o desfecho.
               </p>
             </div>
             <div class="card__footer">
               <a class="btn btn--filled" href="/app/proposals/new.html">Começar</a>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__header">
+              <span class="material-symbols-outlined">description</span>
+              <h2 class="text-title">Propostas em aberto</h2>
+            </div>
+            <div class="card__body">
+              <p class="text-muted">
+                As propostas transmitidas e ainda sem resposta da seguradora, onde o
+                aceite vira apólice e a recusa registra o motivo.
+              </p>
+            </div>
+            <div class="card__footer">
+              <a class="btn btn--outlined" href="/app/proposals/">Acompanhar</a>
             </div>
           </section>
 

@@ -20,6 +20,7 @@ no adapter correspondente — não em uma camada genérica.
 | Transação / isolamento | Sem `SERIALIZABLE` real por transação | Níveis de isolamento configuráveis | Atomicidade **exercitada**: `SqliteTransaction` usa `SAVEPOINT` (aninhável, ao contrário de `BEGIN`) e há teste de rollback. Níveis de isolamento continuam não exercitados — ver abaixo |
 | Data de calendário | Não existe tipo nativo | `date` | `AAAA-MM-DD` em `TEXT`; `CalendarDate` no domínio evita fuso |
 | Vigência do acordo comercial | Ordenação de `TEXT` | Ordenação de `date` | `effective_from <= ? ORDER BY ... DESC LIMIT 1`. ISO-8601 ordena lexicograficamente igual a cronologicamente, então a mesma expressão vale nos dois (`REQ-065`) |
+| Lista de propostas | Ordenação de `TEXT` | Ordenação de `timestamptz` | `ORDER BY registered_at DESC, id DESC`. Mesmo argumento da vigência: o instante é ISO-8601 UTC, então a ordem lexicográfica é a cronológica (`REQ-043`, `OUT-01`). O `id` é desempate para que a lista não se reordene entre duas leituras |
 | Percentual de comissão | Mesmo problema de `REAL` | `NUMERIC` | `TEXT` com a escala informada (`REQ-121`). A aritmética não acontece no banco: `Money.applyRate` opera em `bigint` no domínio |
 | Enum | Não existe | `enum` / `CHECK` | `CHECK (... IN (...))` explícito em cadeia de comissão, base do corretor e regra de liberação |
 

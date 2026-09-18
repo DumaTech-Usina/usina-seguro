@@ -1,4 +1,13 @@
+import path from 'node:path';
 import { defineConfig } from 'vitest/config';
+
+/**
+ * O navegador recebe os modulos da interface pelo prefixo em que eles sao
+ * servidos (`/app/shared/api.js`). Para que um teste possa importar a mesma
+ * pagina que o navegador executa, sem build e sem copia, o prefixo resolve
+ * para o diretorio publico.
+ */
+const WEB_PUBLIC = path.resolve(import.meta.dirname, 'src/interfaces/web/public');
 
 /**
  * Tres suites com propositos distintos:
@@ -25,6 +34,9 @@ export default defineConfig({
         },
       },
       {
+        resolve: {
+          alias: [{ find: /^\/app\//, replacement: `${WEB_PUBLIC}/` }],
+        },
         test: {
           name: 'e2e',
           include: ['tests/e2e/**/*.test.ts'],

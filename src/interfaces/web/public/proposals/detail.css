@@ -1,5 +1,24 @@
 /* Only what this page adds to the design system. */
 
+.proposal-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.proposal-head__numbers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.proposal-head__number {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 500;
+}
+
 .outcome-switch {
   display: inline-flex;
   padding: var(--space-1);
