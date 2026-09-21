@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryCommissionAgreementRepository } from '../../../infrastructure/persistence/in-memory/in-memory-commission-agreement-repository.ts';
+import { InMemoryReferenceRepository } from '../../../infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
 import { CalendarDate } from '../../policy/domain/calendar-date.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
+import { Reference } from '../../registry/domain/reference.ts';
 import { CommissionAgreement } from '../domain/commission-agreement.ts';
 import { ListCommissionAgreements } from './list-commission-agreements.ts';
 
@@ -78,7 +80,13 @@ async function scenario() {
     }),
   );
 
-  return { agreements, useCase: new ListCommissionAgreements({ agreements }) };
+  const references = new InMemoryReferenceRepository();
+
+  return {
+    agreements,
+    references,
+    useCase: new ListCommissionAgreements({ agreements, references }),
+  };
 }
 
 describe('ListCommissionAgreements', () => {
@@ -135,7 +143,10 @@ describe('ListCommissionAgreements', () => {
       }),
     );
 
-    const [listed] = await new ListCommissionAgreements({ agreements }).execute();
+    const [listed] = await new ListCommissionAgreements({
+      agreements,
+      references: new InMemoryReferenceRepository(),
+    }).execute();
 
     expect(listed?.insurerRate).toBe('32.50');
   });
@@ -143,6 +154,7 @@ describe('ListCommissionAgreements', () => {
   it('answers an empty registry rather than failing', async () => {
     const useCase = new ListCommissionAgreements({
       agreements: new InMemoryCommissionAgreementRepository(),
+      references: new InMemoryReferenceRepository(),
     });
 
     await expect(useCase.execute()).resolves.toEqual([]);
@@ -173,5 +185,36 @@ describe('ListCommissionAgreements', () => {
 
     expect(sameValidity).toHaveLength(1);
     expect(sameValidity[0]?.insurerRate).toBe('38');
+  });
+
+  it('names the intermediary the chain points at (IN-01, REQ-060)', async () => {
+    const { references, useCase } = await scenario();
+
+    await references.save(
+      Reference.register({
+        kind: 'INTERMEDIARY',
+        id: 'mega',
+        name: 'Mega Intermediacao',
+        registeredAt: new Date('2026-09-20T12:00:00.000Z'),
+      }),
+    );
+
+    const listed = await useCase.execute();
+    const viaIntermediary = listed.find((line) => line.id === 'a-3');
+    const direct = listed.find((line) => line.id === 'a-1');
+
+    expect(viaIntermediary?.intermediaryId).toBe('mega');
+    expect(viaIntermediary?.intermediaryName).toBe('Mega Intermediacao');
+    // REQ-062: a direct chain has no intermediary to name.
+    expect(direct?.intermediaryName).toBeNull();
+  });
+
+  it('answers no name for an intermediary nobody registered', async () => {
+    const { useCase } = await scenario();
+
+    const viaIntermediary = (await useCase.execute()).find((line) => line.id === 'a-3');
+
+    expect(viaIntermediary?.intermediaryId).toBe('mega');
+    expect(viaIntermediary?.intermediaryName).toBeNull();
   });
 });

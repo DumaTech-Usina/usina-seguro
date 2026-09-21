@@ -66,6 +66,15 @@ const NAV = [
         href: '/app/settlements/',
         ready: true,
       },
+      // OUT-10 (REQ-100, REQ-102, REQ-105): what the broker was told when the
+      // emission was effectuated.
+      {
+        id: 'notifications',
+        label: 'Notificações',
+        icon: 'notifications',
+        href: '/app/notifications/',
+        ready: true,
+      },
     ],
   },
   {

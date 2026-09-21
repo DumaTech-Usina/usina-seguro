@@ -4,6 +4,8 @@ import { POLICY_MESSAGES } from '../../policy/domain/errors.ts';
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
 import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
+import { ReferenceNames } from '../../registry/application/reference-names.ts';
+import type { ReferenceRepository } from '../../registry/application/reference-repository.ts';
 import type { SettlementRepository } from './settlement-repository.ts';
 import { type SettlementView, toSettlementView } from './settlement-view.ts';
 
@@ -18,18 +20,26 @@ import { type SettlementView, toSettlementView } from './settlement-view.ts';
  * nothing to hide and nothing to invent: the transfer is opened by an explicit
  * act of the Financeiro, because `DEC-008` has not decided the window.
  *
- * The client and the product travel as stored: the registries of IN-01 are not
- * modelled, so there is no name nor ramo to resolve. That is also why this is
- * **not** the report and receipt of REQ-094/REQ-096 (OUT-08, OUT-09), which
- * need those names and a period `DEC-008` has not defined.
+ * The client, the broker and the product travel as the identifier that is
+ * stored and as the name IN-01 registered for it — the three REQ-096 asks a
+ * repasse document to identify a business by, alongside the percentage and the
+ * net value. The name is `null` while nobody registered one.
+ *
+ * This is still **not** the report and receipt of REQ-094/REQ-096 (OUT-08,
+ * OUT-09): those also need the apuration window, and `DEC-008` has not defined
+ * one. What IN-01 removed is the other half of that blockage.
  */
 export interface BrokerStatementLineView {
   readonly policyId: string;
   readonly policyNumber: string;
   readonly proposalNumber: string | null;
   readonly clientId: string;
+  readonly clientName: string | null;
   readonly productId: string;
+  /** REQ-022 names the field "produto/ramo": the product's name is the ramo. */
+  readonly productName: string | null;
   readonly brokerId: string;
+  readonly brokerName: string | null;
   /** REQ-093: what the Usina expects to pay, override of REQ-066 included. */
   readonly payable: string;
   /** Section 10.5: the state of the commission this transfer comes from. */
@@ -74,6 +84,8 @@ export interface ListBrokerStatementDependencies {
   readonly policies: PolicyRepository;
   readonly proposals: ProposalRepository;
   readonly settlements: SettlementRepository;
+  /** IN-01: the names REQ-096 identifies a business by. */
+  readonly references: ReferenceRepository;
 }
 
 /**
@@ -102,6 +114,7 @@ export class ListBrokerStatement {
   async execute(input: ListBrokerStatementInput = {}): Promise<BrokerStatementView> {
     const wanted = input.brokerId?.trim() ?? '';
     const commissions = await this.deps.commissions.list({});
+    const names = await ReferenceNames.load(this.deps.references);
 
     const lines = await Promise.all(
       commissions.map(async (commission): Promise<BrokerStatementLineView | null> => {
@@ -128,8 +141,11 @@ export class ListBrokerStatement {
           policyNumber: policy.policyNumber,
           proposalNumber: proposal.proposalNumber,
           clientId: proposal.clientId,
+          clientName: names.of('CLIENT', proposal.clientId),
           productId: proposal.productId,
+          productName: names.of('PRODUCT', proposal.productId),
           brokerId: proposal.brokerId,
+          brokerName: names.of('BROKER', proposal.brokerId),
           payable: commission.effectivePayable.toString(),
           commissionStatus: commission.status,
           divergent: commission.isDivergent,

@@ -120,11 +120,27 @@ export const api = {
     request(`/policies/${encodeURIComponent(policyId)}/settlement`, { method: 'POST' }),
   releaseSettlement: (policyId) =>
     request(`/policies/${encodeURIComponent(policyId)}/settlement/release`, { method: 'POST' }),
+  /**
+   * REQ-095, CA-028: the payment, with the proof attached.
+   *
+   * `input.proof.content` is the document base64-encoded. It travels in the
+   * JSON body like everything else — there is no multipart parser and no
+   * build step here — and the server decodes it back to bytes at its own
+   * boundary.
+   */
   registerSettlementPayment: (policyId, input) =>
     request(`/policies/${encodeURIComponent(policyId)}/settlement/payment`, {
       method: 'POST',
       body: input,
     }),
+  /**
+   * Where the attached proof is served from (REQ-095).
+   *
+   * A URL and not a request: the document is opened by the browser through an
+   * `href`, and this is still the only place that knows the address.
+   */
+  settlementPaymentProofUrl: (policyId) =>
+    `/policies/${encodeURIComponent(policyId)}/settlement/payment/proof`,
 
   /**
    * OUT-07: the commission statement of a broker — forecast, held, released
@@ -169,4 +185,31 @@ export const api = {
     request('/payment-method-release-rules', { method: 'POST', body: input }),
   /** IN-06: the release rule of each payment method (REQ-090, CA-024). */
   listReleaseRules: () => request('/payment-method-release-rules'),
+
+  /**
+   * OUT-10, REQ-102, REQ-105: the notifications of effectuated emission —
+   * what was notified, to whom and when (REQ-100).
+   *
+   * Read-only: a notification is produced by FP-01 step 7, never by a user,
+   * so there is nothing to post here. `recipientId` narrows it to one broker,
+   * or nothing for every one of them.
+   */
+  listNotifications: (recipientId) =>
+    request(
+      recipientId === undefined
+        ? '/notifications'
+        : `/notifications?recipientId=${encodeURIComponent(recipientId)}`,
+    ),
+
+  /**
+   * IN-01: the reference records — client, broker, insurer, intermediary and
+   * product — that give a business a name (REQ-096).
+   *
+   * Nothing is validated against them: a proposal may name a client nobody
+   * registered (REQ-002), and the screens show the identifier when there is no
+   * name. `kind` narrows the reading to one of the five, or nothing for all.
+   */
+  registerReference: (input) => request('/references', { method: 'POST', body: input }),
+  listReferences: (kind) =>
+    request(kind === undefined ? '/references' : `/references?kind=${encodeURIComponent(kind)}`),
 };

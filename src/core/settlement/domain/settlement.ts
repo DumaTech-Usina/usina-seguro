@@ -25,6 +25,27 @@ export type SettlementStatus =
   | 'DIVERGENT'
   | 'RESOLVED';
 
+/**
+ * REQ-095, CA-028: the proof attached to the payment.
+ *
+ * The requirement says *comprovante anexo* — a document, not a note about one.
+ * What the aggregate keeps is the document's identity and what a human needs
+ * to recognise it; the bytes live behind `DocumentStorage`, because a payment
+ * record is read constantly and the file is read once, when someone asks for
+ * it.
+ *
+ * `fileName` is what identifies the proof on screen — the role the textual
+ * reference used to play before the document existed. `byteSize` is here and
+ * not derived from the stored bytes because it is what lets this aggregate
+ * refuse an empty proof without reaching into storage.
+ */
+export interface PaymentProof {
+  readonly documentId: string;
+  readonly fileName: string;
+  readonly contentType: string;
+  readonly byteSize: number;
+}
+
 /** REQ-095, CA-028: what the Usina sent the broker. */
 export interface SettlementPayment {
   readonly paidAt: Date;
@@ -33,8 +54,8 @@ export interface SettlementPayment {
    * happened, and REQ-075 wants the real paid side next to the agreed one.
    */
   readonly amount: Money;
-  /** REQ-095: the attached proof, kept as the reference that identifies it. */
-  readonly proofReference: string;
+  /** REQ-095, CA-028: the attached proof. */
+  readonly proof: PaymentProof;
   /** REQ-123: who registered the payment. */
   readonly userId: string;
 }
@@ -157,7 +178,10 @@ export class Settlement {
       );
     }
 
-    if (payment.proofReference.trim() === '') {
+    // REQ-095, CA-028: a payment with no document attached, or with one that
+    // carries no bytes, is a payment with no proof. The name is what makes it
+    // recognisable; the size is what makes it a document at all.
+    if (payment.proof.fileName.trim() === '' || payment.proof.byteSize <= 0) {
       throw new BusinessRuleViolation('REQ-095', SETTLEMENT_MESSAGES.PAYMENT_PROOF_REQUIRED);
     }
 
@@ -171,7 +195,7 @@ export class Settlement {
       payment: {
         paidAt: payment.paidAt,
         amount: payment.amount,
-        proofReference: payment.proofReference.trim(),
+        proof: { ...payment.proof, fileName: payment.proof.fileName.trim() },
         userId: payment.userId.trim(),
       },
     });

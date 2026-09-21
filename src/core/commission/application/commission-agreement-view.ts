@@ -1,3 +1,4 @@
+import type { ReferenceNames } from '../../registry/application/reference-names.ts';
 import type { CommissionAgreement } from '../domain/commission-agreement.ts';
 
 /**
@@ -24,12 +25,17 @@ export interface CommissionAgreementView {
   readonly insurerRate: string;
   readonly chain: string;
   readonly intermediaryId: string | null;
+  /** IN-01: the name registered for the intermediary, null while there is none. */
+  readonly intermediaryName: string | null;
   readonly intermediaryRate: string | null;
   readonly brokerBase: string;
   readonly registeredAt: string;
 }
 
-export function toCommissionAgreementView(agreement: CommissionAgreement): CommissionAgreementView {
+export function toCommissionAgreementView(
+  agreement: CommissionAgreement,
+  names: ReferenceNames,
+): CommissionAgreementView {
   const chain = agreement.chain;
 
   return {
@@ -40,6 +46,8 @@ export function toCommissionAgreementView(agreement: CommissionAgreement): Commi
     insurerRate: agreement.insurerRate.toString(),
     chain: chain.kind,
     intermediaryId: chain.kind === 'INTERMEDIARY' ? chain.intermediaryId : null,
+    intermediaryName:
+      chain.kind === 'INTERMEDIARY' ? names.of('INTERMEDIARY', chain.intermediaryId) : null,
     intermediaryRate: chain.kind === 'INTERMEDIARY' ? chain.intermediaryRate.toString() : null,
     // REQ-062: without an intermediary there is only one amount to calculate on.
     brokerBase: chain.kind === 'INTERMEDIARY' ? chain.brokerBase : 'USINA',

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
+import { InMemoryReferenceRepository } from '../../../infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal } from '../../proposal/domain/proposal.ts';
+import { Reference } from '../../registry/domain/reference.ts';
 import { CalendarDate } from '../domain/calendar-date.ts';
 import { Installment } from '../domain/installment.ts';
 import { Policy } from '../domain/policy.ts';
@@ -78,6 +80,9 @@ async function scenario() {
   const repositories = {
     proposals: new InMemoryProposalRepository(),
     policies: new InMemoryPolicyRepository(),
+    // IN-01 is empty unless a test registers a name: an unregistered
+    // reference is the ordinary case until somebody maintains the registry.
+    references: new InMemoryReferenceRepository(),
   };
 
   await business(repositories, {
@@ -179,8 +184,74 @@ describe('ListPolicies', () => {
   it('refuses to answer a policy whose proposal is gone', async () => {
     const { policies } = await scenario();
 
-    const useCase = new ListPolicies({ policies, proposals: new InMemoryProposalRepository() });
+    const useCase = new ListPolicies({
+      policies,
+      proposals: new InMemoryProposalRepository(),
+      references: new InMemoryReferenceRepository(),
+    });
 
     await expect(useCase.execute()).rejects.toBeInstanceOf(RecordNotFound);
+  });
+
+  it('identifies each line by the name IN-01 registered (REQ-096)', async () => {
+    const { references, useCase } = await scenario();
+
+    await references.save(
+      Reference.register({
+        kind: 'CLIENT',
+        id: 'client-MID',
+        name: 'Ana Lima',
+        registeredAt: new Date('2026-09-20T12:00:00.000Z'),
+      }),
+    );
+    await references.save(
+      Reference.register({
+        kind: 'INSURER',
+        id: 'insurer-1',
+        name: 'Seguradora Norte',
+        registeredAt: new Date('2026-09-20T12:00:00.000Z'),
+      }),
+    );
+    await references.save(
+      Reference.register({
+        kind: 'PRODUCT',
+        id: 'auto',
+        name: 'Automovel',
+        registeredAt: new Date('2026-09-20T12:00:00.000Z'),
+      }),
+    );
+
+    const listing = await useCase.execute();
+    const mid = listing.find((line) => line.policyNumber === 'APL-MID');
+
+    expect(mid?.clientName).toBe('Ana Lima');
+    expect(mid?.insurerName).toBe('Seguradora Norte');
+    // REQ-022 names the field "produto/ramo": the product's name is the ramo.
+    expect(mid?.productName).toBe('Automovel');
+    // The identifier travels beside the name: it is what every other record
+    // is matched on, and the name never replaces it.
+    expect(mid?.clientId).toBe('client-MID');
+  });
+
+  it('answers no name for a reference nobody registered, and lists it anyway', async () => {
+    const { references, useCase } = await scenario();
+
+    await references.save(
+      Reference.register({
+        kind: 'CLIENT',
+        id: 'client-MID',
+        name: 'Ana Lima',
+        registeredAt: new Date('2026-09-20T12:00:00.000Z'),
+      }),
+    );
+
+    const listing = await useCase.execute();
+    const last = listing.find((line) => line.policyNumber === 'APL-LAST');
+
+    // REQ-002: the system reflects a control that happens outside it. A client
+    // nobody registered is a missing name, never a business to hide or refuse.
+    expect(last?.clientName).toBeNull();
+    expect(last?.clientId).toBe('client-LAST');
+    expect(listing).toHaveLength(3);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryCommissionRepository } from '../../../infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
+import { InMemoryReferenceRepository } from '../../../infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
 import { CalendarDate } from '../../policy/domain/calendar-date.ts';
 import { Installment } from '../../policy/domain/installment.ts';
 import { Policy } from '../../policy/domain/policy.ts';
@@ -9,6 +10,7 @@ import { RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal } from '../../proposal/domain/proposal.ts';
+import { Reference } from '../../registry/domain/reference.ts';
 import { Commission } from '../domain/commission.ts';
 import { ListCommissions } from './list-commissions.ts';
 
@@ -108,6 +110,8 @@ async function scenario() {
     proposals: new InMemoryProposalRepository(),
     policies: new InMemoryPolicyRepository(),
     commissions: new InMemoryCommissionRepository(),
+    // IN-01 is empty unless a test registers a name.
+    references: new InMemoryReferenceRepository(),
   };
 
   await business(repositories, { suffix: 'FORE', calculatedAt: '2026-09-15T12:00:00.000Z' });
@@ -225,8 +229,50 @@ describe('ListCommissions', () => {
       commissions,
       policies: new InMemoryPolicyRepository(),
       proposals: new InMemoryProposalRepository(),
+      references: new InMemoryReferenceRepository(),
     });
 
     await expect(useCase.execute()).rejects.toBeInstanceOf(RecordNotFound);
+  });
+
+  it('identifies each line by the name IN-01 registered (REQ-096)', async () => {
+    const { references, useCase } = await scenario();
+    const at = new Date('2026-09-20T12:00:00.000Z');
+
+    await references.save(
+      Reference.register({ kind: 'CLIENT', id: 'client-DIV', name: 'Ana Lima', registeredAt: at }),
+    );
+    await references.save(
+      Reference.register({
+        kind: 'INSURER',
+        id: 'insurer-1',
+        name: 'Seguradora Norte',
+        registeredAt: at,
+      }),
+    );
+    await references.save(
+      Reference.register({ kind: 'PRODUCT', id: 'auto', name: 'Automovel', registeredAt: at }),
+    );
+
+    const [line] = await useCase.execute({ status: 'DIVERGENT' });
+
+    expect(line?.clientName).toBe('Ana Lima');
+    expect(line?.insurerName).toBe('Seguradora Norte');
+    expect(line?.productName).toBe('Automovel');
+    // The identifier stays beside the name: it is what the conciliation of
+    // REQ-082 and every other record are matched on.
+    expect(line?.clientId).toBe('client-DIV');
+  });
+
+  it('answers no name for a reference nobody registered, and lists it anyway', async () => {
+    const { useCase } = await scenario();
+
+    const panel = await useCase.execute();
+
+    // REQ-002, REQ-077: an empty registry costs the panel its names, never a
+    // line and never the divergence it is there to show.
+    expect(panel).toHaveLength(3);
+    expect(panel.every((line) => line.clientName === null)).toBe(true);
+    expect(panel.some((line) => line.divergent)).toBe(true);
   });
 });

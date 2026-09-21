@@ -223,6 +223,25 @@ function answerDialog(id: string, values: Record<string, string>): void {
   confirm.click();
 }
 
+/** A proof with a byte no text encoding survives, to prove the round-trip. */
+const PROOF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x00, 0xff]);
+
+/**
+ * Attaches a document to the file field of a dialog, the way a person picks
+ * one in the file chooser.
+ *
+ * jsdom has `File` and `FileReader` but no way to fill an `<input type=file>`:
+ * `files` is read-only and there is no `DataTransfer`. Defining the property
+ * is the standard way around it, and it leaves the page code untouched — what
+ * runs is the same `readProof` the browser runs.
+ */
+function attachProof(dialogId: string, fileName: string, contentType: string): void {
+  const input = document.querySelector(`${dialogId} [name="proof"]`);
+  const file = new window.File([PROOF_BYTES], fileName, { type: contentType });
+
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+}
+
 /* --------------------------------------------------------- the backend -- */
 
 async function callApi(method: string, apiPath: string, body?: unknown): Promise<Untyped> {
@@ -458,17 +477,20 @@ describe('the policy screen', () => {
     const dialog = document.querySelector('#dialog-payment');
     // The expected amount is offered, not imposed.
     expect(dialog.querySelector('[name="amount"]').value).toBe('20.00');
-    answerDialog('#dialog-payment', {
-      amount: '20.00',
-      proofReference: 'comprovante.pdf',
-      userId: 'fin-2',
-    });
+    // REQ-095, CA-028: the proof is the document, attached here.
+    attachProof('#dialog-payment', 'comprovante.pdf', 'application/pdf');
+    answerDialog('#dialog-payment', { amount: '20.00', userId: 'fin-2' });
 
     await vi.waitFor(() => {
       expect(statusIn('Repasse ao corretor')).toBe('Pago');
     });
     expect(card('Repasse ao corretor').textContent).toContain('Pagamento registrado');
     expect(card('Repasse ao corretor').textContent).toContain('comprovante.pdf');
+
+    // The attachment is reachable from the screen: a proof nobody can open
+    // again evidences nothing.
+    const link = card('Repasse ao corretor').querySelector('a.proof-link');
+    expect(link.getAttribute('href')).toBe(`/policies/${policyId}/settlement/payment/proof`);
 
     // Every act crossed as a request made by the page, not by this test.
     expect(requests).toContain(`POST /policies/${policyId}/settlement`);
@@ -481,9 +503,17 @@ describe('the policy screen', () => {
     expect(settlement.amount).toBe('20.00');
     expect(settlement.payment).toMatchObject({
       amount: '20.00',
-      proofReference: 'comprovante.pdf',
+      proof: {
+        fileName: 'comprovante.pdf',
+        contentType: 'application/pdf',
+        byteSize: PROOF_BYTES.length,
+      },
       userId: 'fin-2',
     });
+
+    // REQ-095, CA-028: the bytes the page uploaded are the bytes served back.
+    const served = await fetch(`${baseUrl}/policies/${policyId}/settlement/payment/proof`);
+    expect([...new Uint8Array(await served.arrayBuffer())]).toEqual([...PROOF_BYTES]);
 
     // REQ-092: the first installment carries who confirmed it.
     const policy = await callApi('GET', `/policies/${policyId}`);

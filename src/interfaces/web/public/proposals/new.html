@@ -56,27 +56,56 @@
                 <span class="material-symbols-outlined">info</span>
                 <div class="banner__text">
                   Cliente, corretor, seguradora e produto são informados por
-                  identificador: os cadastros de IN-01 ainda não fazem parte do sistema.
-                  Use os mesmos identificadores dos cadastros financeiros.
+                  identificador. Os que já estão em <strong>Cadastros</strong> aparecem como
+                  sugestão, com o nome ao lado; um identificador novo continua sendo aceito —
+                  nada aqui exige cadastro prévio.
                 </div>
               </div>
 
               <div class="form-grid">
                 <div class="field">
-                  <input class="field__input" name="clientId" placeholder=" " required />
+                  <input
+                    class="field__input"
+                    name="clientId"
+                    placeholder=" "
+                    list="client-options"
+                    required
+                  />
+                  <datalist id="client-options"></datalist>
                   <label class="field__label">Cliente</label>
                 </div>
                 <div class="field">
-                  <input class="field__input" name="brokerId" placeholder=" " required />
+                  <input
+                    class="field__input"
+                    name="brokerId"
+                    placeholder=" "
+                    list="broker-options"
+                    required
+                  />
+                  <datalist id="broker-options"></datalist>
                   <label class="field__label">Corretor</label>
                   <span class="field__hint">Define a tabela de comissão aplicada.</span>
                 </div>
                 <div class="field">
-                  <input class="field__input" name="insurerId" placeholder=" " required />
+                  <input
+                    class="field__input"
+                    name="insurerId"
+                    placeholder=" "
+                    list="insurer-options"
+                    required
+                  />
+                  <datalist id="insurer-options"></datalist>
                   <label class="field__label">Seguradora</label>
                 </div>
                 <div class="field">
-                  <input class="field__input" name="productId" placeholder=" " required />
+                  <input
+                    class="field__input"
+                    name="productId"
+                    placeholder=" "
+                    list="product-options"
+                    required
+                  />
+                  <datalist id="product-options"></datalist>
                   <label class="field__label">Produto / ramo</label>
                   <span class="field__hint">
                     Com a seguradora, seleciona o acordo comercial vigente.

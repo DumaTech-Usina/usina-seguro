@@ -21,10 +21,17 @@ function open(releaseRule: ReleaseRule, firstInstallmentPaid: boolean): Settleme
   );
 }
 
+const PROOF = {
+  documentId: 'document-1',
+  fileName: 'comprovante-001.pdf',
+  contentType: 'application/pdf',
+  byteSize: 1024,
+};
+
 const PAYMENT = {
   paidAt: LATER,
   amount: Money.fromString('20.00'),
-  proofReference: 'comprovante-001',
+  proof: PROOF,
   userId: 'user-1',
 };
 
@@ -83,7 +90,7 @@ describe('Settlement', () => {
       expect(paid.status).toBe('PAID');
       expect(paid.payment?.paidAt).toBe(LATER);
       expect(paid.payment?.amount.toString()).toBe('20.00');
-      expect(paid.payment?.proofReference).toBe('comprovante-001');
+      expect(paid.payment?.proof).toEqual(PROOF);
       expect(paid.payment?.userId).toBe('user-1');
     });
 
@@ -103,10 +110,33 @@ describe('Settlement', () => {
       );
     });
 
-    it('requires the attached proof (REQ-095)', () => {
+    it('requires the attached proof to have a name (REQ-095, CA-028)', () => {
       expect(() =>
-        open('IMMEDIATE', false).registerPayment({ ...PAYMENT, proofReference: '  ' }),
+        open('IMMEDIATE', false).registerPayment({
+          ...PAYMENT,
+          proof: { ...PROOF, fileName: '  ' },
+        }),
       ).toThrow(BusinessRuleViolation);
+    });
+
+    it('refuses a proof with no content at all (REQ-095, CA-028)', () => {
+      // An empty file is an attachment that evidences nothing. This is the
+      // one reason the aggregate keeps the size instead of only the name.
+      expect(() =>
+        open('IMMEDIATE', false).registerPayment({
+          ...PAYMENT,
+          proof: { ...PROOF, byteSize: 0 },
+        }),
+      ).toThrow(BusinessRuleViolation);
+    });
+
+    it('stores the proof name trimmed, the way every other name is stored', () => {
+      const paid = open('IMMEDIATE', false).registerPayment({
+        ...PAYMENT,
+        proof: { ...PROOF, fileName: '  comprovante.pdf  ' },
+      });
+
+      expect(paid.payment?.proof.fileName).toBe('comprovante.pdf');
     });
 
     it('requires the user who registered it (REQ-123)', () => {

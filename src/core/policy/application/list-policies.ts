@@ -1,5 +1,7 @@
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
 import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
+import { ReferenceNames } from '../../registry/application/reference-names.ts';
+import type { ReferenceRepository } from '../../registry/application/reference-repository.ts';
 import { CalendarDate } from '../domain/calendar-date.ts';
 import type { PolicyListFilter, PolicyRepository } from './policy-repository.ts';
 import { type PolicyListItemView, toPolicyListItemView } from './policy-view.ts';
@@ -21,6 +23,8 @@ export interface ListPoliciesInput {
 export interface ListPoliciesDependencies {
   readonly policies: PolicyRepository;
   readonly proposals: ProposalRepository;
+  /** IN-01: the names the line is identified by (REQ-096). */
+  readonly references: ReferenceRepository;
 }
 
 /**
@@ -52,6 +56,9 @@ export class ListPolicies {
         : { renewalUntil: CalendarDate.fromString(input.renewalUntil) };
 
     const policies = await this.deps.policies.list(filter);
+    // Read once for the whole listing, not once per line: the registry is the
+    // counterparties of the brokerage, not a table that grows with volume.
+    const names = await ReferenceNames.load(this.deps.references);
 
     return Promise.all(
       policies.map(async (policy) => {
@@ -63,7 +70,7 @@ export class ListPolicies {
           throw new RecordNotFound(PROPOSAL_MESSAGES.NOT_FOUND, { id: policy.proposalId });
         }
 
-        return toPolicyListItemView(policy, proposal);
+        return toPolicyListItemView(policy, proposal, names);
       }),
     );
   }

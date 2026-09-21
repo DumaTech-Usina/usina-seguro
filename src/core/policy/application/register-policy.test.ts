@@ -10,6 +10,7 @@ import type {
   AgreedCommissionCalculator,
   AgreedCommissionRequest,
 } from './agreed-commission-calculator.ts';
+import type { PolicyIssuedEvent, PolicyIssuedNotifier } from './policy-issued-notifier.ts';
 import { RegisterPolicy, type RegisterPolicyInput } from './register-policy.ts';
 
 const NOW = new Date('2026-09-20T10:00:00.000Z');
@@ -27,10 +28,24 @@ class RecordingCommissionCalculator implements AgreedCommissionCalculator {
   }
 }
 
+/**
+ * Stands in for the notification module (FP-01 step 7, REQ-100). Same reason
+ * as above: what the broker is told, and through which channel, is the other
+ * module's business — this one only has to hand over the emission.
+ */
+class RecordingNotifier implements PolicyIssuedNotifier {
+  readonly events: PolicyIssuedEvent[] = [];
+
+  async notify(event: PolicyIssuedEvent): Promise<void> {
+    this.events.push(event);
+  }
+}
+
 function scenario() {
   const proposals = new InMemoryProposalRepository();
   const policies = new InMemoryPolicyRepository();
   const agreedCommission = new RecordingCommissionCalculator();
+  const notifier = new RecordingNotifier();
   let sequence = 0;
 
   const useCase = new RegisterPolicy({
@@ -38,11 +53,12 @@ function scenario() {
     policies,
     transaction: new ImmediateTransaction(),
     agreedCommission,
+    notifier,
     newId: () => `id-${++sequence}`,
     now: () => NOW,
   });
 
-  return { proposals, policies, agreedCommission, useCase };
+  return { proposals, policies, agreedCommission, notifier, useCase };
 }
 
 function draft(): Proposal {
@@ -256,7 +272,7 @@ describe('RegisterPolicy', () => {
   });
 
   it('asks for nothing when the policy is refused (REQ-070, CA-009)', async () => {
-    const { proposals, agreedCommission, useCase } = scenario();
+    const { proposals, agreedCommission, notifier, useCase } = scenario();
     await proposals.save(transmitted());
 
     await expect(useCase.execute(input({ installments: [] }))).rejects.toThrow(
@@ -264,5 +280,23 @@ describe('RegisterPolicy', () => {
     );
 
     expect(agreedCommission.requests).toEqual([]);
+    // REQ-100 fires on the effectuated emission; there was none.
+    expect(notifier.events).toEqual([]);
+  });
+
+  it('notifies the broker once the policy is created (FP-01 step 7, REQ-100)', async () => {
+    const { proposals, notifier, useCase } = scenario();
+    await proposals.save(transmitted());
+
+    const policy = await useCase.execute(input());
+
+    expect(notifier.events).toHaveLength(1);
+    expect(notifier.events[0]).toEqual({
+      policyId: policy.id,
+      proposalId: 'proposal-1',
+      policyNumber: 'APL-4711',
+      // REQ-105: when the emission was registered, which is when it happened.
+      issuedAt: NOW,
+    });
   });
 });

@@ -1,5 +1,7 @@
 import { CalendarDate } from '../../policy/domain/calendar-date.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
+import { ReferenceNames } from '../../registry/application/reference-names.ts';
+import type { ReferenceRepository } from '../../registry/application/reference-repository.ts';
 import {
   type BrokerBase,
   CommissionAgreement,
@@ -27,6 +29,8 @@ export interface RegisterCommissionAgreementInput {
 
 export interface RegisterCommissionAgreementDependencies {
   readonly agreements: CommissionAgreementRepository;
+  /** IN-01: so a registration answers the same document the listing answers. */
+  readonly references: ReferenceRepository;
   readonly newId: () => string;
   readonly now: () => Date;
 }
@@ -73,6 +77,6 @@ export class RegisterCommissionAgreement {
 
     // The same shape the listing answers, so a record just registered and a
     // record read back are the same document to whoever displays them.
-    return toCommissionAgreementView(agreement);
+    return toCommissionAgreementView(agreement, await ReferenceNames.load(this.deps.references));
   }
 }

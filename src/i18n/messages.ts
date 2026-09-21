@@ -1,7 +1,9 @@
 import type { CommissionMessageKey } from '../core/commission/domain/errors.ts';
+import type { NotificationMessageKey } from '../core/notification/domain/errors.ts';
 import type { PolicyMessageKey } from '../core/policy/domain/errors.ts';
 import type { ProposalMessageKey } from '../core/proposal/domain/errors.ts';
 import type { ReconciliationMessageKey } from '../core/reconciliation/domain/errors.ts';
+import type { RegistryMessageKey } from '../core/registry/domain/errors.ts';
 import type { SettlementMessageKey } from '../core/settlement/domain/errors.ts';
 
 /**
@@ -22,6 +24,8 @@ export type MessageKey =
   | PolicyMessageKey
   | CommissionMessageKey
   | ReconciliationMessageKey
+  | RegistryMessageKey
+  | NotificationMessageKey
   | SettlementMessageKey;
 
 export type Locale = 'pt-BR';
@@ -77,6 +81,7 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'policy.payment_confirmation_user_required':
       'Confirmação de pagamento da parcela {number} exige a identificação do usuário.',
 
+    'registry.reference_field_required': 'Cadastro de referência exige o campo {field}.',
     'commission.agreement_field_required': 'Acordo comercial exige o campo {field}.',
     'commission.intermediary_required':
       'Cadeia com intermediária exige a identificação da intermediária.',
@@ -106,6 +111,9 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'reconciliation.proposal_number_required':
       'Linha do arquivo de comissionamento exige o número da proposta.',
 
+    'notification.recipient_required':
+      'Notificação de emissão efetivada exige a identificação do corretor destinatário.',
+
     'settlement.release_rule_not_configured':
       "Forma de pagamento '{paymentMethodId}' não tem regra de liberação configurada.",
     'settlement.payment_method_required':
@@ -122,6 +130,8 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
       'Somente repasse liberado pode ser pago. Estado atual: {status}.',
     'settlement.payment_amount_must_be_positive': 'Valor do repasse pago deve ser positivo.',
     'settlement.payment_proof_required': 'Registro de repasse exige comprovante anexo.',
+    'settlement.payment_proof_not_found':
+      "Repasse da apólice '{policyId}' não possui comprovante anexo registrado.",
     'settlement.payment_user_required': 'Registro de repasse exige a identificação do usuário.',
   },
 };

@@ -25,7 +25,16 @@
   font-weight: 500;
 }
 
-/* REQ-095: o comprovante é uma referência textual, não um anexo. */
-.proof {
+/* REQ-095, CA-028: o comprovante é o anexo, e daqui ele é aberto. */
+.proof-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--primary);
   font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.proof-link .material-symbols-outlined {
+  font-size: 16px;
 }

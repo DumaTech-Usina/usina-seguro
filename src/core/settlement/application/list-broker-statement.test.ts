@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { InMemoryCommissionRepository } from '../../../infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
+import { InMemoryReferenceRepository } from '../../../infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
 import { InMemorySettlementRepository } from '../../../infrastructure/persistence/in-memory/in-memory-settlement-repository.ts';
 import type { CommissionBasis } from '../../commission/domain/commission-basis.ts';
 import { Commission } from '../../commission/domain/commission.ts';
@@ -12,6 +13,7 @@ import { RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal } from '../../proposal/domain/proposal.ts';
+import { Reference } from '../../registry/domain/reference.ts';
 import { Settlement } from '../domain/settlement.ts';
 import { ListBrokerStatement } from './list-broker-statement.ts';
 
@@ -46,13 +48,23 @@ function world() {
   const policies = new InMemoryPolicyRepository();
   const commissions = new InMemoryCommissionRepository();
   const settlements = new InMemorySettlementRepository();
+  // IN-01 is empty unless a test registers a name: an unregistered reference
+  // is the ordinary case until somebody maintains the registry.
+  const references = new InMemoryReferenceRepository();
 
   return {
     proposals,
     policies,
     commissions,
     settlements,
-    useCase: new ListBrokerStatement({ commissions, policies, proposals, settlements }),
+    references,
+    useCase: new ListBrokerStatement({
+      commissions,
+      policies,
+      proposals,
+      settlements,
+      references,
+    }),
   };
 }
 
@@ -144,7 +156,12 @@ async function business(
       paidAt: NOW,
       // REQ-095: what was actually sent, which the statement adds up as such.
       amount: Money.fromString(options.paidAmount ?? '20.00'),
-      proofReference: `comprovante-${suffix}`,
+      proof: {
+        documentId: `document-${suffix}`,
+        fileName: `comprovante-${suffix}.pdf`,
+        contentType: 'application/pdf',
+        byteSize: 2048,
+      },
       userId: 'financeiro-1',
     });
   }
@@ -233,7 +250,7 @@ describe('ListBrokerStatement', () => {
     const paid = byNumber.get('APL-PAGO');
     expect(paid?.settlement?.status).toBe('PAID');
     expect(paid?.settlement?.payment?.amount).toBe('19.50');
-    expect(paid?.settlement?.payment?.proofReference).toBe('comprovante-PAGO');
+    expect(paid?.settlement?.payment?.proof.fileName).toBe('comprovante-PAGO.pdf');
     expect(paid?.settlement?.payment?.userId).toBe('financeiro-1');
   });
 
@@ -326,5 +343,59 @@ describe('ListBrokerStatement', () => {
     );
 
     await expect(repositories.useCase.execute()).rejects.toBeInstanceOf(RecordNotFound);
+  });
+
+  it('identifies each line by the names REQ-096 asks a repasse document for', async () => {
+    const repositories = world();
+    await business(repositories, {
+      suffix: 'A',
+      brokerId: 'broker-1',
+      stage: 'RECONCILED',
+      calculatedAt: '2026-09-18T12:00:00.000Z',
+    });
+    const at = new Date('2026-09-20T12:00:00.000Z');
+
+    await repositories.references.save(
+      Reference.register({ kind: 'CLIENT', id: 'client-A', name: 'Ana Lima', registeredAt: at }),
+    );
+    await repositories.references.save(
+      Reference.register({
+        kind: 'BROKER',
+        id: 'broker-1',
+        name: 'Corretora Alfa',
+        registeredAt: at,
+      }),
+    );
+    await repositories.references.save(
+      Reference.register({ kind: 'PRODUCT', id: 'auto', name: 'Automovel', registeredAt: at }),
+    );
+
+    const statement = await repositories.useCase.execute({ brokerId: 'broker-1' });
+    const [line] = statement.lines;
+
+    // Three of the five fields of REQ-096; the percentage and the net value
+    // are already on the line, and the window is still DEC-008.
+    expect(line?.clientName).toBe('Ana Lima');
+    expect(line?.brokerName).toBe('Corretora Alfa');
+    expect(line?.productName).toBe('Automovel');
+    expect(line?.brokerId).toBe('broker-1');
+  });
+
+  it('answers no name for a broker nobody registered, and states it anyway', async () => {
+    const repositories = world();
+    await business(repositories, {
+      suffix: 'A',
+      brokerId: 'broker-1',
+      stage: 'RECONCILED',
+      calculatedAt: '2026-09-18T12:00:00.000Z',
+    });
+
+    const statement = await repositories.useCase.execute({ brokerId: 'broker-1' });
+
+    // The filter is the identifier, never the name: OUT-07 has to answer for a
+    // broker the registry never heard of.
+    expect(statement.lines).toHaveLength(1);
+    expect(statement.lines[0]?.brokerName).toBeNull();
+    expect(statement.brokerId).toBe('broker-1');
   });
 });

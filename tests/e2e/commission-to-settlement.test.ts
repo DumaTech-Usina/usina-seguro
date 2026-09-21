@@ -111,7 +111,11 @@ interface CommissionPanelLine {
   policyId: string;
   policyNumber: string;
   proposalNumber: string | null;
+  clientId: string;
+  clientName: string | null;
   insurerId: string;
+  insurerName: string | null;
+  productName: string | null;
   status: string;
   effectiveReceivable: string;
   realReceivable: string | null;
@@ -126,7 +130,10 @@ interface BrokerStatementBody {
     policyNumber: string;
     proposalNumber: string | null;
     clientId: string;
+    clientName: string | null;
     brokerId: string;
+    brokerName: string | null;
+    productName: string | null;
     payable: string;
     commissionStatus: string;
     divergent: boolean;
@@ -135,11 +142,18 @@ interface BrokerStatementBody {
   totals: { payable: string; awaitingConfirmation: string; released: string; paid: string };
 }
 
+/** A proof with bytes no text encoding survives, to prove the round-trip. */
+const PROOF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x00, 0xff]);
+
 interface SettlementBody {
   status: string;
   amount: string;
   brokerId: string;
-  payment: { amount: string; proofReference: string; userId: string } | null;
+  payment: {
+    amount: string;
+    proof: { fileName: string; contentType: string; byteSize: number };
+    userId: string;
+  } | null;
 }
 
 /** One agreement, as `GET /commission-agreements` answers it (IN-02). */
@@ -168,6 +182,14 @@ interface ReleaseRuleBody {
   registeredAt: string;
 }
 
+/** One reference record, as `GET /references` answers it (IN-01). */
+interface ReferenceBody {
+  kind: string;
+  id: string;
+  name: string;
+  registeredAt: string;
+}
+
 interface ReportBody {
   reconciled: number;
   divergent: number;
@@ -179,10 +201,12 @@ async function sellPolicy(options: {
   paymentMethodId: string;
   proposalNumber: string;
   policyNumber: string;
+  /** IN-01: defaults to the client the registry names in the block below. */
+  clientId?: string;
 }): Promise<PolicyBody> {
   const proposal = await json<{ id: string }>(
     await post('/proposals', {
-      clientId: 'client-1',
+      clientId: options.clientId ?? 'client-1',
       brokerId: 'broker-1',
       insurerId: 'insurer-1',
       productId: 'auto',
@@ -261,11 +285,26 @@ describe('financial journey with immediate release (credit)', () => {
     expect(settlement.brokerId).toBe('broker-1');
   });
 
+  it('refuses a payment with no proof attached (REQ-095, CA-028)', async () => {
+    // Shape, not rule: the document is part of what a payment *is*, so the
+    // request without it never reaches the domain.
+    const response = await post(`/policies/${policy.id}/settlement/payment`, {
+      amount: '20.00',
+      userId: 'financeiro-1',
+    });
+
+    expect(response.status).toBe(400);
+  });
+
   it('registers the payment sent to the broker (FP-03 step 5, CA-028)', async () => {
     const settlement = await json<SettlementBody>(
       await post(`/policies/${policy.id}/settlement/payment`, {
         amount: '20.00',
-        proofReference: 'comprovante-100.pdf',
+        proof: {
+          fileName: 'comprovante-100.pdf',
+          contentType: 'application/pdf',
+          content: Buffer.from(PROOF_BYTES).toString('base64'),
+        },
         userId: 'financeiro-1',
       }),
     );
@@ -273,11 +312,40 @@ describe('financial journey with immediate release (credit)', () => {
     expect(settlement.status).toBe('PAID');
     expect(settlement.payment?.amount).toBe('20.00');
     expect(settlement.payment?.userId).toBe('financeiro-1');
+    expect(settlement.payment?.proof).toEqual({
+      fileName: 'comprovante-100.pdf',
+      contentType: 'application/pdf',
+      byteSize: PROOF_BYTES.length,
+    });
 
     const reread = await json<SettlementBody>(
       await fetch(`${baseUrl}/policies/${policy.id}/settlement`),
     );
     expect(reread.status).toBe('PAID');
+  });
+
+  it('serves the attached proof back, byte for byte (REQ-095, CA-028)', async () => {
+    const response = await fetch(`${baseUrl}/policies/${policy.id}/settlement/payment/proof`);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toContain('application/pdf');
+    expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([...PROOF_BYTES]);
+  });
+
+  it('hands the proof over as a download, never as a page of this app', async () => {
+    // A proof uploaded as HTML or SVG must not run in the origin that serves
+    // the application. `attachment` plus `nosniff` is what prevents it.
+    const response = await fetch(`${baseUrl}/policies/${policy.id}/settlement/payment/proof`);
+
+    expect(response.headers.get('content-disposition')).toContain('attachment');
+    expect(response.headers.get('content-disposition')).toContain('comprovante-100.pdf');
+    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+  });
+
+  it('answers 404 for the proof of a policy with no payment (REQ-095)', async () => {
+    const response = await fetch(`${baseUrl}/policies/ghost/settlement/payment/proof`);
+
+    expect(response.status).toBe(404);
   });
 });
 
@@ -623,5 +691,110 @@ describe('the registries the Administrator maintains', () => {
 
     expect(changed).toHaveLength(1);
     expect(changed[0]?.release).toBe('REQUIRES_RECEIPT_CONFIRMATION');
+  });
+});
+
+/**
+ * IN-01 over HTTP, and the names it gives the readings that were already here.
+ *
+ * REQ-096 identifies a business by the name of the client, the broker and the
+ * ramo — not by the identifier the proposal stores (REQ-022). This block
+ * registers those names after the businesses above already exist, which is the
+ * order the registry is really maintained in, and checks that the listings
+ * start answering them without anything else changing.
+ */
+describe('the reference registry (IN-01)', () => {
+  it('registers a reference and answers it in the shape the listing answers', async () => {
+    const registered = await json<ReferenceBody>(
+      await post('/references', { kind: 'CLIENT', id: 'client-1', name: 'Ana Lima' }),
+    );
+
+    const listed = await json<ReferenceBody[]>(await fetch(`${baseUrl}/references`));
+
+    expect(registered).toMatchObject({ kind: 'CLIENT', id: 'client-1', name: 'Ana Lima' });
+    expect(listed).toContainEqual(registered);
+  });
+
+  it('answers one kind at a time when asked', async () => {
+    await post('/references', { kind: 'BROKER', id: 'broker-1', name: 'Corretora Alfa' });
+    await post('/references', { kind: 'PRODUCT', id: 'auto', name: 'Automovel' });
+    await post('/references', { kind: 'INSURER', id: 'insurer-1', name: 'Seguradora Norte' });
+
+    const brokers = await json<ReferenceBody[]>(await fetch(`${baseUrl}/references?kind=BROKER`));
+
+    expect(brokers.every((reference) => reference.kind === 'BROKER')).toBe(true);
+    expect(brokers.map((reference) => reference.name)).toContain('Corretora Alfa');
+  });
+
+  it('refuses a kind IN-01 does not name', async () => {
+    // Shape validation: an unknown kind is a 400, never an empty listing that
+    // reads as "nothing is registered".
+    expect((await fetch(`${baseUrl}/references?kind=COVERAGE`)).status).toBe(400);
+    expect((await post('/references', { kind: 'COVERAGE', id: 'x', name: 'y' })).status).toBe(400);
+  });
+
+  it('refuses a reference with no name, in Portuguese', async () => {
+    const response = await post('/references', { kind: 'CLIENT', id: 'client-9', name: '  ' });
+
+    expect(response.status).toBe(422);
+    expect(await json(response)).toMatchObject({
+      rule: 'IN-01',
+      message: expect.stringContaining('Cadastro de referência'),
+    });
+  });
+
+  it('names the businesses on the panel of OUT-05 (REQ-096)', async () => {
+    const panel = await json<CommissionPanelLine[]>(await fetch(`${baseUrl}/commissions`));
+    const line = panel.find((entry) => entry.policyNumber === 'APL-100');
+
+    expect(line?.clientName).toBe('Ana Lima');
+    expect(line?.insurerName).toBe('Seguradora Norte');
+    // REQ-022 names the field "produto/ramo": the product's name is the ramo.
+    expect(line?.productName).toBe('Automovel');
+    // The identifier travels beside the name and still matches the record.
+    expect(line?.clientId).toBe('client-1');
+  });
+
+  it('names the businesses on the statement of OUT-07 (REQ-096)', async () => {
+    const statement = await json<BrokerStatementBody>(
+      await fetch(`${baseUrl}/broker-commission-statements?brokerId=broker-1`),
+    );
+    const [line] = statement.lines;
+
+    expect(line?.clientName).toBe('Ana Lima');
+    expect(line?.brokerName).toBe('Corretora Alfa');
+    expect(line?.productName).toBe('Automovel');
+  });
+
+  it('answers no name for a reference nobody registered, and lists the business', async () => {
+    const policy = await sellPolicy({
+      paymentMethodId: 'credit',
+      proposalNumber: 'PRP-IN01',
+      policyNumber: 'APL-IN01',
+      clientId: 'cliente-sem-cadastro',
+    });
+
+    const panel = await json<CommissionPanelLine[]>(await fetch(`${baseUrl}/commissions`));
+    const line = panel.find((entry) => entry.policyId === policy.id);
+
+    // REQ-002: the system reflects a control that happens outside it. A client
+    // nobody registered is a missing name, never a business to hide or refuse.
+    expect(line?.clientId).toBe('cliente-sem-cadastro');
+    expect(line?.clientName).toBeNull();
+    // The references that *are* registered still resolve on the same line.
+    expect(line?.insurerName).toBe('Seguradora Norte');
+  });
+
+  it('replaces the name of a reference registered again', async () => {
+    await post('/references', { kind: 'CLIENT', id: 'client-1', name: 'Ana Lima Souza' });
+
+    const clients = await json<ReferenceBody[]>(await fetch(`${baseUrl}/references?kind=CLIENT`));
+    const client = clients.filter((reference) => reference.id === 'client-1');
+
+    expect(client).toHaveLength(1);
+    expect(client[0]?.name).toBe('Ana Lima Souza');
+
+    // Put it back, so a later reading of this file is not surprised by it.
+    await post('/references', { kind: 'CLIENT', id: 'client-1', name: 'Ana Lima' });
   });
 });

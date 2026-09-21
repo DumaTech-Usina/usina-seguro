@@ -12,6 +12,7 @@ export const SETTLEMENT_MESSAGES = {
   ONLY_RELEASED_CAN_BE_PAID: 'settlement.only_released_can_be_paid',
   PAYMENT_AMOUNT_MUST_BE_POSITIVE: 'settlement.payment_amount_must_be_positive',
   PAYMENT_PROOF_REQUIRED: 'settlement.payment_proof_required',
+  PAYMENT_PROOF_NOT_FOUND: 'settlement.payment_proof_not_found',
   PAYMENT_USER_REQUIRED: 'settlement.payment_user_required',
 } as const;
 

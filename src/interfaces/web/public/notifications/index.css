@@ -1,0 +1,20 @@
+/* Only what this page adds to the design system. */
+
+.recipient-field {
+  min-width: 240px;
+}
+
+/* O `select` não tem placeholder, então o rótulo fica sempre levantado. */
+.recipient-field .field__label {
+  top: 8px;
+  font-size: 12px;
+}
+
+.recipient-field .field__input {
+  padding-top: 22px;
+}
+
+.policy-number {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}

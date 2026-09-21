@@ -258,6 +258,22 @@ function clickIn(title: string, label: string): void {
   button.click();
 }
 
+/**
+ * Attaches a document to the file field of a dialog (REQ-095).
+ *
+ * Same reason as in `web-policy-flow.test.ts`: jsdom has no way to fill an
+ * `<input type=file>`, and defining the property leaves the page's own code
+ * running untouched.
+ */
+function attachProof(dialogId: string, fileName: string): void {
+  const input = document.querySelector(`${dialogId} [name="proof"]`);
+  const file = new window.File([new Uint8Array([0x25, 0x50, 0x44, 0x46])], fileName, {
+    type: 'application/pdf',
+  });
+
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+}
+
 function answerDialog(id: string, values: Record<string, string>): void {
   const dialog = document.querySelector(id);
   expect(dialog.open, `${id} should be open`).toBe(true);
@@ -397,11 +413,8 @@ describe('the broker statement (OUT-07)', () => {
     // amount, the proof and the user.
     await followToPolicy(rowOf('APL-EXT-LIB'));
     clickIn('Repasse ao corretor', 'Registrar pagamento');
-    answerDialog('#dialog-payment', {
-      amount: '19.50',
-      proofReference: 'comprovante-EXT-LIB.pdf',
-      userId: 'fin-1',
-    });
+    attachProof('#dialog-payment', 'comprovante-EXT-LIB.pdf');
+    answerDialog('#dialog-payment', { amount: '19.50', userId: 'fin-1' });
 
     await vi.waitFor(() => {
       expect(card('Repasse ao corretor').textContent).toContain('Pagamento registrado');
@@ -416,6 +429,10 @@ describe('the broker statement (OUT-07)', () => {
     expect(paid.textContent).toContain('R$ 19,50');
     expect(paid.textContent).toContain('comprovante-EXT-LIB.pdf');
     expect(paid.textContent).toContain('fin-1');
+    // CA-028: from the statement the proof is one click away, as a document.
+    expect(paid.querySelector('a.proof-link').getAttribute('href')).toBe(
+      `/policies/${paid.querySelector('a.btn').getAttribute('href').split('id=')[1]}/settlement/payment/proof`,
+    );
 
     // The amount left "liberado a pagar" and became "pago".
     expect(total('Liberado a pagar')).toBe('R$ 0,00');

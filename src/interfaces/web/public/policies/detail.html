@@ -154,10 +154,23 @@
             />
             <label class="field__label">Valor pago</label>
           </div>
-          <div class="field">
-            <input class="field__input" name="proofReference" placeholder=" " required />
-            <label class="field__label">Comprovante</label>
-            <span class="field__hint">Referência do anexo, ex.: comprovante.pdf</span>
+          <!-- REQ-095, CA-028: o comprovante é o documento, não uma referência
+               a ele. O `accept` é uma sugestão ao seletor do sistema, não uma
+               regra: nenhum requisito restringe o formato, e o servidor guarda
+               o que for anexado. -->
+          <div class="field field--file">
+            <label class="field__label field__label--static" for="payment-proof">
+              Comprovante (anexo)
+            </label>
+            <input
+              class="field__input"
+              type="file"
+              id="payment-proof"
+              name="proof"
+              accept=".pdf,.png,.jpg,.jpeg,image/*,application/pdf"
+              required
+            />
+            <span class="field__hint">O arquivo fica anexado ao repasse.</span>
           </div>
           <div class="field">
             <input class="field__input" name="userId" placeholder=" " required />

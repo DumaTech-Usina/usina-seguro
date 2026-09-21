@@ -6,18 +6,25 @@ Fonte de verdade dos requisitos: [`requisitos_refinados.md`](./requisitos_refina
 Identificadores `REQ-xxx`, `CA-xxx`, `ITP-xxx` e `DEC-xxx` no código referenciam esse
 documento.
 
-> **Estado atual: `Proposta → Apólice → Parcela → Comissão → Conciliação → Repasse`.**
+> **Estado atual: `Proposta → Apólice → Parcela → Comissão → Conciliação → Repasse`,
+> com `Notificação` fechando o passo 7 de `FP-01`.**
 > `FP-01` vai do registro da proposta (`REQ-040`), passa pelo rastreio das propostas em
-> aberto (`REQ-043`, `OUT-01`, passo 5) e chega ao cálculo da comissão acordada no
-> momento em que a apólice nasce (`REQ-048`, `REQ-075`, passo 7). `FP-02` concilia o
-> relatório de comissionamento contra as apólices (`REQ-082`, `REQ-083`, `REQ-086`) e
-> `FP-03` conduz o repasse ao corretor até o registro do pagamento (`REQ-090`–`REQ-095`).
+> aberto (`REQ-043`, `OUT-01`, passo 5) e chega, no momento em que a apólice nasce, ao
+> cálculo da comissão acordada e à **notificação do corretor** (`REQ-048`, `REQ-075`,
+> `REQ-100`, passo 7). `FP-02` concilia o relatório de comissionamento contra as
+> apólices (`REQ-082`, `REQ-083`, `REQ-086`) e `FP-03` conduz o repasse ao corretor até
+> o registro do pagamento (`REQ-090`–`REQ-095`).
 >
 > O controle das apólices vendidas e das que estão a vencer (`REQ-055`, `OUT-03`,
 > `OUT-04`) é lido da mesma base.
 >
-> **Fora**: notificação (`REQ-100`–`REQ-105`), cotação, **geração** da renovação
-> (`REQ-056`), endosso, sinistro e cancelamento de apólice. O *parser* do arquivo de comissionamento também não existe —
+> O comprovante do repasse é um **anexo real** (`REQ-095`, `CA-028`): o documento é
+> enviado no registro do pagamento, guardado e servido de volta byte a byte.
+>
+> **Fora**: cotação, **geração** da renovação (`REQ-056`), endosso, sinistro e
+> cancelamento de apólice. A entrega da notificação é interna (`REQ-102`): o contrato de
+> canal existe (`REQ-101`, `REQ-103`, `REQ-104`) e nenhum *adapter* externo está ligado.
+> O *parser* do arquivo de comissionamento também não existe —
 > `DEC-001` não definiu o layout; a conciliação recebe linhas já estruturadas. Ver
 > [Decisões em aberto](#decisões-de-negócio-em-aberto).
 
@@ -141,12 +148,35 @@ curl http://127.0.0.1:3000/policies
 #    ele inclusive. A janela é de quem pergunta — nenhum requisito define o que
 #    é uma renovação "próxima".
 curl 'http://127.0.0.1:3000/policies?renewalUntil=2027-06-30'
+
+# 7. A notificação que o registro da apólice produziu (REQ-100, OUT-10). Não há
+#    POST: ela é efeito do passo 4b, não um ato do usuário. Sem recipientId
+#    lista todas; com ele, as de um corretor.
+curl 'http://127.0.0.1:3000/notifications?recipientId=broker-1'
+# 200 [{"event":"POLICY_ISSUED","recipientId":"broker-1","policyNumber":"APL-4711",
+#       "client":{"id":"client-1","name":"Ana Lima"},
+#       "broker":{"id":"broker-1","name":"Corretora Alfa"},
+#       "product":{"id":"auto","name":"Automóvel"},
+#       "workedCommission":"32.5","netPremium":"1200.00","occurredAt":"..."}]
+#
+# Os cinco campos de REQ-096/REQ-100 são gravados como foram notificados
+# (REQ-105): corrigir um nome em IN-01 depois não reescreve o que já foi dito.
 ```
 
 Fluxo financeiro `FP-02` / `FP-03`:
 
 ```bash
-# 0. Cadastros do Administrador (IN-02..IN-06), sem os quais não há o que calcular.
+# 0a. Cadastros de referência (IN-01): dão nome a quem aparece na operação.
+#     Nada é validado contra eles — uma proposta pode nomear um cliente que
+#     ninguém cadastrou (REQ-002); o que falta nesse caso é o nome, não o negócio.
+curl -X POST http://127.0.0.1:3000/references \
+  -H 'content-type: application/json' \
+  -d '{"kind":"CLIENT","id":"client-1","name":"Ana Lima"}'
+# kind: CLIENT | BROKER | INSURER | INTERMEDIARY | PRODUCT. Cobertura não existe:
+# nenhuma regra confirmada lê uma cobertura.
+curl 'http://127.0.0.1:3000/references?kind=CLIENT'
+
+# 0b. Cadastros do Administrador (IN-02..IN-06), sem os quais não há o que calcular.
 #    Cadeia direta: a seguradora paga 40% do prêmio à Usina (REQ-060, REQ-065).
 curl -X POST http://127.0.0.1:3000/commission-agreements \
   -H 'content-type: application/json' -d '{
@@ -213,11 +243,26 @@ curl -X POST http://127.0.0.1:3000/policies/<apolice>/installments/1/payment \
 curl -X POST http://127.0.0.1:3000/policies/<apolice>/settlement/release
 # 200 {"status":"RELEASED",...}
 
-# 5. Registro do pagamento enviado ao corretor (REQ-095, CA-028).
+# 5. Registro do pagamento enviado ao corretor, com o comprovante **anexo**
+#    (REQ-095, CA-028, IN-15). O documento viaja base64 no corpo JSON — é o
+#    transporte que o resto da API já usa, sem parser multipart e sem build —
+#    e o servidor o devolve a bytes na sua própria fronteira.
 curl -X POST http://127.0.0.1:3000/policies/<apolice>/settlement/payment \
-  -H 'content-type: application/json' \
-  -d '{"amount":"240.00","proofReference":"comprovante.pdf","userId":"financeiro-1"}'
-# 200 {"status":"PAID","payment":{"amount":"240.00",...}}
+  -H 'content-type: application/json' -d "{
+    \"amount\": \"240.00\", \"userId\": \"financeiro-1\",
+    \"proof\": {
+      \"fileName\": \"comprovante.pdf\", \"contentType\": \"application/pdf\",
+      \"content\": \"$(base64 -i comprovante.pdf | tr -d '\n')\"
+    }
+  }"
+# 200 {"status":"PAID","payment":{"amount":"240.00","userId":"financeiro-1",
+#      "proof":{"fileName":"comprovante.pdf","contentType":"application/pdf",
+#               "byteSize":18342},...}}
+
+#    E o comprovante de volta, como arquivo. É a única rota da API que não
+#    responde JSON, e vai com `attachment` + `nosniff`: um anexo enviado como
+#    HTML ou SVG nunca é executado como página desta aplicação.
+curl -OJ http://127.0.0.1:3000/policies/<apolice>/settlement/payment/proof
 ```
 
 Rejeições, com a regra e o texto traduzido na resposta:
@@ -273,16 +318,19 @@ O que existe hoje:
 | Nova proposta (`FP-01` passos 3 e 4) | `/app/proposals/new.html` | Pronta |
 | Propostas, por estado (`OUT-01`, `OUT-02`, passo 5) | `/app/proposals/` | Pronta |
 | Proposta: dados e desfecho — aceite vira apólice, recusa exige motivo (passo 6) | `/app/proposals/detail.html?id=…` | Pronta |
-| Apólice: parcelas, comissão acordada × real, repasse | `/app/policies/detail.html?id=…` | Pronta |
+| Apólice: parcelas, comissão acordada × real, repasse | `/app/policies/detail.html?id=…` | Pronta — o pagamento do repasse leva o comprovante como anexo (`REQ-095`) |
 | Conciliação do comissionamento (`FP-02`, `OUT-06`) | `/app/reconciliations/` | Pronta — as linhas são digitadas; o arquivo é `DEC-001` |
 | Comissões: acordado × real de todas as apólices (`OUT-05`) | `/app/commissions/` | Pronta |
-| Repasses: extrato de comissão por corretor (`OUT-07`) | `/app/settlements/` | Pronta — sem relatório do período nem recibo (`DEC-008`, `IN-01`) |
-| Cadastros (`IN-02`..`IN-06`) | `/app/settings/` | Pronta — grava e lista cada cadastro; `IN-01` (cliente, corretor, seguradora, produto) não existe |
+| Repasses: extrato de comissão por corretor (`OUT-07`) | `/app/settlements/` | Pronta — sem relatório do período nem recibo (`DEC-008`) |
+| Cadastros (`IN-01`..`IN-06`) | `/app/settings/` | Pronta — grava e lista cada cadastro, inclusive as referências de `IN-01` (cobertura fora) |
 | Apólices: vendidas e a vencer (`OUT-03`, `OUT-04`) | `/app/policies/` | Pronta — o corte por data de renovação é informado pelo operador (`CA-032` não define a janela) |
+| Notificações de emissão efetivada (`OUT-10`, `REQ-100`) | `/app/notifications/` | Pronta — só leitura; a entrega é interna (`REQ-102`) |
 
 O caminho completo pela interface: **nova proposta → transmitir → a proposta aparece em
 _Propostas / Em aberto_ → abrir → registrar a apólice (ou a recusa) → abrir a apólice**.
-Depois disso a apólice fica encontrável por conta própria, em _Apólices_.
+Depois disso a apólice fica encontrável por conta própria, em _Apólices_, e o corretor
+encontra em _Notificações_ o que lhe foi comunicado sobre a emissão (`REQ-100`) — com o
+caminho de volta para a apólice que ele encaminha ao segurado (`FP-01` passo 8).
 `FP-01` separa esses atos no tempo de propósito: a seguradora responde depois, e o
 desfecho é registrado na própria proposta, não no formulário de cadastro.
 
@@ -291,6 +339,12 @@ sem comissão, e a tela mostra isso explicitamente em vez de inventar um valor. 
 lista o que já está registrado abaixo de cada formulário, então dá para conferir o
 percentual antes de ele virar uma comissão — e ver, pela ausência, qual forma de
 pagamento ainda não tem regra de liberação.
+
+Cadastre também as **referências de `IN-01`** (cliente, corretor, seguradora,
+intermediária, produto/ramo): é o que faz as telas dizerem *Ana Lima* em vez de
+`client-1`. Nenhuma tela exige esse cadastro — sem ele o identificador aparece como
+sempre apareceu —, mas é dele que saem três dos cinco campos que `REQ-096` pede no
+relatório de repasse.
 
 **Sem build.** Não há bundler, transpilador nem framework: o que é servido é o que está
 em disco — HTML, CSS e ES modules nativos. Por isso o código de browser é `.js` e não
@@ -368,7 +422,13 @@ src/
 │   ├── reconciliation/      # casar o informado pelo terceiro com o que o sistema sabe
 │   │   ├── domain/
 │   │   └── application/
-│   └── settlement/          # repasse ao corretor
+│   ├── settlement/          # repasse ao corretor
+│   │   ├── domain/
+│   │   └── application/
+│   ├── registry/            # IN-01: o nome de cada referência que o negócio guarda
+│   │   ├── domain/
+│   │   └── application/
+│   └── notification/        # REQ-100..REQ-105: o que o corretor foi avisado
 │       ├── domain/
 │       └── application/
 ├── infrastructure/          # implementações dos contratos
@@ -389,7 +449,8 @@ capacidades, com atores e fluxos distintos — `FP-01` passo 7 (`ATR-001`), `FP-
 vida próprio (seções 10.5 e 10.6). Os cadastros que alimentam o cálculo (acordo
 comercial, cadeia, tabela do corretor) vivem no módulo que os lê, `commission/`; a regra
 de liberação por forma de pagamento vive em `settlement/`, pelo mesmo motivo. Não há um
-módulo de cadastros.
+módulo de cadastros — `registry/` guarda apenas o **nome** de uma referência (`IN-01`),
+que é uma capacidade de leitura, não um parâmetro de cálculo.
 
 ### Direção das dependências
 
@@ -417,13 +478,16 @@ então um ciclo quebra a suíte:
 proposal ◄── policy ◄── commission ◄── reconciliation
                             ▲
                             └────────── settlement ──► policy, proposal
+
+registry ──► proposal          ◄── policy, commission, settlement, notification
+notification ──► policy, proposal
 ```
 
 Todos leem o vocabulário que o módulo de proposta declara (`Money`, `Percentage`,
 `BusinessRuleViolation`, `RecordNotFound`) — ele fica lá por ser o módulo do qual todos
 os outros já dependem, e não em `core/shared/`, que nenhum requisito justifica.
 
-Duas travessias merecem nota:
+Três travessias merecem nota:
 
 - **`commission → policy` e não o contrário.** `FP-01` passo 7 manda calcular a comissão
   acordada assim que a apólice nasce, mas quem declara o contrato é o módulo de apólice
@@ -435,6 +499,16 @@ Duas travessias merecem nota:
   `Comissão → Conciliação → Repasse` existe, mas o que o repasse precisa saber é o valor
   a pagar (`REQ-093`) e se a comissão real foi apurada (`FP-03` passo 1) — ambos estão na
   comissão. Quem conciliou não interessa.
+- **`notification → policy`, pelo mesmo motivo que a comissão.** A outra metade do passo
+  7 de `FP-01` é avisar o corretor (`REQ-100`), e de novo quem declara o contrato é o
+  módulo de apólice (`PolicyIssuedNotifier`). É isso que torna `REJ-017` verdadeiro na
+  estrutura e não só na intenção: a regra que dispara a notificação não nomeia canal
+  nenhum. Os canais ficam atrás de um segundo contrato, `NotificationChannel`
+  (`REQ-101`), que é onde e-mail, WhatsApp ou fila entram como *adapter* sem que
+  nenhuma regra mude (`REQ-103`, `REQ-104`, `CA-030`). Hoje nenhum está ligado: por
+  `REQ-102` a entrega inicial é interna, e o registro de `REQ-105` — o que foi
+  notificado, para quem e quando — é a própria notificação in-app que `/app/notifications/`
+  lê.
 
 ### Persistência
 
@@ -514,8 +588,8 @@ O que os requisitos deixaram pendente e onde isso aparece no código:
 | `ITP-006` | Não retroatividade de alteração de acordo | Não virou regra: o que existe é a cópia dos percentuais no registro da comissão, que é o que `REJ-011` (confirmado) pede |
 | `ITP-008` | Confirmação do boleto é manual | Implementada como manual, mas apoiada em `REQ-013` e `IN-13`, que são confirmados |
 
-Também ficaram de fora, por serem outras capacidades e não decisões pendentes:
-notificação ao corretor (`REQ-100`–`REQ-105`), cotação, renovação, endosso, sinistro,
-`RECEBIDA` da comissão (a *baixa* de `REQ-075` — nenhum requisito diz quem a registra) e
-os relatórios/recibo de `REQ-094`/`REQ-096`, que precisam de nome de cliente, corretor e
-ramo — cadastros (`IN-01`) ainda não modelados.
+Também ficaram de fora, por serem outras capacidades e não decisões pendentes: cotação,
+renovação, endosso, sinistro e `RECEBIDA` da comissão (a *baixa* de `REQ-075` — nenhum
+requisito diz quem a registra). Os relatórios/recibo de `REQ-094`/`REQ-096` dependem
+apenas de `DEC-008`: os cinco campos que eles exigem existem desde os cadastros de
+`IN-01`, e são os mesmos que a notificação de `REQ-100` já carrega.

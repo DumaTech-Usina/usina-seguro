@@ -53,3 +53,36 @@
     grid-template-columns: 1fr;
   }
 }
+
+/*
+ * Campo de arquivo (REQ-095): o rótulo flutuante do design system depende de
+ * `:placeholder-shown`, que um `input[type=file]` não tem. Aqui o rótulo fica
+ * acima do campo, em posição fixa, em vez de sobrepô-lo.
+ */
+.field--file .field__label--static {
+  position: static;
+  transform: none;
+  margin-bottom: var(--space-1);
+  font-size: 11px;
+  font-weight: 500;
+  pointer-events: auto;
+}
+
+.field--file .field__input {
+  height: auto;
+  padding: var(--space-3) var(--space-4);
+}
+
+/* REQ-095, CA-028: o comprovante anexado, aberto a partir do repasse. */
+.proof-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.proof-link .material-symbols-outlined {
+  font-size: 16px;
+}

@@ -419,11 +419,22 @@ function settlementCard(policy, settlement) {
     const text = element('div', 'audit-note__body');
     text.append(
       element('span', 'text-label', 'Pagamento registrado'),
-      element(
-        'span',
-        undefined,
-        `${formatMoney(settlement.payment.amount)} · comprovante ${settlement.payment.proofReference}`,
-      ),
+      element('span', undefined, formatMoney(settlement.payment.amount)),
+    );
+
+    // REQ-095, CA-028: o comprovante é o documento. Um anexo que ninguém
+    // consegue abrir de volta não comprova coisa alguma, então ele aparece
+    // como link para o próprio arquivo.
+    const proof = element('a', 'proof-link');
+    proof.href = api.settlementPaymentProofUrl(policy.id);
+    proof.append(
+      icon('attach_file'),
+      element('span', undefined, settlement.payment.proof.fileName),
+      element('span', 'text-muted', formatByteSize(settlement.payment.proof.byteSize)),
+    );
+    text.append(proof);
+
+    text.append(
       element(
         'span',
         'text-muted',
@@ -463,18 +474,88 @@ function settlementCard(policy, settlement) {
   return section;
 }
 
+/**
+ * O tamanho do anexo, para o operador reconhecer o arquivo que subiu.
+ *
+ * Fica nesta página e não em `shared/`: é a única tela que mostra o tamanho —
+ * o extrato mostra só o nome — e um módulo compartilhado para uma função não
+ * se paga.
+ */
+function formatByteSize(bytes) {
+  if (typeof bytes !== 'number' || bytes < 0) {
+    return '';
+  }
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`;
+}
+
+/**
+ * O arquivo anexado, em base64, no formato que a API espera (REQ-095).
+ *
+ * `readAsDataURL` devolve `data:<tipo>;base64,<conteúdo>`; o que interessa é o
+ * que vem depois da vírgula. O tipo vem do próprio arquivo, e quando o sistema
+ * não souber dizer qual é, vale o genérico — nenhum requisito restringe o
+ * formato do comprovante, então a tela não recusa por isso.
+ */
+function readProof(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      resolve({
+        fileName: file.name,
+        contentType: file.type === '' ? 'application/octet-stream' : file.type,
+        content: String(reader.result).split(',')[1] ?? '',
+      });
+    });
+    reader.addEventListener('error', () => reject(reader.error));
+    reader.readAsDataURL(file);
+  });
+}
+
 async function registerPayment(policy, settlement) {
-  const answer = await ask('#dialog-payment', (dialog) => {
+  const dialog = document.querySelector('#dialog-payment');
+
+  const answer = await ask('#dialog-payment', (node) => {
     // The expected amount is offered, not imposed: REQ-095 records what was
     // actually sent, which may differ.
-    dialog.querySelector('[name="amount"]').value = settlement.amount;
+    node.querySelector('[name="amount"]').value = settlement.amount;
   });
 
   if (answer === null) {
     return;
   }
 
-  await perform(() => api.registerSettlementPayment(policy.id, answer), 'Pagamento registrado.');
+  const file = dialog.querySelector('[name="proof"]').files?.[0] ?? null;
+
+  if (file === null) {
+    // CA-028: sem documento não há comprovante. A recusa do servidor viria de
+    // qualquer forma (REQ-095); dizer isso aqui evita uma ida em vão.
+    showSnackbar('Anexe o comprovante do pagamento.', { tone: 'danger', rule: 'REQ-095' });
+    return;
+  }
+
+  let proof;
+  try {
+    proof = await readProof(file);
+  } catch {
+    showSnackbar('Não foi possível ler o arquivo anexado.', { tone: 'danger' });
+    return;
+  }
+
+  await perform(
+    () =>
+      api.registerSettlementPayment(policy.id, {
+        amount: answer.amount,
+        userId: answer.userId,
+        proof,
+      }),
+    'Pagamento registrado.',
+  );
 }
 
 /* --------------------------------------------------------------- page -- */

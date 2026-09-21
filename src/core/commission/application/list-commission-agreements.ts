@@ -1,3 +1,5 @@
+import { ReferenceNames } from '../../registry/application/reference-names.ts';
+import type { ReferenceRepository } from '../../registry/application/reference-repository.ts';
 import type { CommissionAgreementRepository } from './commission-agreement-repository.ts';
 import {
   type CommissionAgreementView,
@@ -6,6 +8,8 @@ import {
 
 export interface ListCommissionAgreementsDependencies {
   readonly agreements: CommissionAgreementRepository;
+  /** IN-01: the name of the intermediary the chain names (REQ-060). */
+  readonly references: ReferenceRepository;
 }
 
 /**
@@ -31,7 +35,8 @@ export class ListCommissionAgreements {
 
   async execute(): Promise<readonly CommissionAgreementView[]> {
     const agreements = await this.deps.agreements.list();
+    const names = await ReferenceNames.load(this.deps.references);
 
-    return agreements.map(toCommissionAgreementView);
+    return agreements.map((agreement) => toCommissionAgreementView(agreement, names));
   }
 }

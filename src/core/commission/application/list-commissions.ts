@@ -2,6 +2,8 @@ import type { PolicyRepository } from '../../policy/application/policy-repositor
 import { POLICY_MESSAGES } from '../../policy/domain/errors.ts';
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
 import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
+import { ReferenceNames } from '../../registry/application/reference-names.ts';
+import type { ReferenceRepository } from '../../registry/application/reference-repository.ts';
 import type { CommissionStatus } from '../domain/commission.ts';
 import type { CommissionRepository } from './commission-repository.ts';
 import { type CommissionListItemView, toCommissionListItemView } from './commission-view.ts';
@@ -21,6 +23,8 @@ export interface ListCommissionsDependencies {
   readonly commissions: CommissionRepository;
   readonly policies: PolicyRepository;
   readonly proposals: ProposalRepository;
+  /** IN-01: the names the line is identified by (REQ-096). */
+  readonly references: ReferenceRepository;
 }
 
 /**
@@ -47,6 +51,7 @@ export class ListCommissions {
 
   async execute(input: ListCommissionsInput = {}): Promise<readonly CommissionListItemView[]> {
     const commissions = await this.deps.commissions.list(input);
+    const names = await ReferenceNames.load(this.deps.references);
 
     return Promise.all(
       commissions.map(async (commission) => {
@@ -64,7 +69,7 @@ export class ListCommissions {
           throw new RecordNotFound(PROPOSAL_MESSAGES.NOT_FOUND, { id: policy.proposalId });
         }
 
-        return toCommissionListItemView(commission, policy, proposal);
+        return toCommissionListItemView(commission, policy, proposal, names);
       }),
     );
   }

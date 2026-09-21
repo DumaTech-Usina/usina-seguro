@@ -21,6 +21,7 @@
 
 import { ApiError, api } from '/app/shared/api.js';
 import { formatDate, formatInstant, formatPercentage } from '/app/shared/money.js';
+import { referenceLabel } from '/app/shared/reference.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
 
@@ -164,6 +165,60 @@ function wire(selector, send, success, reload) {
   });
 }
 
+/* ---------------------------------------------------------- reference -- */
+
+/**
+ * The five kinds of IN-01, in Portuguese.
+ *
+ * Presentation only, like `shared/status.js`: the set is the requirement's and
+ * the server refuses anything outside it, so this map never decides anything.
+ */
+const REFERENCE_KINDS = {
+  CLIENT: 'Cliente',
+  BROKER: 'Corretor',
+  INSURER: 'Seguradora',
+  INTERMEDIARY: 'Intermediária',
+  PRODUCT: 'Produto / ramo',
+};
+
+const references = registry({
+  region: '#list-references',
+  title: 'Cadastros registrados',
+  read: () => api.listReferences(),
+  headers: [
+    ['Tipo', ''],
+    ['Nome', ''],
+    ['Identificador', ''],
+    ['Registrado em', ''],
+  ],
+  row: (reference) => {
+    const line = element('tr');
+    const kind = element('td');
+    kind.append(element('span', 'chip', REFERENCE_KINDS[reference.kind] ?? reference.kind));
+
+    line.append(
+      kind,
+      element('td', undefined, reference.name),
+      element('td', 'registry-key', reference.id),
+      element('td', 'text-muted', formatInstant(reference.registeredAt)),
+    );
+    return line;
+  },
+  empty: {
+    icon: 'groups',
+    title: 'Nenhum cadastro registrado',
+    description: 'Sem eles, a operação identifica cada negócio pelo código digitado na proposta.',
+  },
+});
+
+wire(
+  '#form-reference',
+  (input) => api.registerReference({ kind: input.kind, id: input.id, name: input.name }),
+  (reference) =>
+    `${REFERENCE_KINDS[reference.kind] ?? reference.kind} ${reference.name} registrado.`,
+  () => references.load(),
+);
+
 /* ---------------------------------------------------------- agreement -- */
 
 const intermediaryToggle = document.querySelector('#has-intermediary');
@@ -186,7 +241,7 @@ function chainCell(agreement) {
     element(
       'span',
       undefined,
-      `Via ${agreement.intermediaryId} · ${formatPercentage(agreement.intermediaryRate)} à Usina`,
+      `Via ${referenceLabel(agreement.intermediaryName, agreement.intermediaryId)} · ${formatPercentage(agreement.intermediaryRate)} à Usina`,
     ),
     element(
       'div',
@@ -340,6 +395,7 @@ wire(
 
 /* --------------------------------------------------------------- load -- */
 
+references.load();
 agreements.load();
 brokerRates.load();
 releaseRules.load();

@@ -13,7 +13,16 @@ export interface SettlementView {
   readonly payment: {
     readonly paidAt: string;
     readonly amount: string;
-    readonly proofReference: string;
+    /**
+     * REQ-095, CA-028: the attached proof, as metadata. The bytes are fetched
+     * on demand, by the route that serves the document — a statement listing
+     * twenty payments has no business carrying twenty files.
+     */
+    readonly proof: {
+      readonly fileName: string;
+      readonly contentType: string;
+      readonly byteSize: number;
+    };
     readonly userId: string;
   } | null;
 }
@@ -34,7 +43,11 @@ export function toSettlementView(settlement: Settlement): SettlementView {
         : {
             paidAt: settlement.payment.paidAt.toISOString(),
             amount: settlement.payment.amount.toString(),
-            proofReference: settlement.payment.proofReference,
+            proof: {
+              fileName: settlement.payment.proof.fileName,
+              contentType: settlement.payment.proof.contentType,
+              byteSize: settlement.payment.proof.byteSize,
+            },
             userId: settlement.payment.userId,
           },
   };

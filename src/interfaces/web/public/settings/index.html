@@ -38,6 +38,50 @@
           </div>
         </div>
 
+
+        <!-- Cadastros de referencia (IN-01). -->
+        <section class="card">
+          <div class="card__header">
+            <span class="material-symbols-outlined">groups</span>
+            <h2 class="text-title">Cadastros de referência</h2>
+          </div>
+          <form id="form-reference">
+            <div class="card__body stack">
+              <p class="text-muted">
+                O nome de quem aparece na operação: cliente, corretor, seguradora,
+                intermediária e produto/ramo. O identificador é o mesmo que a proposta já
+                usa — cadastrar aqui não valida nada, apenas dá um nome ao que hoje aparece
+                como código.
+              </p>
+              <div class="form-grid form-grid--three">
+                <div class="field">
+                  <select class="field__input" name="kind" required>
+                    <option value="CLIENT">Cliente</option>
+                    <option value="BROKER">Corretor</option>
+                    <option value="INSURER">Seguradora</option>
+                    <option value="INTERMEDIARY">Intermediária</option>
+                    <option value="PRODUCT">Produto / ramo</option>
+                  </select>
+                  <label class="field__label">Tipo</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="id" placeholder=" " required />
+                  <label class="field__label">Identificador</label>
+                  <span class="field__hint">O mesmo usado na proposta.</span>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="name" placeholder=" " required />
+                  <label class="field__label">Nome</label>
+                </div>
+              </div>
+            </div>
+            <div class="card__footer">
+              <button class="btn btn--filled" type="submit">Registrar cadastro</button>
+            </div>
+          </form>
+          <div class="registry" id="list-references"></div>
+        </section>
+
         <!-- Acordo comercial (IN-02, IN-03, IN-04). -->
         <section class="card">
           <div class="card__header">

@@ -16,6 +16,7 @@
 
 import { ApiError, api } from '/app/shared/api.js';
 import { formatMoney } from '/app/shared/money.js';
+import { referenceLabel } from '/app/shared/reference.js';
 import { reportError } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
 
@@ -75,12 +76,18 @@ function row(commission) {
     element(
       'div',
       'text-muted',
-      `Proposta ${commission.proposalNumber ?? 'sem número'} · Cliente ${commission.clientId}`,
+      `Proposta ${commission.proposalNumber ?? 'sem número'} · ${referenceLabel(
+        commission.clientName,
+        commission.clientId,
+      )}`,
     ),
     element(
       'div',
       'text-muted',
-      `Seguradora ${commission.insurerId} · Ramo ${commission.productId}`,
+      `${referenceLabel(commission.insurerName, commission.insurerId)} · ${referenceLabel(
+        commission.productName,
+        commission.productId,
+      )}`,
     ),
   );
   line.append(identification);

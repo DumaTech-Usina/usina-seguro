@@ -15,6 +15,57 @@ import { ApiError, api } from '/app/shared/api.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
 
+/* ------------------------------------------------------- IN-01 hints -- */
+
+/**
+ * Offers the identifiers already registered in IN-01, with their names.
+ *
+ * A suggestion, never a constraint: no requirement says a proposal must name a
+ * registered client, and REQ-002 makes this system reflect a control that
+ * happens outside it. The field stays free text — the list only spares the
+ * operator from retyping an identifier the registry already holds, which is
+ * what keeps the two sides matching.
+ *
+ * A registry that cannot be read leaves the fields exactly as they were: this
+ * is an aid, so its absence must not stop a proposal from being registered.
+ */
+async function offerRegisteredReferences() {
+  const fields = [
+    ['CLIENT', 'client-options'],
+    ['BROKER', 'broker-options'],
+    ['INSURER', 'insurer-options'],
+    ['PRODUCT', 'product-options'],
+  ];
+
+  let references;
+  try {
+    references = await api.listReferences();
+  } catch {
+    return;
+  }
+
+  for (const [kind, id] of fields) {
+    const list = document.querySelector(`#${id}`);
+    if (list === null) {
+      continue;
+    }
+
+    list.replaceChildren(
+      ...references
+        .filter((reference) => reference.kind === kind)
+        .map((reference) => {
+          const option = document.createElement('option');
+          option.value = reference.id;
+          option.label = reference.name;
+          option.textContent = reference.name;
+          return option;
+        }),
+    );
+  }
+}
+
+offerRegisteredReferences();
+
 /** What the wizard has accumulated. `null` means "this step has not run". */
 const state = {
   proposalId: null,

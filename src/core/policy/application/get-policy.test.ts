@@ -21,9 +21,10 @@ function scenario() {
       proposals,
       policies,
       transaction: new ImmediateTransaction(),
-      // FP-01 step 7 belongs to the commission module; this test is about
-      // reading a policy back.
+      // FP-01 step 7 belongs to the commission and notification modules; this
+      // test is about reading a policy back.
       agreedCommission: { calculateFor: async () => {} },
+      notifier: { notify: async () => {} },
       newId: () => `id-${++sequence}`,
       now: () => new Date('2026-09-20T10:00:00.000Z'),
     }),

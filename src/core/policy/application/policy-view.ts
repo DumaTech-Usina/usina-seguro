@@ -1,4 +1,5 @@
 import type { Proposal } from '../../proposal/domain/proposal.ts';
+import type { ReferenceNames } from '../../registry/application/reference-names.ts';
 import type { Policy } from '../domain/policy.ts';
 
 /**
@@ -69,8 +70,13 @@ export function toPolicyView(policy: Policy, proposal: Proposal): PolicyView {
  * The policy holds the proposal by id and nothing a human recognises, so what
  * identifies the business comes from the proposal it originated: the number the
  * insurer issued (REQ-050) and the client, insurer and product references
- * REQ-022 keeps. Those travel as they are stored: the registries of IN-01 are
- * not modelled yet, so there is no name to resolve.
+ * REQ-022 keeps.
+ *
+ * Each reference travels twice: as the identifier that is stored, which is
+ * what the conciliation and every other record match on, and as the name IN-01
+ * registered for it. The name is `null` when nobody registered one — nothing
+ * refuses a business for that (REQ-002), so the absence is information for
+ * whoever renders the line, not an error.
  */
 export interface PolicyListItemView {
   readonly id: string;
@@ -78,8 +84,12 @@ export interface PolicyListItemView {
   readonly proposalId: string;
   readonly proposalNumber: string | null;
   readonly clientId: string;
+  readonly clientName: string | null;
   readonly insurerId: string;
+  readonly insurerName: string | null;
   readonly productId: string;
+  /** REQ-022 names the field "produto/ramo": the product's name is the ramo. */
+  readonly productName: string | null;
   readonly status: string;
   readonly premium: string;
   readonly coverageStart: string;
@@ -88,15 +98,22 @@ export interface PolicyListItemView {
   readonly registeredAt: string;
 }
 
-export function toPolicyListItemView(policy: Policy, proposal: Proposal): PolicyListItemView {
+export function toPolicyListItemView(
+  policy: Policy,
+  proposal: Proposal,
+  names: ReferenceNames,
+): PolicyListItemView {
   return {
     id: policy.id,
     policyNumber: policy.policyNumber,
     proposalId: policy.proposalId,
     proposalNumber: proposal.proposalNumber,
     clientId: proposal.clientId,
+    clientName: names.of('CLIENT', proposal.clientId),
     insurerId: proposal.insurerId,
+    insurerName: names.of('INSURER', proposal.insurerId),
     productId: proposal.productId,
+    productName: names.of('PRODUCT', proposal.productId),
     status: policy.status,
     premium: policy.premium.toString(),
     coverageStart: policy.coverageStart.toString(),

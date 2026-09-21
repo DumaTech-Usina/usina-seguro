@@ -15,7 +15,10 @@ interface SettlementRow {
   released_at: string | null;
   paid_at: string | null;
   paid_amount: string | null;
-  proof_reference: string | null;
+  proof_document_id: string | null;
+  proof_file_name: string | null;
+  proof_content_type: string | null;
+  proof_byte_size: number | null;
   payment_user_id: string | null;
 }
 
@@ -33,15 +36,20 @@ export class SqliteSettlementRepository implements SettlementRepository {
       .prepare(
         `INSERT INTO settlement (
            id, policy_id, broker_id, amount, release_rule, status, opened_at,
-           released_at, paid_at, paid_amount, proof_reference, payment_user_id
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           released_at, paid_at, paid_amount,
+           proof_document_id, proof_file_name, proof_content_type, proof_byte_size,
+           payment_user_id
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
-           status          = excluded.status,
-           released_at     = excluded.released_at,
-           paid_at         = excluded.paid_at,
-           paid_amount     = excluded.paid_amount,
-           proof_reference = excluded.proof_reference,
-           payment_user_id = excluded.payment_user_id`,
+           status             = excluded.status,
+           released_at        = excluded.released_at,
+           paid_at            = excluded.paid_at,
+           paid_amount        = excluded.paid_amount,
+           proof_document_id  = excluded.proof_document_id,
+           proof_file_name    = excluded.proof_file_name,
+           proof_content_type = excluded.proof_content_type,
+           proof_byte_size    = excluded.proof_byte_size,
+           payment_user_id    = excluded.payment_user_id`,
       )
       .run(
         settlement.id,
@@ -54,7 +62,10 @@ export class SqliteSettlementRepository implements SettlementRepository {
         settlement.releasedAt?.toISOString() ?? null,
         payment?.paidAt.toISOString() ?? null,
         payment?.amount.toString() ?? null,
-        payment?.proofReference ?? null,
+        payment?.proof.documentId ?? null,
+        payment?.proof.fileName ?? null,
+        payment?.proof.contentType ?? null,
+        payment?.proof.byteSize ?? null,
         payment?.userId ?? null,
       );
   }
@@ -86,7 +97,12 @@ export class SqliteSettlementRepository implements SettlementRepository {
             : {
                 paidAt: new Date(row.paid_at),
                 amount: Money.fromString(row.paid_amount ?? '0.00'),
-                proofReference: row.proof_reference ?? '',
+                proof: {
+                  documentId: row.proof_document_id ?? '',
+                  fileName: row.proof_file_name ?? '',
+                  contentType: row.proof_content_type ?? '',
+                  byteSize: row.proof_byte_size ?? 0,
+                },
                 userId: row.payment_user_id ?? '',
               },
       },

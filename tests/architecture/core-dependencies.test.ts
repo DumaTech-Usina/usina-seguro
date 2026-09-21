@@ -98,6 +98,30 @@ describe('core dependency rule', () => {
       // REQ-090 keys the release rule by the payment method, and REQ-096 pays
       // the broker: both live on the proposal.
       'settlement -> proposal',
+      // IN-01 is a registry like any other: it throws the shared
+      // `BusinessRuleViolation` and nothing else crosses this way. The arrow
+      // points at the proposal, never back, which is what lets the three
+      // listings below depend on the registry without closing a loop.
+      'registry -> proposal',
+      // REQ-096 identifies a business by the *name* of the client, the broker
+      // and the ramo, not by the identifier the proposal stores (REQ-022).
+      // Each listing resolves the references it already shows; the registry is
+      // read-only to all three, and none of them can refuse a business for
+      // having no record there (REQ-002).
+      'policy -> registry',
+      'commission -> registry',
+      'settlement -> registry',
+      // FP-01 step 7, REQ-100: the emission was effectuated, so the broker is
+      // notified. The notification module implements the port the policy
+      // module declares (`PolicyIssuedNotifier`), so the arrow points this way
+      // and `RegisterPolicy` never names a notification — let alone a channel
+      // (REJ-017, CA-030).
+      'notification -> policy',
+      // REQ-100 and REQ-096 list the five fields the notification carries:
+      // client, broker, worked percentage, net value and ramo. All five live
+      // on the proposal (REQ-022, REQ-041), and the names come from IN-01.
+      'notification -> proposal',
+      'notification -> registry',
     ];
 
     const crossings = new Set<string>();

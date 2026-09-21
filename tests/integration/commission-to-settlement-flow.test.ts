@@ -16,6 +16,13 @@ import { BusinessRuleViolation } from '../../src/core/proposal/domain/errors.ts'
  * because without them there is nothing to calculate.
  */
 let directory: string;
+/**
+ * A proof with a byte no text encoding survives (0x00) and one above ASCII
+ * (0xFF): if the driver ever stored the document as text, this is what would
+ * come back changed.
+ */
+const PROOF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x00, 0xff, 0x0a]);
+
 let file: string;
 let application: Application;
 
@@ -508,13 +515,21 @@ describe('reconciliation to settlement (FP-03)', () => {
     const paid = await application.useCases.registerSettlementPayment.execute({
       policyId: policy.id,
       amount: '20.00',
-      proofReference: 'comprovante-2026-10-09.pdf',
+      proof: {
+        fileName: 'comprovante-2026-10-09.pdf',
+        contentType: 'application/pdf',
+        content: PROOF_BYTES,
+      },
       userId: 'financeiro-1',
     });
 
     expect(paid.status).toBe('PAID');
     expect(paid.payment?.amount).toBe('20.00');
-    expect(paid.payment?.proofReference).toBe('comprovante-2026-10-09.pdf');
+    expect(paid.payment?.proof).toEqual({
+      fileName: 'comprovante-2026-10-09.pdf',
+      contentType: 'application/pdf',
+      byteSize: PROOF_BYTES.length,
+    });
 
     await application.shutdown();
     application = open();
@@ -522,6 +537,63 @@ describe('reconciliation to settlement (FP-03)', () => {
     const reloaded = await application.useCases.getSettlement.execute(policy.id);
     expect(reloaded.status).toBe('PAID');
     expect(reloaded.payment?.userId).toBe('financeiro-1');
+
+    // REQ-095, CA-028: the document survives the restart byte for byte. An
+    // attachment nobody can open again evidences nothing.
+    const proof = await application.useCases.getSettlementPaymentProof.execute(policy.id);
+    expect(proof.fileName).toBe('comprovante-2026-10-09.pdf');
+    expect(proof.contentType).toBe('application/pdf');
+    expect([...proof.content]).toEqual([...PROOF_BYTES]);
+  });
+
+  it('keeps the proof as a BLOB, never as text (REQ-095)', async () => {
+    const policy = await registerPolicy({ paymentMethodId: 'credit' });
+    await reconcile();
+    await application.useCases.openSettlement.execute({ policyId: policy.id });
+    await application.useCases.registerSettlementPayment.execute({
+      policyId: policy.id,
+      amount: '20.00',
+      proof: { fileName: 'c.pdf', contentType: 'application/pdf', content: PROOF_BYTES },
+      userId: 'financeiro-1',
+    });
+
+    await application.shutdown();
+    const db = new DatabaseSync(file);
+    const row = db
+      .prepare('SELECT typeof(content) AS kind, length(content) AS size FROM document')
+      .get() as { kind: string; size: number };
+    db.close();
+    application = open();
+
+    // Text would corrupt any byte outside the ASCII range on the way back.
+    expect(row.kind).toBe('blob');
+    expect(row.size).toBe(PROOF_BYTES.length);
+  });
+
+  it('writes no document when the payment is refused (REQ-095)', async () => {
+    const policy = await registerPolicy({ paymentMethodId: 'bank-slip' });
+    await reconcile();
+    // EX-07: the transfer is held, so there is nothing to pay yet.
+    await application.useCases.openSettlement.execute({ policyId: policy.id });
+
+    await expect(
+      application.useCases.registerSettlementPayment.execute({
+        policyId: policy.id,
+        amount: '20.00',
+        proof: { fileName: 'c.pdf', contentType: 'application/pdf', content: PROOF_BYTES },
+        userId: 'financeiro-1',
+      }),
+    ).rejects.toThrow(BusinessRuleViolation);
+
+    await application.shutdown();
+    const db = new DatabaseSync(file);
+    const { total } = db.prepare('SELECT count(*) AS total FROM document').get() as {
+      total: number;
+    };
+    db.close();
+    application = open();
+
+    expect(total).toBe(0);
   });
 
   it('refuses to open a transfer before the real commission is apurada (FP-03 step 1)', async () => {
@@ -582,7 +654,11 @@ describe('broker commission statement (OUT-07)', () => {
     await application.useCases.registerSettlementPayment.execute({
       policyId: paid.id,
       amount: '19.50',
-      proofReference: 'comprovante-8004.pdf',
+      proof: {
+        fileName: 'comprovante-8004.pdf',
+        contentType: 'application/pdf',
+        content: PROOF_BYTES,
+      },
       userId: 'financeiro-1',
     });
 
@@ -599,7 +675,7 @@ describe('broker commission statement (OUT-07)', () => {
     // EX-07: the bank slip waits for the client to pay the first installment.
     expect(byPolicy.get(held.id)?.settlement?.status).toBe('AWAITING_CONFIRMATION');
     expect(byPolicy.get(released.id)?.settlement?.status).toBe('RELEASED');
-    expect(byPolicy.get(paid.id)?.settlement?.payment?.proofReference).toBe('comprovante-8004.pdf');
+    expect(byPolicy.get(paid.id)?.settlement?.payment?.proof.fileName).toBe('comprovante-8004.pdf');
 
     // REQ-120: the totals are exact, and the paid one is what was sent.
     expect(statement.totals).toEqual({

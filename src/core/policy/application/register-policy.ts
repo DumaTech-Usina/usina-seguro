@@ -10,6 +10,7 @@ import { POLICY_MESSAGES } from '../domain/errors.ts';
 import { Installment } from '../domain/installment.ts';
 import { Policy } from '../domain/policy.ts';
 import type { AgreedCommissionCalculator } from './agreed-commission-calculator.ts';
+import type { PolicyIssuedNotifier } from './policy-issued-notifier.ts';
 import type { PolicyRepository } from './policy-repository.ts';
 import { type PolicyView, toPolicyView } from './policy-view.ts';
 import type { Transaction } from './transaction.ts';
@@ -43,6 +44,8 @@ export interface RegisterPolicyDependencies {
   readonly transaction: Transaction;
   /** FP-01 step 7: the agreed commission follows the policy being created. */
   readonly agreedCommission: AgreedCommissionCalculator;
+  /** FP-01 step 7: so does the notification to the broker (REQ-100). */
+  readonly notifier: PolicyIssuedNotifier;
   readonly newId: () => string;
   readonly now: () => Date;
 }
@@ -109,10 +112,16 @@ export class RegisterPolicy {
       ),
     });
 
-    // One business fact, three writes: see `Transaction`. The agreed
-    // commission joins the same unit of work because FP-01 step 7 ties it to
-    // the policy being created — a policy stored without it would show an
-    // empty agreed side on the panel REQ-076 requires.
+    // One business fact, four writes: see `Transaction`. The agreed commission
+    // and the notification join the same unit of work because FP-01 step 7
+    // ties both to the policy being created — a policy stored without the
+    // first would show an empty agreed side on the panel REQ-076 requires, and
+    // one stored without the second would leave CA-029 silently unmet, with no
+    // operation able to produce the notification afterwards.
+    //
+    // A channel of REQ-103 does not run in here: REQ-104 has the contract
+    // admit asynchronous delivery precisely so an outbound adapter hands the
+    // payload to a queue and returns.
     await this.deps.transaction.run(async () => {
       await this.deps.policies.save(policy);
       await this.deps.proposals.save(accepted);
@@ -121,6 +130,12 @@ export class RegisterPolicy {
         proposalId: accepted.id,
         premium: policy.premium,
         calculatedAt: policy.registeredAt,
+      });
+      await this.deps.notifier.notify({
+        policyId: policy.id,
+        proposalId: accepted.id,
+        policyNumber: policy.policyNumber,
+        issuedAt: policy.registeredAt,
       });
     });
 

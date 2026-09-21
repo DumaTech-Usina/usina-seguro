@@ -120,6 +120,87 @@ describe('proposal to policy flow on SQLite', () => {
     expect(rejected).toBeInstanceOf(BusinessRuleViolation);
   });
 
+  it('notifies the broker in the same unit of work (FP-01 step 7, REQ-100)', async () => {
+    await application.useCases.registerReference.execute({
+      kind: 'CLIENT',
+      id: 'client-1',
+      name: 'Maria Souza',
+    });
+    const proposalId = await registerProposal();
+    await transmit(proposalId);
+
+    const policy = await registerPolicy(proposalId);
+
+    const [notified] = await application.useCases.listNotifications.execute({
+      recipientId: 'broker-1',
+    });
+    expect(notified).toMatchObject({
+      event: 'POLICY_ISSUED',
+      policyId: policy.id,
+      policyNumber: 'APL-4711',
+      client: { id: 'client-1', name: 'Maria Souza' },
+      // REQ-041: the percentage informed at transmission, with its scale.
+      workedCommission: '32.5',
+      netPremium: '1200.00',
+    });
+  });
+
+  it('narrows the notifications to one broker, on the driver (OUT-10)', async () => {
+    // Three emissions, two brokers. The filter is SQL, not a slice done after
+    // reading: the in-memory driver answers the same shape in the unit suite.
+    const emissions: readonly [string, string, string][] = [
+      ['broker-1', 'PRP-N-1', 'APL-N-1'],
+      ['broker-2', 'PRP-N-2', 'APL-N-2'],
+      ['broker-1', 'PRP-N-3', 'APL-N-3'],
+    ];
+
+    for (const [brokerId, proposalNumber, policyNumber] of emissions) {
+      const proposal = await application.useCases.registerProposal.execute({
+        clientId: 'client-1',
+        brokerId,
+        insurerId: 'insurer-1',
+        productId: 'auto',
+        paymentMethodId: 'bank-slip',
+        customerAccepted: true,
+        netPremium: '1200.00',
+      });
+      await application.useCases.transmitProposal.execute({
+        proposalId: proposal.id,
+        proposalNumber,
+        workedCommission: '32.5',
+      });
+      await registerPolicy(proposal.id, policyNumber);
+    }
+
+    const mine = await application.useCases.listNotifications.execute({
+      recipientId: 'broker-1',
+    });
+    expect(mine.map((notification) => notification.policyNumber).sort()).toEqual([
+      'APL-N-1',
+      'APL-N-3',
+    ]);
+
+    // REQ-105: most recent first, as the contract of the repository promises.
+    const every = await application.useCases.listNotifications.execute({});
+    expect(every).toHaveLength(3);
+    const instants = every.map((notification) => Date.parse(notification.occurredAt));
+    expect(instants).toEqual([...instants].sort((a, b) => b - a));
+  });
+
+  it('keeps the notification readable after a restart (REQ-105)', async () => {
+    const proposalId = await registerProposal();
+    await transmit(proposalId);
+    const policy = await registerPolicy(proposalId);
+    const before = await application.useCases.listNotifications.execute({});
+    await application.shutdown();
+
+    application = open();
+    const after = await application.useCases.listNotifications.execute({});
+
+    expect(after).toEqual(before);
+    expect(after[0]?.policyId).toBe(policy.id);
+  });
+
   it('writes nothing when the policy data is invalid: the proposal stays open', async () => {
     const proposalId = await registerProposal();
     await transmit(proposalId);
@@ -139,5 +220,10 @@ describe('proposal to policy flow on SQLite', () => {
     // The proposal is still transmittable to a policy: nothing was accepted.
     const policy = await registerPolicy(proposalId);
     expect(policy.status).toBe('ACTIVE');
+
+    // REQ-100 fires on the emission that happened, and only on it: the
+    // refused attempt rolled back with the rest of the unit of work.
+    const notified = await application.useCases.listNotifications.execute({});
+    expect(notified).toHaveLength(1);
   });
 });

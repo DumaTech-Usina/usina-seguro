@@ -23,16 +23,43 @@ const policyIdParams = {
   properties: { id: { type: 'string' } },
 } as const;
 
+/**
+ * How big a proof may be, in bytes of body.
+ *
+ * This is a transport bound, not a business rule: no requirement states a
+ * size for the *comprovante* of REQ-095, and the domain does not know this
+ * number exists. It is here for the same reason any server caps a request —
+ * so a single upload cannot exhaust the process — and Fastify answers 413
+ * when it is exceeded, which is a refusal of the request and not of the
+ * payment.
+ *
+ * Base64 costs four bytes per three, so the usable file is about 3/4 of this.
+ */
+const PROOF_BODY_LIMIT = 12 * 1024 * 1024;
+
 const paymentSchema: FastifySchema = {
   params: policyIdParams,
   body: {
     type: 'object',
-    required: ['amount', 'proofReference', 'userId'],
+    required: ['amount', 'proof', 'userId'],
     additionalProperties: false,
     properties: {
       // Money as a decimal string, never a number (REQ-120).
       amount: { type: 'string' },
-      proofReference: { type: 'string' },
+      // REQ-095, CA-028: the attached document. It travels base64-encoded in
+      // the JSON body — the transport the rest of the API already uses, with
+      // no multipart parser and no build step to add. What the core receives
+      // is bytes; base64 stops at this layer.
+      proof: {
+        type: 'object',
+        required: ['fileName', 'contentType', 'content'],
+        additionalProperties: false,
+        properties: {
+          fileName: { type: 'string', minLength: 1 },
+          contentType: { type: 'string', minLength: 1 },
+          content: { type: 'string', minLength: 1 },
+        },
+      },
       userId: { type: 'string' },
     },
   },
@@ -109,11 +136,67 @@ export function registerSettlementRoutes(app: FastifyInstance, useCases: UseCase
     },
   );
 
-  // FP-03 step 5, REQ-095, IN-15: the payment sent to the broker.
-  app.post('/policies/:id/settlement/payment', { schema: paymentSchema }, async (request) => {
-    const { id } = request.params as PolicyIdParams;
-    const body = request.body as { amount: string; proofReference: string; userId: string };
+  // FP-03 step 5, REQ-095, IN-15, CA-028: the payment sent to the broker,
+  // with the proof attached.
+  app.post(
+    '/policies/:id/settlement/payment',
+    { schema: paymentSchema, bodyLimit: PROOF_BODY_LIMIT },
+    async (request) => {
+      const { id } = request.params as PolicyIdParams;
+      const body = request.body as {
+        amount: string;
+        proof: { fileName: string; contentType: string; content: string };
+        userId: string;
+      };
 
-    return useCases.registerSettlementPayment.execute({ policyId: id, ...body });
-  });
+      return useCases.registerSettlementPayment.execute({
+        policyId: id,
+        amount: body.amount,
+        userId: body.userId,
+        proof: {
+          fileName: body.proof.fileName,
+          contentType: body.proof.contentType,
+          // Base64 is how the document crossed HTTP; the core is handed bytes.
+          content: new Uint8Array(Buffer.from(body.proof.content, 'base64')),
+        },
+      });
+    },
+  );
+
+  /**
+   * REQ-095, CA-028: the attached proof itself.
+   *
+   * The only route in the API that does not answer JSON, because the whole
+   * point of an attachment is the file. Two headers are not decoration:
+   * `attachment` and `nosniff` make the browser save the document instead of
+   * rendering it, which is what keeps a proof uploaded as HTML or SVG from
+   * running as a page of this application.
+   */
+  app.get(
+    '/policies/:id/settlement/payment/proof',
+    { schema: { params: policyIdParams } },
+    async (request, reply) => {
+      const { id } = request.params as PolicyIdParams;
+      const document = await useCases.getSettlementPaymentProof.execute(id);
+
+      return reply
+        .header('content-type', document.contentType)
+        .header('content-disposition', contentDisposition(document.fileName))
+        .header('x-content-type-options', 'nosniff')
+        .send(Buffer.from(document.content));
+    },
+  );
+}
+
+/**
+ * `Content-Disposition` for a name the Financeiro typed, which may hold
+ * quotes, accents or anything else a file name can hold.
+ *
+ * RFC 6266: the plain `filename` carries an ASCII fallback for old clients,
+ * and `filename*` carries the real name percent-encoded as UTF-8.
+ */
+function contentDisposition(fileName: string): string {
+  const ascii = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
+
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }

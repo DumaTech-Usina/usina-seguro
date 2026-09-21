@@ -371,3 +371,126 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
     });
   });
 });
+
+/**
+ * FP-01 step 7, the notification half (REQ-100, REQ-105, OUT-10).
+ *
+ * The other half — the agreed commission — is covered above and in the
+ * commission suite. What this group asserts is the one thing only the whole
+ * stack can show: registering the policy *produces* a notification, over real
+ * HTTP and real SQLite, with the five fields CA-029 requires.
+ */
+describe('the notification of an effectuated emission (OUT-10)', () => {
+  async function listNotifications(query = ''): Promise<
+    Array<{
+      recipientId: string;
+      policyId: string;
+      policyNumber: string;
+      client: { id: string; name: string | null };
+      broker: { id: string; name: string | null };
+      product: { id: string; name: string | null };
+      workedCommission: string | null;
+      netPremium: string;
+      occurredAt: string;
+    }>
+  > {
+    const response = await fetch(`${baseUrl}/notifications${query}`);
+    expect(response.status).toBe(200);
+    return response.json() as never;
+  }
+
+  it('notifies the broker with the five fields when the policy is registered (CA-029)', async () => {
+    // IN-01 gives the three references a name; the other two fields are the
+    // worked percentage of REQ-041 and the net premium of REQ-022.
+    for (const reference of [
+      { kind: 'CLIENT', id: 'client-notified', name: 'Maria Souza' },
+      { kind: 'BROKER', id: 'broker-notified', name: 'Corretora Alfa' },
+      { kind: 'PRODUCT', id: 'auto', name: 'Automovel' },
+    ]) {
+      expect((await post('/references', reference)).status).toBe(201);
+    }
+
+    const proposal = await post('/proposals', {
+      clientId: 'client-notified',
+      brokerId: 'broker-notified',
+      insurerId: 'insurer-1',
+      productId: 'auto',
+      paymentMethodId: 'credit',
+      customerAccepted: true,
+      netPremium: '1200.00',
+    });
+    const { id: proposalId } = (await proposal.json()) as { id: string };
+    await transmit(proposalId, 'PRP-NOTIFY-1');
+
+    const policy = await post('/policies', policyBody(proposalId, 'APL-NOTIFY-1'));
+    const { id: policyId } = (await policy.json()) as { id: string };
+
+    const [notified] = await listNotifications('?recipientId=broker-notified');
+    expect(notified).toMatchObject({
+      recipientId: 'broker-notified',
+      policyId,
+      policyNumber: 'APL-NOTIFY-1',
+      client: { id: 'client-notified', name: 'Maria Souza' },
+      broker: { id: 'broker-notified', name: 'Corretora Alfa' },
+      product: { id: 'auto', name: 'Automovel' },
+      workedCommission: '32.5',
+      netPremium: '1200.00',
+    });
+  });
+
+  it('notifies even when IN-01 has no name for the references (REQ-002)', async () => {
+    const proposal = await post('/proposals', {
+      clientId: 'client-unnamed',
+      brokerId: 'broker-unnamed',
+      insurerId: 'insurer-1',
+      productId: 'auto',
+      paymentMethodId: 'credit',
+      customerAccepted: true,
+      netPremium: '1200.00',
+    });
+    const { id: proposalId } = (await proposal.json()) as { id: string };
+    await transmit(proposalId, 'PRP-NOTIFY-2');
+    await post('/policies', policyBody(proposalId, 'APL-NOTIFY-2'));
+
+    const [notified] = await listNotifications('?recipientId=broker-unnamed');
+    expect(notified?.client).toEqual({ id: 'client-unnamed', name: null });
+  });
+
+  it('produces nothing for a policy that was refused (REQ-070, CA-009)', async () => {
+    const proposal = await post('/proposals', {
+      clientId: 'client-1',
+      brokerId: 'broker-nothing',
+      insurerId: 'insurer-1',
+      productId: 'auto',
+      paymentMethodId: 'credit',
+      customerAccepted: true,
+      netPremium: '1200.00',
+    });
+    const { id: proposalId } = (await proposal.json()) as { id: string };
+    await transmit(proposalId, 'PRP-NOTIFY-3');
+
+    // No schedule: REQ-021 refuses the policy, so FP-01 step 7 never happens.
+    const refused = await post('/policies', {
+      ...(policyBody(proposalId, 'APL-NOTIFY-3') as Record<string, unknown>),
+      installments: [],
+    });
+
+    expect(refused.status).toBe(422);
+    expect(await listNotifications('?recipientId=broker-nothing')).toEqual([]);
+  });
+
+  it('answers every recipient, most recent first (OUT-10, REQ-105)', async () => {
+    const every = await listNotifications();
+    const recipients = every.map((notification) => notification.recipientId);
+
+    expect(recipients).toContain('broker-notified');
+    expect(recipients).toContain('broker-unnamed');
+
+    const instants = every.map((notification) => Date.parse(notification.occurredAt));
+    expect(instants).toEqual([...instants].sort((a, b) => b - a));
+  });
+
+  it('reads a recipient that notified nobody as an empty list, not an error', async () => {
+    expect(await listNotifications('?recipientId=broker-ghost')).toEqual([]);
+  });
+});

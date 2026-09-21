@@ -12,12 +12,14 @@
  * corretor é uma nova leitura, não uma fatia local.
  *
  * O relatório do período e o recibo de REQ-094/REQ-096 não estão aqui, e a
- * tela diz por quê: `DEC-008` não definiu a janela de apuração e `IN-01` não
- * existe, então não há nome de cliente nem ramo para imprimir.
+ * tela diz por quê: `DEC-008` não definiu a janela de apuração. Os cinco
+ * campos que eles exigem já existem — `IN-01` os entregou e este extrato os
+ * mostra —, então o que falta é o período, não o dado.
  */
 
 import { ApiError, api } from '/app/shared/api.js';
 import { formatInstant, formatMoney } from '/app/shared/money.js';
+import { referenceLabel } from '/app/shared/reference.js';
 import { reportError } from '/app/shared/shell.js';
 import { describeStatus, statusChip } from '/app/shared/status.js';
 
@@ -61,17 +63,19 @@ function metric(label, value, highlight = false) {
 /* -------------------------------------------------------------- filtro -- */
 
 /**
- * Os corretores que o extrato completo trouxe.
+ * Os corretores que o extrato completo trouxe, com o nome de IN-01.
  *
- * Não há cadastro de corretor (IN-01), então a lista é o que os negócios
- * registrados dizem — nada é inventado nem digitado a esmo.
+ * A lista continua sendo o que os negócios registrados dizem, e não o cadastro:
+ * o extrato é por corretor que tem comissão, não por corretor cadastrado. O
+ * cadastro só dá nome ao que já estava aqui, e um corretor sem cadastro
+ * continua na lista pelo identificador.
  */
 let brokers = [];
 
 function renderBrokers(selected) {
   const options = [
     { value: EVERY_BROKER, label: 'Todos os corretores' },
-    ...brokers.map((id) => ({ value: id, label: id })),
+    ...brokers.map(({ id, name }) => ({ value: id, label: referenceLabel(name, id) })),
   ];
 
   broker.replaceChildren(
@@ -120,9 +124,16 @@ function paymentCell(line) {
     return cell;
   }
 
+  // REQ-095, CA-028: o comprovante é o documento anexado, e daqui ele é
+  // aberto. O nome basta para reconhecê-lo; o tamanho fica na apólice, que é
+  // onde o anexo acabou de ser enviado.
+  const proof = element('a', 'proof-link');
+  proof.href = api.settlementPaymentProofUrl(line.policyId);
+  proof.append(icon('attach_file'), element('span', undefined, payment.proof.fileName));
+
   cell.append(
     element('span', undefined, formatMoney(payment.amount)),
-    element('div', 'text-muted proof', payment.proofReference),
+    proof,
     element('div', 'text-muted', `${payment.userId} · ${formatInstant(payment.paidAt)}`),
   );
   return cell;
@@ -137,9 +148,19 @@ function row(line) {
     element(
       'div',
       'text-muted',
-      `Proposta ${line.proposalNumber ?? 'sem número'} · Cliente ${line.clientId}`,
+      `Proposta ${line.proposalNumber ?? 'sem número'} · ${referenceLabel(
+        line.clientName,
+        line.clientId,
+      )}`,
     ),
-    element('div', 'text-muted', `Corretor ${line.brokerId} · Ramo ${line.productId}`),
+    element(
+      'div',
+      'text-muted',
+      `${referenceLabel(line.brokerName, line.brokerId)} · ${referenceLabel(
+        line.productName,
+        line.productId,
+      )}`,
+    ),
   );
   node.append(identification);
 
@@ -245,7 +266,11 @@ async function load(brokerId) {
 
   // A lista de corretores é a do extrato completo: um filtro não a encolhe.
   if (statement.brokerId === null) {
-    brokers = [...new Set(statement.lines.map((line) => line.brokerId))].sort();
+    brokers = [...new Map(statement.lines.map((line) => [line.brokerId, line])).values()]
+      .map((line) => ({ id: line.brokerId, name: line.brokerName }))
+      .sort((a, b) =>
+        referenceLabel(a.name, a.id).localeCompare(referenceLabel(b.name, b.id), 'pt-BR'),
+      );
   }
   renderBrokers(statement.brokerId ?? EVERY_BROKER);
   renderTotals(statement);

@@ -18,6 +18,7 @@
 
 import { ApiError, api } from '/app/shared/api.js';
 import { formatDate, formatMoney } from '/app/shared/money.js';
+import { referenceLabel } from '/app/shared/reference.js';
 import { reportError } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
 
@@ -60,12 +61,23 @@ function row(policy) {
   identification.append(
     element('span', 'policy-number', policy.policyNumber),
     // REQ-050: os dois números ficam consultáveis, mesmo quando coincidem.
+    // IN-01: o nome quando há cadastro, o identificador quando não há.
     element(
       'div',
       'text-muted',
-      `Proposta ${policy.proposalNumber ?? 'sem número'} · Cliente ${policy.clientId}`,
+      `Proposta ${policy.proposalNumber ?? 'sem número'} · ${referenceLabel(
+        policy.clientName,
+        policy.clientId,
+      )}`,
     ),
-    element('div', 'text-muted', `Seguradora ${policy.insurerId} · Ramo ${policy.productId}`),
+    element(
+      'div',
+      'text-muted',
+      `${referenceLabel(policy.insurerName, policy.insurerId)} · ${referenceLabel(
+        policy.productName,
+        policy.productId,
+      )}`,
+    ),
   );
   line.append(identification);
 

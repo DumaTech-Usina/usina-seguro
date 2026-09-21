@@ -85,6 +85,22 @@ CREATE TABLE IF NOT EXISTS commission_agreement (
   UNIQUE (insurer_id, product_id, effective_from)
 );
 
+-- Reference records the Administrator maintains (IN-01). One row per entity
+-- the Usina works with, holding the identifier the rest of the schema already
+-- stores and the name REQ-096 has to print. Nothing references this table by
+-- foreign key on purpose: no requirement says a proposal must name a
+-- registered client, and REQ-002 makes this system reflect a control that
+-- happens outside it -- an unregistered reference is a missing name, not an
+-- invalid business.
+CREATE TABLE IF NOT EXISTS reference (
+  kind           TEXT NOT NULL
+    CHECK (kind IN ('CLIENT', 'BROKER', 'INSURER', 'INTERMEDIARY', 'PRODUCT')),
+  id             TEXT NOT NULL,
+  name           TEXT NOT NULL,
+  registered_at  TEXT NOT NULL,
+  PRIMARY KEY (kind, id)
+);
+
 -- Broker commission table (IN-05, REQ-093).
 CREATE TABLE IF NOT EXISTS broker_commission_rate (
   broker_id      TEXT PRIMARY KEY,
@@ -154,6 +170,23 @@ CREATE TABLE IF NOT EXISTS payment_method_release_rule (
   registered_at      TEXT NOT NULL
 );
 
+-- Attached document (REQ-095, CA-028, IN-15). The only attachment the whole
+-- specification asks for is the proof of a broker payment, so there is one
+-- table and no notion of "owner": whoever attaches a document keeps its id.
+--
+-- The bytes are a BLOB and not a path: the database is one file, a backup is
+-- a copy of it, and there is no second place for the row and the file to get
+-- out of step. PostgreSQL would use `bytea` -- see SQLITE-NOTES.md.
+--
+-- No delete: REQ-124 forbids erasing a financial record, and the proof is
+-- part of one.
+CREATE TABLE IF NOT EXISTS document (
+  id            TEXT NOT NULL PRIMARY KEY,
+  file_name     TEXT NOT NULL,
+  content_type  TEXT NOT NULL,
+  content       BLOB NOT NULL
+);
+
 -- Broker transfer (REQ-090 to REQ-095). One per policy: REQ-094 mentions a
 -- period, but the window is DEC-008 and undecided.
 CREATE TABLE IF NOT EXISTS settlement (
@@ -168,6 +201,47 @@ CREATE TABLE IF NOT EXISTS settlement (
   -- Payment sent to the broker (REQ-095, IN-15, CA-028).
   paid_at          TEXT,
   paid_amount      TEXT,
-  proof_reference  TEXT,
+  -- The attached proof (REQ-095: "comprovante anexo"). Only the metadata
+  -- lives here; the bytes are a row in `document`, because a settlement is
+  -- read on every statement and the file is read only when asked for.
+  proof_document_id   TEXT REFERENCES document (id),
+  proof_file_name     TEXT,
+  proof_content_type  TEXT,
+  proof_byte_size     INTEGER,
   payment_user_id  TEXT
+);
+
+-- Notification of an effectuated emission (REQ-100, REQ-105, OUT-10). It is
+-- both the record REQ-105 asks for -- what was notified, to whom and when --
+-- and the in-app notification of REQ-102, which is what the screen reads.
+--
+-- The five fields of REQ-100 are stored, not joined: REQ-105 records what was
+-- notified, and resolving the names again on a later reading would show what
+-- IN-01 says today instead of what the broker was told. The name columns are
+-- nullable for the same reason every listing tolerates it -- an unregistered
+-- reference is a missing name, not an invalid business (REQ-002).
+--
+-- No UNIQUE constraint: the table is a log, nothing keys off it, and a second
+-- notification for the same policy would be a second event -- which the
+-- requirements do not define yet.
+CREATE TABLE IF NOT EXISTS notification (
+  id                 TEXT NOT NULL PRIMARY KEY,
+  event              TEXT NOT NULL CHECK (event IN ('POLICY_ISSUED')),
+  -- REQ-100 names the broker and no other recipient (ATR-004).
+  recipient_id       TEXT NOT NULL,
+  policy_id          TEXT NOT NULL REFERENCES policy (id),
+  policy_number      TEXT NOT NULL,
+  client_id          TEXT NOT NULL,
+  client_name        TEXT,
+  broker_id          TEXT NOT NULL,
+  broker_name        TEXT,
+  product_id         TEXT NOT NULL,
+  product_name       TEXT,
+  -- Percentage as exact decimal text, with the informed scale (REQ-121).
+  -- Nullable because the proposal only knows it from the transmission on
+  -- (REQ-041); a policy is unreachable before that, so it is always present.
+  worked_commission  TEXT,
+  -- Exact decimal as text (REQ-120). Never REAL.
+  net_premium        TEXT NOT NULL,
+  occurred_at        TEXT NOT NULL
 );

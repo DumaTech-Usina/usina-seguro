@@ -11,6 +11,9 @@ import { BrokerCommissionRate } from '../../src/core/commission/domain/broker-co
 import { CommissionAgreement } from '../../src/core/commission/domain/commission-agreement.ts';
 import { CalendarDate } from '../../src/core/policy/domain/calendar-date.ts';
 import { Percentage } from '../../src/core/proposal/domain/percentage.ts';
+import { ListReferences } from '../../src/core/registry/application/list-references.ts';
+import type { ReferenceRepository } from '../../src/core/registry/application/reference-repository.ts';
+import { Reference, type ReferenceKind } from '../../src/core/registry/domain/reference.ts';
 import { ListPaymentMethodReleaseRules } from '../../src/core/settlement/application/list-payment-method-release-rules.ts';
 import type { PaymentMethodReleaseRuleRepository } from '../../src/core/settlement/application/payment-method-release-rule-repository.ts';
 import {
@@ -20,10 +23,12 @@ import {
 import { InMemoryBrokerCommissionRateRepository } from '../../src/infrastructure/persistence/in-memory/in-memory-broker-commission-rate-repository.ts';
 import { InMemoryCommissionAgreementRepository } from '../../src/infrastructure/persistence/in-memory/in-memory-commission-agreement-repository.ts';
 import { InMemoryPaymentMethodReleaseRuleRepository } from '../../src/infrastructure/persistence/in-memory/in-memory-payment-method-release-rule-repository.ts';
+import { InMemoryReferenceRepository } from '../../src/infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
 import { SqliteBrokerCommissionRateRepository } from '../../src/infrastructure/persistence/sqlite/sqlite-broker-commission-rate-repository.ts';
 import { SqliteCommissionAgreementRepository } from '../../src/infrastructure/persistence/sqlite/sqlite-commission-agreement-repository.ts';
 import { openSqliteConnection } from '../../src/infrastructure/persistence/sqlite/sqlite-connection.ts';
 import { SqlitePaymentMethodReleaseRuleRepository } from '../../src/infrastructure/persistence/sqlite/sqlite-payment-method-release-rule-repository.ts';
+import { SqliteReferenceRepository } from '../../src/infrastructure/persistence/sqlite/sqlite-reference-repository.ts';
 
 /**
  * The registries of IN-02, IN-05 and IN-06 read back from the real driver.
@@ -40,6 +45,7 @@ let db: DatabaseSync;
 let agreements: SqliteCommissionAgreementRepository;
 let brokerRates: SqliteBrokerCommissionRateRepository;
 let releaseRules: SqlitePaymentMethodReleaseRuleRepository;
+let references: SqliteReferenceRepository;
 
 beforeEach(() => {
   directory = mkdtempSync(path.join(tmpdir(), 'usina-registries-'));
@@ -47,6 +53,7 @@ beforeEach(() => {
   agreements = new SqliteCommissionAgreementRepository(db);
   brokerRates = new SqliteBrokerCommissionRateRepository(db);
   releaseRules = new SqlitePaymentMethodReleaseRuleRepository(db);
+  references = new SqliteReferenceRepository(db);
 });
 
 afterEach(() => {
@@ -97,6 +104,17 @@ function releaseRule(paymentMethodId: string, release: ReleaseRule): PaymentMeth
     release,
     registeredAt: new Date('2026-09-18T12:00:00.000Z'),
   });
+}
+
+function reference(kind: ReferenceKind, id: string, name: string): Reference {
+  return Reference.register({ kind, id, name, registeredAt: new Date('2026-09-21T12:00:00.000Z') });
+}
+
+async function seedReferences(repository: ReferenceRepository): Promise<void> {
+  await repository.save(reference('CLIENT', 'client-2', 'Maria Souza'));
+  await repository.save(reference('CLIENT', 'client-1', 'Ana Lima'));
+  await repository.save(reference('PRODUCT', 'auto', 'Automovel'));
+  await repository.save(reference('INTERMEDIARY', 'mega', 'Mega Intermediacao'));
 }
 
 /** The same four agreements in whatever driver is handed over. */
@@ -154,7 +172,7 @@ describe('the commercial agreement registry on SQLite (IN-02)', () => {
   it('lists by insurer, product and most recent validity first', async () => {
     await seedAgreements(agreements);
 
-    const listed = await new ListCommissionAgreements({ agreements }).execute();
+    const listed = await new ListCommissionAgreements({ agreements, references }).execute();
 
     expect(listed.map((line) => line.id)).toEqual(['a-2', 'a-1', 'a-4', 'a-3']);
   });
@@ -162,7 +180,7 @@ describe('the commercial agreement registry on SQLite (IN-02)', () => {
   it('keeps both validities of a pair (REQ-065, REQ-124)', async () => {
     await seedAgreements(agreements);
 
-    const listed = await new ListCommissionAgreements({ agreements }).execute();
+    const listed = await new ListCommissionAgreements({ agreements, references }).execute();
     const auto = listed.filter(
       (line) => line.insurerId === 'insurer-1' && line.productId === 'auto',
     );
@@ -185,7 +203,7 @@ describe('the commercial agreement registry on SQLite (IN-02)', () => {
       }),
     );
 
-    const listed = await new ListCommissionAgreements({ agreements }).execute();
+    const listed = await new ListCommissionAgreements({ agreements, references }).execute();
 
     // UNIQUE (insurer_id, product_id, effective_from): a correction of a
     // validity, not a second one.
@@ -198,7 +216,7 @@ describe('the commercial agreement registry on SQLite (IN-02)', () => {
   it('answers the chain and the rates exactly as they were stored', async () => {
     await seedAgreements(agreements);
 
-    const listed = await new ListCommissionAgreements({ agreements }).execute();
+    const listed = await new ListCommissionAgreements({ agreements, references }).execute();
     const viaIntermediary = listed.find((line) => line.id === 'a-3');
 
     expect(viaIntermediary).toMatchObject({
@@ -228,7 +246,7 @@ describe('the commercial agreement registry on SQLite (IN-02)', () => {
 
     expect(row.kind).toBe('text');
     expect(row.value).toBe('32.50');
-    const [listed] = await new ListCommissionAgreements({ agreements }).execute();
+    const [listed] = await new ListCommissionAgreements({ agreements, references }).execute();
     expect(listed?.insurerRate).toBe('32.50');
   });
 
@@ -237,9 +255,9 @@ describe('the commercial agreement registry on SQLite (IN-02)', () => {
     await seedAgreements(agreements);
     await seedAgreements(inMemory);
 
-    await expect(new ListCommissionAgreements({ agreements: inMemory }).execute()).resolves.toEqual(
-      await new ListCommissionAgreements({ agreements }).execute(),
-    );
+    await expect(
+      new ListCommissionAgreements({ agreements: inMemory, references }).execute(),
+    ).resolves.toEqual(await new ListCommissionAgreements({ agreements, references }).execute());
   });
 });
 
@@ -307,5 +325,68 @@ describe('the release rule registry on SQLite (IN-06)', () => {
     await expect(
       new ListPaymentMethodReleaseRules({ releaseRules: inMemory }).execute(),
     ).resolves.toEqual(await new ListPaymentMethodReleaseRules({ releaseRules }).execute());
+  });
+});
+
+describe('the reference registry on SQLite (IN-01)', () => {
+  it('lists by kind and then by name', async () => {
+    await seedReferences(references);
+
+    const listed = await new ListReferences({ references }).execute();
+
+    expect(listed.map((line) => `${line.kind}:${line.id}`)).toEqual([
+      'CLIENT:client-1',
+      'CLIENT:client-2',
+      'INTERMEDIARY:mega',
+      'PRODUCT:auto',
+    ]);
+  });
+
+  it('answers one kind at a time when asked', async () => {
+    await seedReferences(references);
+
+    const clients = await new ListReferences({ references }).execute({ kind: 'CLIENT' });
+
+    expect(clients.map((line) => line.name)).toEqual(['Ana Lima', 'Maria Souza']);
+  });
+
+  it('replaces the name of a record registered again', async () => {
+    await seedReferences(references);
+    await references.save(reference('CLIENT', 'client-1', 'Ana Lima Souza'));
+
+    const clients = await new ListReferences({ references }).execute({ kind: 'CLIENT' });
+
+    // PRIMARY KEY (kind, id): a correction of the name, not a second record.
+    expect(clients).toHaveLength(2);
+    expect(clients.find((line) => line.id === 'client-1')?.name).toBe('Ana Lima Souza');
+  });
+
+  it('keeps the same identifier of two different kinds apart', async () => {
+    await references.save(reference('CLIENT', 'alfa', 'Alfa Transportes'));
+    await references.save(reference('BROKER', 'alfa', 'Corretora Alfa'));
+
+    const listed = await new ListReferences({ references }).execute();
+
+    expect(listed).toHaveLength(2);
+  });
+
+  it('names the intermediary of an agreement read back from the driver', async () => {
+    await seedAgreements(agreements);
+    await seedReferences(references);
+
+    const listed = await new ListCommissionAgreements({ agreements, references }).execute();
+
+    expect(listed.find((line) => line.id === 'a-3')?.intermediaryName).toBe('Mega Intermediacao');
+    expect(listed.find((line) => line.id === 'a-1')?.intermediaryName).toBeNull();
+  });
+
+  it('answers the same listing as the in-memory driver', async () => {
+    const inMemory = new InMemoryReferenceRepository();
+    await seedReferences(references);
+    await seedReferences(inMemory);
+
+    await expect(new ListReferences({ references: inMemory }).execute()).resolves.toEqual(
+      await new ListReferences({ references }).execute(),
+    );
   });
 });
