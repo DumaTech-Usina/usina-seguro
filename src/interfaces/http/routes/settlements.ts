@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
+import type { ListBrokerStatementInput } from '../../../core/settlement/application/list-broker-statement.ts';
 
 const registerReleaseRuleSchema: FastifySchema = {
   body: {
@@ -37,6 +38,19 @@ const paymentSchema: FastifySchema = {
   },
 };
 
+/**
+ * Shape only. The broker is a free reference (IN-01 is not modelled), so there
+ * is nothing to enumerate here: an unknown broker is an empty statement, not a
+ * refusal.
+ */
+const brokerStatementSchema: FastifySchema = {
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { brokerId: { type: 'string' } },
+  },
+};
+
 interface PolicyIdParams {
   id: string;
 }
@@ -55,6 +69,19 @@ export function registerSettlementRoutes(app: FastifyInstance, useCases: UseCase
       return reply.code(201).send(output);
     },
   );
+
+  // IN-06, REQ-090: the rules configured. A payment method with no rule is
+  // absent from the answer, which is how the operator sees that opening a
+  // transfer for it is refused — Pix included, whose rule is DEC-002.
+  app.get('/payment-method-release-rules', async () => {
+    return useCases.listPaymentMethodReleaseRules.execute();
+  });
+
+  // OUT-07: the commission statement of a broker — forecast, held, released
+  // and paid. No filter answers for every broker.
+  app.get('/broker-commission-statements', { schema: brokerStatementSchema }, async (request) => {
+    return useCases.listBrokerStatement.execute(request.query as ListBrokerStatementInput);
+  });
 
   // FP-03 steps 1 to 3: the transfer is opened and the release rule evaluated.
   app.post(

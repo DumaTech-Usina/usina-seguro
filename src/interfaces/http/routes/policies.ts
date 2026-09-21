@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
+import type { ListPoliciesInput } from '../../../core/policy/application/list-policies.ts';
 import type { RegisterPolicyInput } from '../../../core/policy/application/register-policy.ts';
 
 /**
@@ -54,6 +55,19 @@ const getPolicySchema: FastifySchema = {
   },
 };
 
+/**
+ * Shape only. Whether the day is a real calendar date is the domain's answer
+ * (`CalendarDate`, REQ-020), so a malformed one is a 422 with the translated
+ * sentence, not a pattern restated here.
+ */
+const listPoliciesSchema: FastifySchema = {
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+    properties: { renewalUntil: { type: 'string' } },
+  },
+};
+
 const payInstallmentSchema: FastifySchema = {
   params: {
     type: 'object',
@@ -82,7 +96,14 @@ export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): 
     return reply.code(201).send(output);
   });
 
-  // CA-008 / OUT-03: both numbers and the schedule stay consultable.
+  // OUT-03: the policies the Usina sold, with coverage, state and renewal
+  // date. With `renewalUntil` it is the a-vencer listing of OUT-04 (REQ-055,
+  // CA-032); the window is informed, because no requirement fixes one.
+  app.get('/policies', { schema: listPoliciesSchema }, async (request) => {
+    return useCases.listPolicies.execute(request.query as ListPoliciesInput);
+  });
+
+  // CA-008: both numbers and the schedule stay consultable.
   app.get('/policies/:id', { schema: getPolicySchema }, async (request) => {
     const { id } = request.params as { id: string };
     return useCases.getPolicy.execute(id);

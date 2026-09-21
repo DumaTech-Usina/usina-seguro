@@ -42,6 +42,22 @@ const COMMISSION = {
   RESOLVED: { label: 'Resolvida', tone: 'info' },
 };
 
+/**
+ * What happened to one line of the commission report (FP-02).
+ *
+ * Not a state of an aggregate: it is the answer the import gives per line,
+ * and the labels say what the requirements say. `DUPLICATE` is not an error —
+ * REQ-086 means the policy was already conciliated in that competence and
+ * nothing was written a second time.
+ */
+const RECONCILIATION = {
+  RECONCILED: { label: 'Conciliada', tone: 'success' },
+  DIVERGENT: { label: 'Divergente', tone: 'danger' },
+  DUPLICATE: { label: 'Já conciliada', tone: 'neutral' },
+  PENDING: { label: 'Pendência', tone: 'warning' },
+  NO_COMMISSION: { label: 'Sem comissão calculada', tone: 'info' },
+};
+
 const SETTLEMENT = {
   AWAITING_CONFIRMATION: { label: 'Aguardando confirmação', tone: 'warning' },
   RELEASED: { label: 'Liberado', tone: 'info' },
@@ -60,6 +76,7 @@ const MAPS = {
   policy: POLICY,
   installment: INSTALLMENT,
   commission: COMMISSION,
+  reconciliation: RECONCILIATION,
   settlement: SETTLEMENT,
   releaseRule: RELEASE_RULE,
 };

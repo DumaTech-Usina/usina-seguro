@@ -1,5 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { PolicyRepository } from '../../../core/policy/application/policy-repository.ts';
+import type {
+  PolicyListFilter,
+  PolicyRepository,
+} from '../../../core/policy/application/policy-repository.ts';
 import { CalendarDate } from '../../../core/policy/domain/calendar-date.ts';
 import { Installment, type InstallmentStatus } from '../../../core/policy/domain/installment.ts';
 import { Policy, type PolicyStatus } from '../../../core/policy/domain/policy.ts';
@@ -103,6 +106,26 @@ export class SqlitePolicyRepository implements PolicyRepository {
     return this.load('SELECT * FROM policy WHERE proposal_id = ?', proposalId);
   }
 
+  /**
+   * OUT-03, OUT-04: the listing, nearest renewal first (REQ-055).
+   *
+   * The cut-off compares ISO days as text, which is chronological order for
+   * this format, so the query needs no date function of the driver — the same
+   * comparison the domain makes (`CalendarDate.isBefore`) and the same one
+   * PostgreSQL would make on a `date` column.
+   */
+  async list(filter: PolicyListFilter): Promise<readonly Policy[]> {
+    const { renewalUntil } = filter;
+
+    const rows = (renewalUntil === undefined
+      ? this.db.prepare('SELECT * FROM policy ORDER BY renewal_date, id').all()
+      : this.db
+          .prepare('SELECT * FROM policy WHERE renewal_date <= ? ORDER BY renewal_date, id')
+          .all(renewalUntil.toString())) as unknown as PolicyRow[];
+
+    return rows.map((row) => this.restore(row));
+  }
+
   private async load(sql: string, parameter: string): Promise<Policy | null> {
     const row = this.db.prepare(sql).get(parameter) as PolicyRow | undefined;
 
@@ -110,6 +133,10 @@ export class SqlitePolicyRepository implements PolicyRepository {
       return null;
     }
 
+    return this.restore(row);
+  }
+
+  private restore(row: PolicyRow): Policy {
     const installments = this.db
       .prepare('SELECT * FROM installment WHERE policy_id = ? ORDER BY number')
       .all(row.id) as unknown as InstallmentRow[];

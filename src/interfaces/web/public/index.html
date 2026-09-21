@@ -39,9 +39,17 @@
           <div class="banner__text">
             Esta entrega cobre o fluxo <strong>FP-01</strong> de ponta a ponta — da
             proposta ao desfecho, passando pelo acompanhamento das propostas em aberto —
-            e os cadastros que alimentam o cálculo da comissão. As demais telas de
-            listagem dependem de endpoints que ainda não existem e aparecem marcadas
-            como <em>em breve</em> na navegação.
+            e os cadastros que alimentam o cálculo da comissão. De <strong>FP-02</strong>
+            está disponível a <a href="/app/reconciliations/">conciliação do
+            comissionamento</a> a partir das linhas já estruturadas do relatório — o envio
+            do arquivo depende de <strong>DEC-001</strong> — e o
+            <a href="/app/commissions/">painel acordado × real</a>, onde as divergências
+            apuradas ficam localizáveis depois da importação. De <strong>FP-03</strong>,
+            o <a href="/app/settlements/">extrato por corretor</a> mostra o previsto, o
+            retido, o liberado e o pago — o relatório do período e o recibo dependem de
+            <strong>DEC-008</strong> e dos cadastros de <strong>IN-01</strong>. O
+            <a href="/app/policies/">controle de apólices</a> lista o que foi vendido e o
+            que está a vencer; renovação, endosso, sinistro e cancelamento continuam fora.
           </div>
         </div>
 
@@ -121,6 +129,54 @@
 
           <section class="card">
             <div class="card__header">
+              <span class="material-symbols-outlined">shield</span>
+              <h2 class="text-title">Apólices</h2>
+            </div>
+            <div class="card__body">
+              <p class="text-muted">
+                O que a Usina intermediou, com vigência, prêmio e situação, da renovação
+                mais próxima para a mais distante.
+              </p>
+            </div>
+            <div class="card__footer">
+              <a class="btn btn--outlined" href="/app/policies/">Abrir listagem</a>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__header">
+              <span class="material-symbols-outlined">percent</span>
+              <h2 class="text-title">Acordado × real</h2>
+            </div>
+            <div class="card__body">
+              <p class="text-muted">
+                A comissão acordada e a comissão real de cada apólice, com as divergências
+                sinalizadas para tratamento manual.
+              </p>
+            </div>
+            <div class="card__footer">
+              <a class="btn btn--outlined" href="/app/commissions/">Abrir painel</a>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__header">
+              <span class="material-symbols-outlined">payments</span>
+              <h2 class="text-title">Repasses ao corretor</h2>
+            </div>
+            <div class="card__body">
+              <p class="text-muted">
+                O extrato por corretor: o que está previsto, retido aguardando a
+                confirmação do recebimento, liberado e já pago.
+              </p>
+            </div>
+            <div class="card__footer">
+              <a class="btn btn--outlined" href="/app/settlements/">Abrir extrato</a>
+            </div>
+          </section>
+
+          <section class="card">
+            <div class="card__header">
               <span class="material-symbols-outlined">tune</span>
               <h2 class="text-title">Cadastros</h2>
             </div>
@@ -135,45 +191,9 @@
             </div>
           </section>
         </div>
-
-        <section class="card">
-          <div class="card__header">
-            <span class="material-symbols-outlined">travel_explore</span>
-            <h2 class="text-title">Abrir uma apólice existente</h2>
-          </div>
-          <div class="card__body">
-            <p class="text-muted" style="margin-bottom: var(--space-5)">
-              A listagem de apólices ainda não tem endpoint. Enquanto isso, informe o
-              identificador devolvido no registro.
-            </p>
-            <form class="row" id="open-policy">
-              <div class="field" style="flex: 1">
-                <input
-                  class="field__input"
-                  id="policy-id"
-                  name="policyId"
-                  placeholder=" "
-                  required
-                />
-                <label class="field__label" for="policy-id">Identificador da apólice</label>
-              </div>
-              <button class="btn btn--outlined" type="submit">Abrir</button>
-            </form>
-          </div>
-        </section>
       </div>
     </main>
 
     <script type="module" src="/app/shared/shell.js"></script>
-    <script type="module">
-      const form = document.querySelector('#open-policy');
-      form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        const id = document.querySelector('#policy-id').value.trim();
-        if (id !== '') {
-          window.location.href = `/app/policies/detail.html?id=${encodeURIComponent(id)}`;
-        }
-      });
-    </script>
   </body>
 </html>

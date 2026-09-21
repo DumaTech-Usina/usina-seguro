@@ -13,8 +13,11 @@ documento.
 > relatório de comissionamento contra as apólices (`REQ-082`, `REQ-083`, `REQ-086`) e
 > `FP-03` conduz o repasse ao corretor até o registro do pagamento (`REQ-090`–`REQ-095`).
 >
-> **Fora**: notificação (`REQ-100`–`REQ-105`), cotação, renovação, endosso, sinistro e
-> cancelamento de apólice. O *parser* do arquivo de comissionamento também não existe —
+> O controle das apólices vendidas e das que estão a vencer (`REQ-055`, `OUT-03`,
+> `OUT-04`) é lido da mesma base.
+>
+> **Fora**: notificação (`REQ-100`–`REQ-105`), cotação, **geração** da renovação
+> (`REQ-056`), endosso, sinistro e cancelamento de apólice. O *parser* do arquivo de comissionamento também não existe —
 > `DEC-001` não definiu o layout; a conciliação recebe linhas já estruturadas. Ver
 > [Decisões em aberto](#decisões-de-negócio-em-aberto).
 
@@ -126,6 +129,18 @@ curl http://127.0.0.1:3000/policies/<apolice>
 
 # A apólice que a proposta originou, para quem partiu do rastreio (REQ-049, REQ-050)
 curl http://127.0.0.1:3000/proposals/<proposta>/policy
+
+# 6. O controle das apólices vendidas (OUT-03), da renovação mais próxima
+#    para a mais distante (REQ-055).
+curl http://127.0.0.1:3000/policies
+# 200 [{"id":"<apolice>","policyNumber":"APL-4711","proposalNumber":"PRP-9001",
+#       "status":"ACTIVE","premium":"1200.00","coverageStart":"2026-10-01",
+#       "coverageEnd":"2027-09-30","renewalDate":"2027-09-30",...}]
+
+#    As apólices a vencer (OUT-04, CA-032): as que renovam até o dia informado,
+#    ele inclusive. A janela é de quem pergunta — nenhum requisito define o que
+#    é uma renovação "próxima".
+curl 'http://127.0.0.1:3000/policies?renewalUntil=2027-06-30'
 ```
 
 Fluxo financeiro `FP-02` / `FP-03`:
@@ -149,6 +164,16 @@ curl -X POST http://127.0.0.1:3000/payment-method-release-rules \
   -H 'content-type: application/json' \
   -d '{"paymentMethodId":"bank-slip","release":"REQUIRES_RECEIPT_CONFIRMATION"}'
 
+# Cada cadastro é lido de volta pela mesma forma com que foi gravado. É o que
+# torna REQ-061/REQ-125 utilizáveis: um parâmetro que ninguém consegue conferir
+# só aparece errado na comissão que ele já produziu.
+curl http://127.0.0.1:3000/commission-agreements
+curl http://127.0.0.1:3000/broker-commission-rates
+curl http://127.0.0.1:3000/payment-method-release-rules
+# Registrar a mesma chave de novo substitui o registro; no acordo comercial a
+# chave inclui a vigência, então uma nova vigência é um novo registro e a
+# anterior continua listada (REQ-065, REQ-124, CA-012).
+
 # 1. A comissão acordada nasce junto com a apólice (FP-01 passo 7): nada a chamar.
 curl http://127.0.0.1:3000/policies/<apolice>/commission
 # {"status":"FORECAST","agreedReceivable":"480.00","agreedPayable":"240.00",
@@ -165,9 +190,20 @@ curl -X POST http://127.0.0.1:3000/commission-reconciliations \
 
 curl http://127.0.0.1:3000/commission-reconciliations/pendencies   # OUT-06
 
+#    O painel acordado × real de todas as apólices (OUT-05). Sem filtro é o
+#    painel inteiro; por estado é a lista de trabalho de FP-02 passo 5.
+curl http://127.0.0.1:3000/commissions
+curl 'http://127.0.0.1:3000/commissions?status=DIVERGENT'
+
 # 3. Repasse (FP-03). Em boleto nasce retido (CA-023).
 curl -X POST http://127.0.0.1:3000/policies/<apolice>/settlement
 # 201 {"status":"AWAITING_CONFIRMATION","amount":"240.00","brokerId":"broker-1"}
+
+#    O extrato de comissão por corretor (OUT-07): previsto, retido, liberado e
+#    pago, com os totais somados em centavos exatos. Sem corretor, todos eles.
+curl 'http://127.0.0.1:3000/broker-commission-statements?brokerId=broker-1'
+# {"brokerId":"broker-1","lines":[...],
+#  "totals":{"payable":"240.00","awaitingConfirmation":"240.00","released":"0.00","paid":"0.00"}}
 
 # 4. Confirmação manual do pagamento da 1ª parcela pelo cliente (IN-13, REQ-092).
 #    REQ-123 exige registrar quem confirmou: a confirmação é o que libera o repasse.
@@ -238,16 +274,23 @@ O que existe hoje:
 | Propostas, por estado (`OUT-01`, `OUT-02`, passo 5) | `/app/proposals/` | Pronta |
 | Proposta: dados e desfecho — aceite vira apólice, recusa exige motivo (passo 6) | `/app/proposals/detail.html?id=…` | Pronta |
 | Apólice: parcelas, comissão acordada × real, repasse | `/app/policies/detail.html?id=…` | Pronta |
-| Cadastros (`IN-02`..`IN-06`) | `/app/settings/` | Pronta |
-| Apólices, Comissões, Conciliação, Repasses | — | **Placeholder**: o arquivo existe com um comentário do que será implementado e de qual endpoint falta (`OUT-03`..`OUT-07`). Aparecem como *em breve* na navegação |
+| Conciliação do comissionamento (`FP-02`, `OUT-06`) | `/app/reconciliations/` | Pronta — as linhas são digitadas; o arquivo é `DEC-001` |
+| Comissões: acordado × real de todas as apólices (`OUT-05`) | `/app/commissions/` | Pronta |
+| Repasses: extrato de comissão por corretor (`OUT-07`) | `/app/settlements/` | Pronta — sem relatório do período nem recibo (`DEC-008`, `IN-01`) |
+| Cadastros (`IN-02`..`IN-06`) | `/app/settings/` | Pronta — grava e lista cada cadastro; `IN-01` (cliente, corretor, seguradora, produto) não existe |
+| Apólices: vendidas e a vencer (`OUT-03`, `OUT-04`) | `/app/policies/` | Pronta — o corte por data de renovação é informado pelo operador (`CA-032` não define a janela) |
 
 O caminho completo pela interface: **nova proposta → transmitir → a proposta aparece em
 _Propostas / Em aberto_ → abrir → registrar a apólice (ou a recusa) → abrir a apólice**.
+Depois disso a apólice fica encontrável por conta própria, em _Apólices_.
 `FP-01` separa esses atos no tempo de propósito: a seguradora responde depois, e o
 desfecho é registrado na própria proposta, não no formulário de cadastro.
 
 Comece pelos **cadastros**: sem acordo comercial e tabela do corretor a apólice nasce
-sem comissão, e a tela mostra isso explicitamente em vez de inventar um valor.
+sem comissão, e a tela mostra isso explicitamente em vez de inventar um valor. A tela
+lista o que já está registrado abaixo de cada formulário, então dá para conferir o
+percentual antes de ele virar uma comissão — e ver, pela ausência, qual forma de
+pagamento ainda não tem regra de liberação.
 
 **Sem build.** Não há bundler, transpilador nem framework: o que é servido é o que está
 em disco — HTML, CSS e ES modules nativos. Por isso o código de browser é `.js` e não

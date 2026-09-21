@@ -1,6 +1,10 @@
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { BrokerCommissionRate } from '../domain/broker-commission-rate.ts';
 import type { BrokerCommissionRateRepository } from './broker-commission-rate-repository.ts';
+import {
+  type BrokerCommissionRateView,
+  toBrokerCommissionRateView,
+} from './broker-commission-rate-view.ts';
 
 export interface RegisterBrokerCommissionRateInput {
   readonly brokerId: string;
@@ -10,11 +14,6 @@ export interface RegisterBrokerCommissionRateInput {
 export interface RegisterBrokerCommissionRateDependencies {
   readonly brokerRates: BrokerCommissionRateRepository;
   readonly now: () => Date;
-}
-
-export interface BrokerCommissionRateView {
-  readonly brokerId: string;
-  readonly rate: string;
 }
 
 /** IN-05: the Administrator maintains the broker's commission table. */
@@ -34,6 +33,6 @@ export class RegisterBrokerCommissionRate {
 
     await this.deps.brokerRates.save(rate);
 
-    return { brokerId: rate.brokerId, rate: rate.rate.toString() };
+    return toBrokerCommissionRateView(rate);
   }
 }

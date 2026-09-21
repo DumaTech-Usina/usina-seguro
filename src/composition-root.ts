@@ -8,12 +8,16 @@ import { CalculateAgreedCommission } from './core/commission/application/calcula
 import type { CommissionAgreementRepository } from './core/commission/application/commission-agreement-repository.ts';
 import type { CommissionRepository } from './core/commission/application/commission-repository.ts';
 import { GetCommission } from './core/commission/application/get-commission.ts';
+import { ListBrokerCommissionRates } from './core/commission/application/list-broker-commission-rates.ts';
+import { ListCommissionAgreements } from './core/commission/application/list-commission-agreements.ts';
+import { ListCommissions } from './core/commission/application/list-commissions.ts';
 import { OverrideCommission } from './core/commission/application/override-commission.ts';
 import { RegisterBrokerCommissionRate } from './core/commission/application/register-broker-commission-rate.ts';
 import { RegisterCommissionAgreement } from './core/commission/application/register-commission-agreement.ts';
 import { ResolveCommissionDivergence } from './core/commission/application/resolve-commission-divergence.ts';
 import { GetPolicyByProposal } from './core/policy/application/get-policy-by-proposal.ts';
 import { GetPolicy } from './core/policy/application/get-policy.ts';
+import { ListPolicies } from './core/policy/application/list-policies.ts';
 import { PayInstallment } from './core/policy/application/pay-installment.ts';
 import type { PolicyRepository } from './core/policy/application/policy-repository.ts';
 import { RegisterPolicy } from './core/policy/application/register-policy.ts';
@@ -28,6 +32,8 @@ import { ListReconciliationPendencies } from './core/reconciliation/application/
 import { ReconcileCommissionReport } from './core/reconciliation/application/reconcile-commission-report.ts';
 import type { ReconciliationPendencyRepository } from './core/reconciliation/application/reconciliation-pendency-repository.ts';
 import { GetSettlement } from './core/settlement/application/get-settlement.ts';
+import { ListBrokerStatement } from './core/settlement/application/list-broker-statement.ts';
+import { ListPaymentMethodReleaseRules } from './core/settlement/application/list-payment-method-release-rules.ts';
 import { OpenSettlement } from './core/settlement/application/open-settlement.ts';
 import type { PaymentMethodReleaseRuleRepository } from './core/settlement/application/payment-method-release-rule-repository.ts';
 import { RegisterPaymentMethodReleaseRule } from './core/settlement/application/register-payment-method-release-rule.ts';
@@ -68,19 +74,25 @@ export interface UseCases {
   readonly registerPolicy: RegisterPolicy;
   readonly getPolicy: GetPolicy;
   readonly getPolicyByProposal: GetPolicyByProposal;
+  readonly listPolicies: ListPolicies;
   readonly payInstallment: PayInstallment;
   readonly registerCommissionAgreement: RegisterCommissionAgreement;
   readonly registerBrokerCommissionRate: RegisterBrokerCommissionRate;
+  readonly listCommissionAgreements: ListCommissionAgreements;
+  readonly listBrokerCommissionRates: ListBrokerCommissionRates;
   readonly getCommission: GetCommission;
+  readonly listCommissions: ListCommissions;
   readonly overrideCommission: OverrideCommission;
   readonly resolveCommissionDivergence: ResolveCommissionDivergence;
   readonly reconcileCommissionReport: ReconcileCommissionReport;
   readonly listReconciliationPendencies: ListReconciliationPendencies;
   readonly registerPaymentMethodReleaseRule: RegisterPaymentMethodReleaseRule;
+  readonly listPaymentMethodReleaseRules: ListPaymentMethodReleaseRules;
   readonly openSettlement: OpenSettlement;
   readonly releaseSettlement: ReleaseSettlement;
   readonly registerSettlementPayment: RegisterSettlementPayment;
   readonly getSettlement: GetSettlement;
+  readonly listBrokerStatement: ListBrokerStatement;
 }
 
 export interface Application {
@@ -137,10 +149,16 @@ export function composeApplication(config: Config): Application {
       }),
       getPolicy: new GetPolicy({ proposals, policies }),
       getPolicyByProposal: new GetPolicyByProposal({ proposals, policies }),
+      listPolicies: new ListPolicies({ policies, proposals }),
       payInstallment: new PayInstallment({ proposals, policies, now }),
       registerCommissionAgreement: new RegisterCommissionAgreement({ agreements, newId, now }),
       registerBrokerCommissionRate: new RegisterBrokerCommissionRate({ brokerRates, now }),
+      // IN-02 to IN-06 read back: the parameters the calculation uses are data
+      // (REQ-061, REQ-125), and an administrator has to be able to see them.
+      listCommissionAgreements: new ListCommissionAgreements({ agreements }),
+      listBrokerCommissionRates: new ListBrokerCommissionRates({ brokerRates }),
       getCommission: new GetCommission({ commissions }),
+      listCommissions: new ListCommissions({ commissions, policies, proposals }),
       overrideCommission: new OverrideCommission({ commissions, now }),
       resolveCommissionDivergence: new ResolveCommissionDivergence({ commissions, now }),
       reconcileCommissionReport: new ReconcileCommissionReport({
@@ -157,6 +175,7 @@ export function composeApplication(config: Config): Application {
         releaseRules,
         now,
       }),
+      listPaymentMethodReleaseRules: new ListPaymentMethodReleaseRules({ releaseRules }),
       openSettlement: new OpenSettlement({
         proposals,
         policies,
@@ -169,6 +188,12 @@ export function composeApplication(config: Config): Application {
       releaseSettlement: new ReleaseSettlement({ policies, settlements, now }),
       registerSettlementPayment: new RegisterSettlementPayment({ settlements, now }),
       getSettlement: new GetSettlement({ settlements }),
+      listBrokerStatement: new ListBrokerStatement({
+        commissions,
+        policies,
+        proposals,
+        settlements,
+      }),
     },
     shutdown,
   };

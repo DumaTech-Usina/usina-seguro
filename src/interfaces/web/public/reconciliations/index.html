@@ -1,18 +1,105 @@
-<!--
-  Conciliacao do comissionamento (FP-02) e pendencias (OUT-06)
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Conciliação — Usina do Seguro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/app/shared/base.css" />
+    <link rel="stylesheet" href="/app/reconciliations/index.css" />
+  </head>
+  <body class="shell" data-nav="reconciliations">
+    <main class="content">
+      <div class="content__inner">
+        <div class="page-head">
+          <div class="page-head__text">
+            <h1 class="text-display">Conciliação</h1>
+            <p class="text-muted">
+              FP-02: cada linha do relatório de comissionamento é casada com uma apólice
+              pelo número da apólice ou pela proposta vinculada, e o valor apurado é
+              comparado com o acordado.
+            </p>
+          </div>
+        </div>
 
-  Duas partes:
+        <!-- O bloqueio fica escrito na tela porque ele muda o que o operador
+             faz aqui: não há arquivo a enviar, e as linhas são digitadas. -->
+        <div class="banner banner--warning">
+          <span class="material-symbols-outlined">upload_file</span>
+          <div class="banner__text">
+            O <strong>envio do arquivo</strong> ainda não existe: o layout do relatório é a
+            decisão <strong>DEC-001</strong> e, sem uma amostra real, não há o que
+            interpretar. As linhas abaixo são informadas como o sistema já as recebe —
+            número da apólice, número da proposta e comissão do produtor. Todas as regras
+            de conciliação valem sobre elas.
+          </div>
+        </div>
 
-  1. Importacao do relatorio: hoje o endpoint recebe linhas ja estruturadas, entao a
-     tela seria uma grade editavel (numero da apolice, numero da proposta, comissao
-     do produtor) mais a competencia. O upload de arquivo de verdade depende de
-     DEC-001, que nao definiu o layout — sem ele nao ha parser a construir.
-     O resultado por linha ja vem pronto da API: conciliada, divergente, duplicada,
-     pendente ou sem comissao.
+        <section class="card">
+          <div class="card__header">
+            <span class="material-symbols-outlined">sync_alt</span>
+            <h2 class="text-title">Importar relatório</h2>
+          </div>
+          <form id="form-report">
+            <div class="card__body stack">
+              <div class="field competence-field">
+                <input
+                  class="field__input"
+                  id="competence"
+                  name="competence"
+                  placeholder=" "
+                  required
+                />
+                <label class="field__label" for="competence">Competência</label>
+                <span class="field__hint">
+                  Período a que o relatório se refere, por exemplo 2026-10.
+                </span>
+              </div>
 
-  2. Pendencias (OUT-06): tabela das linhas sem apolice correspondente, que e o
-     unico endpoint de listagem que ja existe
-     (GET /commission-reconciliations/pendencies).
+              <div class="report-lines" id="lines"></div>
 
-  Bloqueio: Parcialmente pronto: a importacao e as pendencias ja tem endpoint; o upload de arquivo depende de DEC-001.
--->
+              <div>
+                <button class="btn btn--outlined" type="button" id="add-line">
+                  <span class="material-symbols-outlined">add</span>
+                  Adicionar linha
+                </button>
+              </div>
+            </div>
+            <div class="card__footer">
+              <button class="btn btn--filled" type="submit">Conciliar relatório</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- O resultado da importação, linha a linha. -->
+        <div id="result"></div>
+
+        <!-- OUT-06: as linhas sem apólice correspondente, que são trabalho humano. -->
+        <section class="card">
+          <div class="card__header">
+            <span class="material-symbols-outlined">assignment_late</span>
+            <h2 class="text-title">Pendências de conciliação</h2>
+          </div>
+          <div class="card__body card__body--flush" id="pendencies">
+            <div class="card__body stack">
+              <div class="skeleton" style="width: 40%"></div>
+              <div class="skeleton" style="width: 70%"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script type="module" src="/app/shared/shell.js"></script>
+    <script type="module" src="/app/reconciliations/index.js"></script>
+  </body>
+</html>

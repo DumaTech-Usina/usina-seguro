@@ -41,10 +41,23 @@ export class SqlitePaymentMethodReleaseRuleRepository
       return null;
     }
 
-    return PaymentMethodReleaseRule.restore({
-      paymentMethodId: row.payment_method_id,
-      release: row.release_rule as ReleaseRule,
-      registeredAt: new Date(row.registered_at),
-    });
+    return restore(row);
   }
+
+  /** IN-06, by payment method: every rule configured. */
+  async list(): Promise<readonly PaymentMethodReleaseRule[]> {
+    const rows = this.db
+      .prepare('SELECT * FROM payment_method_release_rule ORDER BY payment_method_id')
+      .all() as unknown as ReleaseRuleRow[];
+
+    return rows.map(restore);
+  }
+}
+
+function restore(row: ReleaseRuleRow): PaymentMethodReleaseRule {
+  return PaymentMethodReleaseRule.restore({
+    paymentMethodId: row.payment_method_id,
+    release: row.release_rule as ReleaseRule,
+    registeredAt: new Date(row.registered_at),
+  });
 }

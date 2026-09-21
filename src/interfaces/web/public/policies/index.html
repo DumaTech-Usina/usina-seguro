@@ -1,10 +1,85 @@
-<!--
-  Controle de apolices (OUT-03) e apolices a vencer (OUT-04)
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Apólices — Usina do Seguro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/app/shared/base.css" />
+    <link rel="stylesheet" href="/app/policies/index.css" />
+  </head>
+  <body class="shell" data-nav="policies">
+    <main class="content">
+      <div class="content__inner">
+        <div class="page-head">
+          <div class="page-head__text">
+            <h1 class="text-display">Apólices</h1>
+            <p class="text-muted">
+              OUT-03: as apólices que a Usina intermediou, com vigência, prêmio e situação.
+              A que renova primeiro vem no topo, que é o controle da data de renovação que
+              REQ-055 pede.
+            </p>
+          </div>
+          <div class="page-head__actions">
+            <a class="btn btn--outlined" href="/app/proposals/">
+              <span class="material-symbols-outlined">description</span>
+              Propostas
+            </a>
+          </div>
+        </div>
 
-  Lista das apolices vendidas com vigencia e situacao (REQ-020), e a listagem por
-  data de renovacao que REQ-055 pede, para a operacao ver o que vence.
+        <section class="card">
+          <div class="card__header">
+            <span class="material-symbols-outlined">shield</span>
+            <h2 class="text-title">Controle de apólices</h2>
+            <div class="card__header-actions" id="summary"></div>
+          </div>
 
-  Cada linha leva a /app/policies/detail.html, que ja existe.
+          <!-- OUT-04 / CA-032: "a vencer" é esta mesma lista com um corte na data
+               de renovação. O dia é informado pelo operador porque nenhum
+               requisito define o que é "próxima": o sistema não escolhe a janela. -->
+          <div class="card__body renewal-filter">
+            <div class="field renewal-field">
+              <input
+                class="field__input"
+                id="renewal-until"
+                name="renewalUntil"
+                type="date"
+                placeholder=" "
+              />
+              <label class="field__label" for="renewal-until">Renovação até</label>
+            </div>
+            <button class="btn btn--outlined" id="clear" type="button" hidden>
+              <span class="material-symbols-outlined">filter_alt_off</span>
+              Ver todas
+            </button>
+            <p class="text-muted renewal-hint">
+              Informe até quando quer enxergar as renovações. Sem data, a lista traz
+              todas as apólices — sempre da renovação mais próxima para a mais distante.
+            </p>
+          </div>
 
-  Bloqueio: GET /policies (listagem, filtro por vigencia e por data de renovacao) nao existe.
--->
+          <div class="card__body card__body--flush" id="list">
+            <div class="card__body stack">
+              <div class="skeleton" style="width: 40%"></div>
+              <div class="skeleton" style="width: 70%"></div>
+              <div class="skeleton" style="width: 55%"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script type="module" src="/app/shared/shell.js"></script>
+    <script type="module" src="/app/policies/index.js"></script>
+  </body>
+</html>

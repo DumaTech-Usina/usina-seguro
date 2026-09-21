@@ -1,13 +1,31 @@
-/*
- * Extrato de repasses por corretor (OUT-07)
- *
- * Repasses previstos, aguardando confirmacao, liberados e pagos, agrupados por
- * corretor. As acoes de liberar e registrar pagamento ja existem por apolice em
- * /app/policies/detail.html.
- *
- * O relatorio do periodo e o recibo (REQ-094, REQ-096, OUT-08, OUT-09) NAO entram
- * aqui ainda: dependem da janela de apuracao (DEC-008) e dos cadastros de IN-01,
- * porque exigem nome do cliente, corretor e ramo, que o sistema nao guarda.
- *
- * Bloqueio: GET /settlements (listagem por corretor e por periodo) nao existe.
- */
+/* Only what this page adds to the design system. */
+
+.broker-field {
+  min-width: 240px;
+}
+
+/* O `select` não tem placeholder, então o rótulo fica sempre levantado. */
+.broker-field .field__label {
+  top: 8px;
+  font-size: 12px;
+}
+
+.broker-field .field__input {
+  padding-top: 22px;
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-4);
+}
+
+.policy-number {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+/* REQ-095: o comprovante é uma referência textual, não um anexo. */
+.proof {
+  font-family: var(--font-mono);
+}

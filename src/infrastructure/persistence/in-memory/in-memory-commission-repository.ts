@@ -1,4 +1,7 @@
-import type { CommissionRepository } from '../../../core/commission/application/commission-repository.ts';
+import type {
+  CommissionListFilter,
+  CommissionRepository,
+} from '../../../core/commission/application/commission-repository.ts';
 import type { Commission } from '../../../core/commission/domain/commission.ts';
 
 /**
@@ -17,5 +20,15 @@ export class InMemoryCommissionRepository implements CommissionRepository {
 
   async findByPolicyId(policyId: string): Promise<Commission | null> {
     return this.records.get(policyId) ?? null;
+  }
+
+  /** OUT-05. Same order the SQLite driver answers: newest calculation first. */
+  async list(filter: CommissionListFilter): Promise<readonly Commission[]> {
+    return [...this.records.values()]
+      .filter((commission) => filter.status === undefined || commission.status === filter.status)
+      .sort((a, b) => {
+        const byDate = b.calculatedAt.getTime() - a.calculatedAt.getTime();
+        return byDate === 0 ? b.id.localeCompare(a.id) : byDate;
+      });
   }
 }

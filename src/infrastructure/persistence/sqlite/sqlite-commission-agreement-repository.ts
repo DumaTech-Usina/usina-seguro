@@ -88,24 +88,46 @@ export class SqliteCommissionAgreementRepository implements CommissionAgreementR
       return null;
     }
 
-    const chain: CommissionChain =
-      row.chain_kind === 'INTERMEDIARY'
-        ? {
-            kind: 'INTERMEDIARY',
-            intermediaryId: row.intermediary_id ?? '',
-            intermediaryRate: Percentage.fromString(row.intermediary_rate ?? '0'),
-            brokerBase: row.broker_base as BrokerBase,
-          }
-        : { kind: 'DIRECT' };
-
-    return CommissionAgreement.restore({
-      id: row.id,
-      insurerId: row.insurer_id,
-      productId: row.product_id,
-      effectiveFrom: CalendarDate.fromString(row.effective_from),
-      insurerRate: Percentage.fromString(row.insurer_rate),
-      chain,
-      registeredAt: new Date(row.registered_at),
-    });
+    return restore(row);
   }
+
+  /**
+   * IN-02: insurer, then product, then the most recent validity first.
+   *
+   * `effective_from` is ISO-8601, so ordering the text descending is ordering
+   * the calendar descending — the same argument `findInForce` already relies
+   * on, and the same expression a PostgreSQL `date` column answers.
+   */
+  async list(): Promise<readonly CommissionAgreement[]> {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM commission_agreement
+         ORDER BY insurer_id, product_id, effective_from DESC`,
+      )
+      .all() as unknown as AgreementRow[];
+
+    return rows.map(restore);
+  }
+}
+
+function restore(row: AgreementRow): CommissionAgreement {
+  const chain: CommissionChain =
+    row.chain_kind === 'INTERMEDIARY'
+      ? {
+          kind: 'INTERMEDIARY',
+          intermediaryId: row.intermediary_id ?? '',
+          intermediaryRate: Percentage.fromString(row.intermediary_rate ?? '0'),
+          brokerBase: row.broker_base as BrokerBase,
+        }
+      : { kind: 'DIRECT' };
+
+  return CommissionAgreement.restore({
+    id: row.id,
+    insurerId: row.insurer_id,
+    productId: row.product_id,
+    effectiveFrom: CalendarDate.fromString(row.effective_from),
+    insurerRate: Percentage.fromString(row.insurer_rate),
+    chain,
+    registeredAt: new Date(row.registered_at),
+  });
 }

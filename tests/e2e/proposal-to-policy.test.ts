@@ -71,14 +71,14 @@ async function transmit(proposalId: string, proposalNumber = 'PRP-9001'): Promis
   });
 }
 
-function policyBody(proposalId: string, policyNumber: string): unknown {
+function policyBody(proposalId: string, policyNumber: string, renewalDate = '2027-09-30'): unknown {
   return {
     proposalId,
     policyNumber,
     premium: '1200.00',
     coverageStart: '2026-10-01',
     coverageEnd: '2027-09-30',
-    renewalDate: '2027-09-30',
+    renewalDate,
     installments: [
       { number: 1, amount: '600.00', dueDate: '2026-10-10' },
       { number: 2, amount: '600.00', dueDate: '2026-11-10' },
@@ -281,5 +281,93 @@ describe('FP-01 over HTTP: proposal, transmission, policy, installments', () => 
     const response = await fetch(`${baseUrl}/policies/does-not-exist`);
 
     expect(response.status).toBe(404);
+  });
+});
+
+/**
+ * OUT-03 and OUT-04 over HTTP. Every other policy of this file renews on
+ * 2027-09-30, so the two registered here — with their own renewal days — are
+ * the ones a window that stops before that can contain.
+ */
+describe('the policy listing (OUT-03, OUT-04)', () => {
+  interface PolicyLine {
+    id: string;
+    policyNumber: string;
+    proposalNumber: string | null;
+    clientId: string;
+    status: string;
+    premium: string;
+    coverageStart: string;
+    coverageEnd: string;
+    renewalDate: string;
+  }
+
+  async function registerRenewingOn(number: string, renewalDate: string): Promise<string> {
+    const proposalId = await registerProposal();
+    await transmit(proposalId, `PRP-${number}`);
+    const created = (await (
+      await post('/policies', policyBody(proposalId, `APL-${number}`, renewalDate))
+    ).json()) as PolicyBody;
+
+    return created.id;
+  }
+
+  async function listPolicies(query = ''): Promise<PolicyLine[]> {
+    const response = await fetch(`${baseUrl}/policies${query}`);
+    expect(response.status).toBe(200);
+    return (await response.json()) as PolicyLine[];
+  }
+
+  it('lists the policies sold, nearest renewal first (REQ-055)', async () => {
+    const early = await registerRenewingOn('LIST-EARLY', '2026-12-31');
+    const later = await registerRenewingOn('LIST-LATER', '2027-03-31');
+
+    const listing = await listPolicies();
+    const numbers = listing.map((line) => line.policyNumber);
+
+    // REQ-020: coverage, premium and state, with both numbers of REQ-050.
+    expect(listing[0]).toMatchObject({
+      id: early,
+      policyNumber: 'APL-LIST-EARLY',
+      proposalNumber: 'PRP-LIST-EARLY',
+      clientId: 'client-1',
+      status: 'ACTIVE',
+      premium: '1200.00',
+      coverageStart: '2026-10-01',
+      renewalDate: '2026-12-31',
+    });
+    expect(numbers.indexOf('APL-LIST-EARLY')).toBeLessThan(numbers.indexOf('APL-LIST-LATER'));
+    expect(listing[1]?.id).toBe(later);
+    // The policies the other tests registered are here too: no filter, no cut.
+    expect(numbers).toContain('APL-4711');
+  });
+
+  it('answers only what renews up to the informed day (CA-032, OUT-04)', async () => {
+    await registerRenewingOn('WINDOW-IN', '2027-02-28');
+    await registerRenewingOn('WINDOW-OUT', '2027-04-30');
+
+    const expiring = await listPolicies('?renewalUntil=2027-03-31');
+    const numbers = expiring.map((line) => line.policyNumber);
+
+    expect(numbers).toContain('APL-WINDOW-IN');
+    // The day informed is inside the window; what renews after it is not.
+    expect(numbers).toContain('APL-LIST-LATER');
+    expect(numbers).not.toContain('APL-WINDOW-OUT');
+    expect(numbers).not.toContain('APL-4711');
+    expect(expiring.every((line) => line.renewalDate <= '2027-03-31')).toBe(true);
+  });
+
+  it('answers an empty listing when nothing renews until then', async () => {
+    expect(await listPolicies('?renewalUntil=2020-01-01')).toEqual([]);
+  });
+
+  it('refuses a malformed day with 422, in Portuguese (REQ-020)', async () => {
+    const response = await fetch(`${baseUrl}/policies?renewalUntil=31%2F03%2F2027`);
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      rule: 'REQ-020',
+      message: "Data inválida: '31/03/2027'. Use o formato AAAA-MM-DD.",
+    });
   });
 });

@@ -6,6 +6,10 @@ import {
   type CommissionChain,
 } from '../domain/commission-agreement.ts';
 import type { CommissionAgreementRepository } from './commission-agreement-repository.ts';
+import {
+  type CommissionAgreementView,
+  toCommissionAgreementView,
+} from './commission-agreement-view.ts';
 
 export interface RegisterCommissionAgreementInput {
   readonly insurerId: string;
@@ -25,18 +29,6 @@ export interface RegisterCommissionAgreementDependencies {
   readonly agreements: CommissionAgreementRepository;
   readonly newId: () => string;
   readonly now: () => Date;
-}
-
-export interface CommissionAgreementView {
-  readonly id: string;
-  readonly insurerId: string;
-  readonly productId: string;
-  readonly effectiveFrom: string;
-  readonly insurerRate: string;
-  readonly chain: string;
-  readonly intermediaryId: string | null;
-  readonly intermediaryRate: string | null;
-  readonly brokerBase: string;
 }
 
 /**
@@ -79,16 +71,8 @@ export class RegisterCommissionAgreement {
 
     await this.deps.agreements.save(agreement);
 
-    return {
-      id: agreement.id,
-      insurerId: agreement.insurerId,
-      productId: agreement.productId,
-      effectiveFrom: agreement.effectiveFrom.toString(),
-      insurerRate: agreement.insurerRate.toString(),
-      chain: agreement.chain.kind,
-      intermediaryId: chain.kind === 'INTERMEDIARY' ? chain.intermediaryId : null,
-      intermediaryRate: chain.kind === 'INTERMEDIARY' ? chain.intermediaryRate.toString() : null,
-      brokerBase: chain.kind === 'INTERMEDIARY' ? chain.brokerBase : 'USINA',
-    };
+    // The same shape the listing answers, so a record just registered and a
+    // record read back are the same document to whoever displays them.
+    return toCommissionAgreementView(agreement);
   }
 }

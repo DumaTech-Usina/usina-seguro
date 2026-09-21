@@ -1,12 +1,44 @@
-/*
- * Painel acordado x real (OUT-05)
- *
- * A visao de REQ-076 sobre todas as apolices, e nao uma por vez: comissao acordada,
- * comissao real e a divergenca sinalizada, com filtro por competencia, seguradora e
- * por "somente divergentes".
- *
- * A comparacao por apolice ja esta implementada no cartao de comissao de
- * /app/policies/detail.html; aqui ela vira lista.
- *
- * Bloqueio: GET /commissions (listagem) nao existe — hoje so se le por apolice.
- */
+/* Only what this page adds to the design system. */
+
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.filters__option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 0 var(--space-5);
+  border: 1px solid var(--outline-variant);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--on-surface-variant);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.filters__option[aria-selected="true"] {
+  border-color: transparent;
+  background: var(--primary-container);
+  color: var(--on-primary-container);
+}
+
+.policy-number {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+/* REQ-076: o valor que não bate com o acordado é o que o olho tem de achar. */
+.is-divergent {
+  color: var(--danger);
+  font-weight: 500;
+}
+
+.not-apurado {
+  color: var(--on-surface-variant);
+}

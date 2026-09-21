@@ -1,18 +1,67 @@
-/*
- * Conciliacao do comissionamento (FP-02) e pendencias (OUT-06)
- *
- * Duas partes:
- *
- * 1. Importacao do relatorio: hoje o endpoint recebe linhas ja estruturadas, entao a
- *    tela seria uma grade editavel (numero da apolice, numero da proposta, comissao
- *    do produtor) mais a competencia. O upload de arquivo de verdade depende de
- *    DEC-001, que nao definiu o layout — sem ele nao ha parser a construir.
- *    O resultado por linha ja vem pronto da API: conciliada, divergente, duplicada,
- *    pendente ou sem comissao.
- *
- * 2. Pendencias (OUT-06): tabela das linhas sem apolice correspondente, que e o
- *    unico endpoint de listagem que ja existe
- *    (GET /commission-reconciliations/pendencies).
- *
- * Bloqueio: Parcialmente pronto: a importacao e as pendencias ja tem endpoint; o upload de arquivo depende de DEC-001.
- */
+/* Only what this page adds to the design system. */
+
+.competence-field {
+  max-width: 260px;
+}
+
+.report-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.line-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 40px;
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.line-row__remove {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 48px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--on-surface-variant);
+  cursor: pointer;
+}
+
+.line-row__remove:hover {
+  background: var(--danger-container);
+  color: var(--danger);
+}
+
+.line-row__remove:disabled {
+  color: var(--outline-variant);
+  cursor: default;
+}
+
+.line-row__remove:disabled:hover {
+  background: transparent;
+  color: var(--outline-variant);
+}
+
+.counters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+}
+
+/* Os dois números que identificam a linha, lidos lado a lado. */
+.report-number {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+@media (max-width: 900px) {
+  .line-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 40px;
+  }
+
+  .line-row .field:nth-child(3) {
+    grid-column: 1 / 3;
+  }
+}

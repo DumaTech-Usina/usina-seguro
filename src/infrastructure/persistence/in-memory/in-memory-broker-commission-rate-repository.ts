@@ -11,4 +11,9 @@ export class InMemoryBrokerCommissionRateRepository implements BrokerCommissionR
   async findByBrokerId(brokerId: string): Promise<BrokerCommissionRate | null> {
     return this.records.get(brokerId) ?? null;
   }
+
+  /** IN-05, by broker. Code-unit order, as SQLite orders `TEXT` by bytes. */
+  async list(): Promise<readonly BrokerCommissionRate[]> {
+    return [...this.records.values()].sort((a, b) => (a.brokerId < b.brokerId ? -1 : 1));
+  }
 }

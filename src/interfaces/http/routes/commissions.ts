@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
+import type { ListCommissionsInput } from '../../../core/commission/application/list-commissions.ts';
 import type { RegisterCommissionAgreementInput } from '../../../core/commission/application/register-commission-agreement.ts';
 
 /**
@@ -82,6 +83,24 @@ const resolutionSchema: FastifySchema = {
   },
 };
 
+/**
+ * Shape only. The set of states is the domain's (section 10.5) and the schema
+ * repeats it so an unknown value is a 400 instead of an empty panel that looks
+ * like "nothing diverges".
+ */
+const listCommissionsSchema: FastifySchema = {
+  querystring: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      status: {
+        type: 'string',
+        enum: ['FORECAST', 'RECONCILED', 'RECEIVED', 'DIVERGENT', 'RESOLVED'],
+      },
+    },
+  },
+};
+
 interface PolicyIdParams {
   id: string;
 }
@@ -110,7 +129,26 @@ export function registerCommissionRoutes(app: FastifyInstance, useCases: UseCase
     },
   );
 
-  // CA-016, REQ-076, OUT-05: agreed and real side by side, divergence flagged.
+  // IN-02, IN-03, IN-04: the agreements already registered. No filter — the
+  // requirements ask for the registry to be maintained, not narrowed, and the
+  // agreement a calculation uses is chosen by its date (REQ-065), not here.
+  app.get('/commission-agreements', async () => {
+    return useCases.listCommissionAgreements.execute();
+  });
+
+  // IN-05: the broker commission table as it stands.
+  app.get('/broker-commission-rates', async () => {
+    return useCases.listBrokerCommissionRates.execute();
+  });
+
+  // OUT-05: the same comparison over every policy. No filter is the whole
+  // panel of REQ-076; `status=DIVERGENT` is the worklist of FP-02 step 5.
+  app.get('/commissions', { schema: listCommissionsSchema }, async (request) => {
+    // The schema already restricted the query to a known state or nothing.
+    return useCases.listCommissions.execute(request.query as ListCommissionsInput);
+  });
+
+  // CA-016, REQ-076: agreed and real side by side for one policy.
   app.get('/policies/:id/commission', { schema: { params: policyIdParams } }, async (request) => {
     const { id } = request.params as PolicyIdParams;
     return useCases.getCommission.execute(id);

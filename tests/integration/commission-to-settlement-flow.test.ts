@@ -64,6 +64,8 @@ interface PolicyOptions {
   readonly proposalNumber?: string;
   readonly policyNumber?: string;
   readonly premium?: string;
+  /** IN-05: the broker the business belongs to, for the statement of OUT-07. */
+  readonly brokerId?: string;
 }
 
 async function registerPolicy(options: PolicyOptions = {}) {
@@ -72,7 +74,7 @@ async function registerPolicy(options: PolicyOptions = {}) {
 
   const proposal = await useCases.registerProposal.execute({
     clientId: 'client-1',
-    brokerId: 'broker-1',
+    brokerId: options.brokerId ?? 'broker-1',
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: options.paymentMethodId ?? 'credit',
@@ -367,6 +369,100 @@ describe('commission to reconciliation (FP-02)', () => {
   });
 });
 
+describe('agreed versus real panel (OUT-05, REQ-076)', () => {
+  /** Two businesses, so a listing has something to order and to filter. */
+  async function twoPolicies() {
+    const first = await registerPolicy({ proposalNumber: 'PRP-9001', policyNumber: 'APL-4711' });
+    const second = await registerPolicy({ proposalNumber: 'PRP-9002', policyNumber: 'APL-4712' });
+    return { first, second };
+  }
+
+  it('lists every policy with both values (CA-016)', async () => {
+    const { first, second } = await twoPolicies();
+
+    const panel = await application.useCases.listCommissions.execute();
+
+    // The order between two registrations of the same instant is the driver's
+    // tie-break, not a rule; what the panel promises is that both are on it.
+    expect(panel.map((line) => line.policyId).sort()).toEqual([first.id, second.id].sort());
+
+    const line = panel.find((entry) => entry.policyNumber === 'APL-4712');
+    expect(line?.proposalNumber).toBe('PRP-9002');
+    expect(line?.clientId).toBe('client-1');
+    expect(line?.insurerId).toBe('insurer-1');
+    expect(line?.effectiveReceivable).toBe('40.00');
+    expect(line?.effectivePayable).toBe('20.00');
+    // REQ-075: nothing is apurado before a report matches the policy.
+    expect(line?.realReceivable).toBeNull();
+  });
+
+  it('survives a reopening of the database', async () => {
+    await twoPolicies();
+
+    await application.shutdown();
+    application = open();
+
+    const panel = await application.useCases.listCommissions.execute();
+    expect(panel.map((line) => line.policyNumber).sort()).toEqual(['APL-4711', 'APL-4712']);
+  });
+
+  it('narrows to the divergences the Financeiro has to treat (FP-02 step 5)', async () => {
+    const { first } = await twoPolicies();
+
+    await application.useCases.reconcileCommissionReport.execute({
+      competence: '2026-10',
+      lines: [
+        { policyNumber: 'APL-4711', proposalNumber: 'PRP-9001', producerCommission: '31.00' },
+        { policyNumber: 'APL-4712', proposalNumber: 'PRP-9002', producerCommission: '40.00' },
+      ],
+    });
+
+    const divergent = await application.useCases.listCommissions.execute({ status: 'DIVERGENT' });
+
+    expect(divergent).toHaveLength(1);
+    expect(divergent[0]?.policyId).toBe(first.id);
+    expect(divergent[0]?.effectiveReceivable).toBe('40.00');
+    expect(divergent[0]?.realReceivable).toBe('31.00');
+    expect(divergent[0]?.divergent).toBe(true);
+    expect(divergent[0]?.reconciledCompetence).toBe('2026-10');
+
+    // REQ-085: once a human closes it, it leaves the worklist and stays on the
+    // panel with the values that disagreed (REQ-124, REJ-014).
+    await application.useCases.resolveCommissionDivergence.execute({
+      policyId: first.id,
+      justification: 'seguradora confirmou o valor menor',
+      userId: 'financeiro-1',
+    });
+
+    await expect(
+      application.useCases.listCommissions.execute({ status: 'DIVERGENT' }),
+    ).resolves.toEqual([]);
+
+    const [resolved] = await application.useCases.listCommissions.execute({ status: 'RESOLVED' });
+    expect(resolved?.policyId).toBe(first.id);
+    expect(resolved?.realReceivable).toBe('31.00');
+  });
+
+  it('carries the override of REQ-066 into the panel', async () => {
+    const { first } = await twoPolicies();
+
+    await application.useCases.overrideCommission.execute({
+      policyId: first.id,
+      receivable: '45.00',
+      justification: 'acordo extraordinario com a seguradora',
+      userId: 'admin-1',
+    });
+
+    const panel = await application.useCases.listCommissions.execute();
+    const adjusted = panel.find((line) => line.policyId === first.id);
+
+    expect(adjusted).toBeDefined();
+    // The calculated value stays next to the one in force (REQ-124).
+    expect(adjusted?.agreedReceivable).toBe('40.00');
+    expect(adjusted?.effectiveReceivable).toBe('45.00');
+  });
+});
+
 describe('reconciliation to settlement (FP-03)', () => {
   it('releases the transfer at once for an immediate payment method (CA-022)', async () => {
     const policy = await registerPolicy({ paymentMethodId: 'credit' });
@@ -450,6 +546,101 @@ describe('reconciliation to settlement (FP-03)', () => {
     const settlement = await application.useCases.openSettlement.execute({ policyId: policy.id });
 
     expect(settlement.amount).toBe('25.00');
+  });
+});
+
+describe('broker commission statement (OUT-07)', () => {
+  it('shows what is forecast, held, released and paid, by broker', async () => {
+    // Four businesses of the same broker, one in each situation OUT-07 names.
+    const forecast = await registerPolicy({
+      proposalNumber: 'PRP-8001',
+      policyNumber: 'APL-8001',
+    });
+    const held = await registerPolicy({
+      paymentMethodId: 'bank-slip',
+      proposalNumber: 'PRP-8002',
+      policyNumber: 'APL-8002',
+    });
+    const released = await registerPolicy({
+      proposalNumber: 'PRP-8003',
+      policyNumber: 'APL-8003',
+    });
+    const paid = await registerPolicy({ proposalNumber: 'PRP-8004', policyNumber: 'APL-8004' });
+
+    await application.useCases.reconcileCommissionReport.execute({
+      competence: '2026-10',
+      lines: [
+        { policyNumber: 'APL-8002', proposalNumber: 'PRP-8002', producerCommission: '40.00' },
+        { policyNumber: 'APL-8003', proposalNumber: 'PRP-8003', producerCommission: '40.00' },
+        { policyNumber: 'APL-8004', proposalNumber: 'PRP-8004', producerCommission: '40.00' },
+      ],
+    });
+
+    await application.useCases.openSettlement.execute({ policyId: held.id });
+    await application.useCases.openSettlement.execute({ policyId: released.id });
+    await application.useCases.openSettlement.execute({ policyId: paid.id });
+    await application.useCases.registerSettlementPayment.execute({
+      policyId: paid.id,
+      amount: '19.50',
+      proofReference: 'comprovante-8004.pdf',
+      userId: 'financeiro-1',
+    });
+
+    const statement = await application.useCases.listBrokerStatement.execute({
+      brokerId: 'broker-1',
+    });
+
+    const byPolicy = new Map(statement.lines.map((line) => [line.policyId, line]));
+    expect(statement.lines).toHaveLength(4);
+
+    // The *prevista* of OUT-07: commission calculated, transfer never opened.
+    expect(byPolicy.get(forecast.id)?.settlement).toBeNull();
+    expect(byPolicy.get(forecast.id)?.payable).toBe('20.00');
+    // EX-07: the bank slip waits for the client to pay the first installment.
+    expect(byPolicy.get(held.id)?.settlement?.status).toBe('AWAITING_CONFIRMATION');
+    expect(byPolicy.get(released.id)?.settlement?.status).toBe('RELEASED');
+    expect(byPolicy.get(paid.id)?.settlement?.payment?.proofReference).toBe('comprovante-8004.pdf');
+
+    // REQ-120: the totals are exact, and the paid one is what was sent.
+    expect(statement.totals).toEqual({
+      payable: '80.00',
+      awaitingConfirmation: '20.00',
+      released: '20.00',
+      paid: '19.50',
+    });
+  });
+
+  it('separates one broker from another and survives a reopening', async () => {
+    await application.useCases.registerBrokerCommissionRate.execute({
+      brokerId: 'broker-2',
+      rate: '25',
+    });
+
+    await registerPolicy({ proposalNumber: 'PRP-8101', policyNumber: 'APL-8101' });
+    await registerPolicy({
+      brokerId: 'broker-2',
+      proposalNumber: 'PRP-8102',
+      policyNumber: 'APL-8102',
+    });
+
+    await application.shutdown();
+    application = open();
+
+    const first = await application.useCases.listBrokerStatement.execute({
+      brokerId: 'broker-1',
+    });
+    const second = await application.useCases.listBrokerStatement.execute({
+      brokerId: 'broker-2',
+    });
+    const everyone = await application.useCases.listBrokerStatement.execute();
+
+    expect(first.lines.map((line) => line.policyNumber)).toEqual(['APL-8101']);
+    // IN-05: a different table produces a different value for the same premium.
+    expect(second.lines.map((line) => line.policyNumber)).toEqual(['APL-8102']);
+    expect(second.totals.payable).toBe('10.00');
+    expect(everyone.brokerId).toBeNull();
+    expect(everyone.lines).toHaveLength(2);
+    expect(everyone.totals.payable).toBe('30.00');
   });
 });
 

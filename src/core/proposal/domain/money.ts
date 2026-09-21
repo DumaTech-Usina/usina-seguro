@@ -43,6 +43,11 @@ export class Money {
     return new Money(negative ? -cents : cents);
   }
 
+  /** Zero, the neutral element of `plus`: where a total starts (OUT-07). */
+  static zero(): Money {
+    return new Money(0n);
+  }
+
   /**
    * Applies a commission rate to this amount (REQ-062..REQ-069, REQ-093).
    *
@@ -59,6 +64,18 @@ export class Money {
   applyRate(rate: Percentage): Money {
     const { numerator, scale } = rate.asFraction();
     return new Money(divideHalfUp(this.cents * numerator, 100n * 10n ** BigInt(scale)));
+  }
+
+  /**
+   * Exact sum, on integer cents (REQ-120).
+   *
+   * It exists because a statement adds amounts up (OUT-07): the totals of what
+   * the Usina expects to pay, holds, released and paid are sums of values the
+   * system already holds, and adding them through `number` would reintroduce
+   * the binary floating point the whole type avoids.
+   */
+  plus(other: Money): Money {
+    return new Money(this.cents + other.cents);
   }
 
   isPositive(): boolean {

@@ -32,9 +32,9 @@
         <div class="banner">
           <span class="material-symbols-outlined">info</span>
           <div class="banner__text">
-            Ainda não existe endpoint de listagem para estes cadastros, então esta tela
-            grava mas não lista o que já foi gravado. Registrar novamente a mesma chave
-            substitui o valor anterior.
+            Registrar novamente a mesma chave substitui o valor anterior. No acordo
+            comercial a chave inclui a data de vigência: uma nova vigência é um novo
+            registro, e os cálculos já feitos guardam os percentuais que usaram.
           </div>
         </div>
 
@@ -114,6 +114,7 @@
               <button class="btn btn--filled" type="submit">Registrar acordo</button>
             </div>
           </form>
+          <div class="registry" id="list-agreements"></div>
         </section>
 
         <!-- Tabela do corretor (IN-05). -->
@@ -147,6 +148,7 @@
               <button class="btn btn--filled" type="submit">Registrar tabela</button>
             </div>
           </form>
+          <div class="registry" id="list-broker-rates"></div>
         </section>
 
         <!-- Regra de liberação por forma de pagamento (IN-06). -->
@@ -184,6 +186,7 @@
               <button class="btn btn--filled" type="submit">Registrar regra</button>
             </div>
           </form>
+          <div class="registry" id="list-release-rules"></div>
         </section>
       </div>
     </main>

@@ -72,6 +72,20 @@ export const api = {
   // FP-01 step 6 and the policy the operator works on afterwards.
   registerPolicy: (input) => request('/policies', { method: 'POST', body: input }),
   getPolicy: (id) => request(`/policies/${encodeURIComponent(id)}`),
+  /**
+   * OUT-03: the policies the Usina sold, nearest renewal first. With a day,
+   * it is the a-vencer listing of OUT-04 (REQ-055, CA-032) — only the policies
+   * that renew on or before it.
+   *
+   * The day is informed by the operator: no requirement says how near
+   * "proxima" is, so nothing here picks a window.
+   */
+  listPolicies: (renewalUntil) =>
+    request(
+      renewalUntil === undefined
+        ? '/policies'
+        : `/policies?renewalUntil=${encodeURIComponent(renewalUntil)}`,
+    ),
   payInstallment: (policyId, number, userId) =>
     request(`/policies/${encodeURIComponent(policyId)}/installments/${number}/payment`, {
       method: 'POST',
@@ -80,6 +94,15 @@ export const api = {
 
   // FP-01 step 7 and the agreed-versus-real panel of REQ-076.
   getCommission: (policyId) => request(`/policies/${encodeURIComponent(policyId)}/commission`),
+  /**
+   * OUT-05: the same comparison over every policy. `status` narrows it to one
+   * state of section 10.5 — `DIVERGENT` is the worklist of FP-02 step 5 — and
+   * nothing asks for the whole panel.
+   */
+  listCommissions: (status) =>
+    request(
+      status === undefined ? '/commissions' : `/commissions?status=${encodeURIComponent(status)}`,
+    ),
   overrideCommission: (policyId, input) =>
     request(`/policies/${encodeURIComponent(policyId)}/commission/override`, {
       method: 'POST',
@@ -103,11 +126,47 @@ export const api = {
       body: input,
     }),
 
+  /**
+   * OUT-07: the commission statement of a broker — forecast, held, released
+   * and paid. Nothing asks for every broker at once.
+   *
+   * This is not the report and the receipt of REQ-094/REQ-096: those need the
+   * period of DEC-008 and the registries of IN-01, and neither exists.
+   */
+  getBrokerStatement: (brokerId) =>
+    request(
+      brokerId === undefined
+        ? '/broker-commission-statements'
+        : `/broker-commission-statements?brokerId=${encodeURIComponent(brokerId)}`,
+    ),
+
+  // FP-02 — the commission report the Financeiro imports.
+  //
+  // The endpoint takes lines already structured, not a file: the layout is
+  // DEC-001 and REQ-080..REQ-083 are not implementable without a real sample.
+  // Every confirmed rule over a line — the key of REQ-082, the pendency of
+  // REQ-083, the refusal to duplicate of REQ-086 — runs on what is sent here.
+  reconcileCommissionReport: (input) =>
+    request('/commission-reconciliations', { method: 'POST', body: input }),
+  /** OUT-06: the lines with no matching policy, waiting for a human. */
+  listReconciliationPendencies: () => request('/commission-reconciliations/pendencies'),
+
   // Registries the Administrator maintains (IN-02 to IN-06).
+  //
+  // These are the parameters the calculation reads — they are data and not
+  // code (REQ-061, REQ-125), so each one is written and read back through the
+  // same shape: what a registration answers is one line of what the listing
+  // answers.
   registerCommissionAgreement: (input) =>
     request('/commission-agreements', { method: 'POST', body: input }),
+  /** IN-02, IN-03, IN-04: every agreement registered, by insurer and product. */
+  listCommissionAgreements: () => request('/commission-agreements'),
   registerBrokerRate: (input) =>
     request('/broker-commission-rates', { method: 'POST', body: input }),
+  /** IN-05: the broker commission table (REQ-093). */
+  listBrokerRates: () => request('/broker-commission-rates'),
   registerReleaseRule: (input) =>
     request('/payment-method-release-rules', { method: 'POST', body: input }),
+  /** IN-06: the release rule of each payment method (REQ-090, CA-024). */
+  listReleaseRules: () => request('/payment-method-release-rules'),
 };

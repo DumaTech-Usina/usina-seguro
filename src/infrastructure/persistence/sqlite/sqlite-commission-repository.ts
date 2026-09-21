@@ -1,5 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { CommissionRepository } from '../../../core/commission/application/commission-repository.ts';
+import type {
+  CommissionListFilter,
+  CommissionRepository,
+} from '../../../core/commission/application/commission-repository.ts';
 import type { BrokerBase } from '../../../core/commission/domain/commission-agreement.ts';
 import { Commission, type CommissionStatus } from '../../../core/commission/domain/commission.ts';
 import { Money } from '../../../core/proposal/domain/money.ts';
@@ -111,57 +114,66 @@ export class SqliteCommissionRepository implements CommissionRepository {
       | CommissionRow
       | undefined;
 
-    if (row === undefined) {
-      return null;
-    }
-
-    return Commission.restore(
-      {
-        id: row.id,
-        policyId: row.policy_id,
-        basis: {
-          premium: Money.fromString(row.premium),
-          insurerRate: Percentage.fromString(row.insurer_rate),
-          insurerAmount: Money.fromString(row.insurer_amount),
-          intermediaryId: row.intermediary_id,
-          intermediaryRate:
-            row.intermediary_rate === null ? null : Percentage.fromString(row.intermediary_rate),
-          brokerBase: row.broker_base as BrokerBase,
-          brokerBaseAmount: Money.fromString(row.broker_base_amount),
-          brokerRate: Percentage.fromString(row.broker_rate),
-        },
-        agreedReceivable: Money.fromString(row.agreed_receivable),
-        agreedPayable: Money.fromString(row.agreed_payable),
-        calculatedAt: new Date(row.calculated_at),
-      },
-      {
-        status: row.status as CommissionStatus,
-        override:
-          row.override_at === null
-            ? null
-            : {
-                receivable:
-                  row.override_receivable === null
-                    ? null
-                    : Money.fromString(row.override_receivable),
-                payable:
-                  row.override_payable === null ? null : Money.fromString(row.override_payable),
-                justification: row.override_justification ?? '',
-                userId: row.override_user_id ?? '',
-                at: new Date(row.override_at),
-              },
-        realReceivable: row.real_receivable === null ? null : Money.fromString(row.real_receivable),
-        reconciledCompetence: row.reconciled_competence,
-        reconciledAt: row.reconciled_at === null ? null : new Date(row.reconciled_at),
-        resolution:
-          row.resolved_at === null
-            ? null
-            : {
-                justification: row.resolution_justification ?? '',
-                userId: row.resolution_user_id ?? '',
-                at: new Date(row.resolved_at),
-              },
-      },
-    );
+    return row === undefined ? null : toCommission(row);
   }
+
+  /** OUT-05: the panel reads every policy at once, newest calculation first. */
+  async list(filter: CommissionListFilter): Promise<readonly Commission[]> {
+    const rows = (filter.status === undefined
+      ? this.db.prepare('SELECT * FROM commission ORDER BY calculated_at DESC, id DESC').all()
+      : this.db
+          .prepare('SELECT * FROM commission WHERE status = ? ORDER BY calculated_at DESC, id DESC')
+          .all(filter.status)) as unknown as CommissionRow[];
+
+    return rows.map(toCommission);
+  }
+}
+
+function toCommission(row: CommissionRow): Commission {
+  return Commission.restore(
+    {
+      id: row.id,
+      policyId: row.policy_id,
+      basis: {
+        premium: Money.fromString(row.premium),
+        insurerRate: Percentage.fromString(row.insurer_rate),
+        insurerAmount: Money.fromString(row.insurer_amount),
+        intermediaryId: row.intermediary_id,
+        intermediaryRate:
+          row.intermediary_rate === null ? null : Percentage.fromString(row.intermediary_rate),
+        brokerBase: row.broker_base as BrokerBase,
+        brokerBaseAmount: Money.fromString(row.broker_base_amount),
+        brokerRate: Percentage.fromString(row.broker_rate),
+      },
+      agreedReceivable: Money.fromString(row.agreed_receivable),
+      agreedPayable: Money.fromString(row.agreed_payable),
+      calculatedAt: new Date(row.calculated_at),
+    },
+    {
+      status: row.status as CommissionStatus,
+      override:
+        row.override_at === null
+          ? null
+          : {
+              receivable:
+                row.override_receivable === null ? null : Money.fromString(row.override_receivable),
+              payable:
+                row.override_payable === null ? null : Money.fromString(row.override_payable),
+              justification: row.override_justification ?? '',
+              userId: row.override_user_id ?? '',
+              at: new Date(row.override_at),
+            },
+      realReceivable: row.real_receivable === null ? null : Money.fromString(row.real_receivable),
+      reconciledCompetence: row.reconciled_competence,
+      reconciledAt: row.reconciled_at === null ? null : new Date(row.reconciled_at),
+      resolution:
+        row.resolved_at === null
+          ? null
+          : {
+              justification: row.resolution_justification ?? '',
+              userId: row.resolution_user_id ?? '',
+              at: new Date(row.resolved_at),
+            },
+    },
+  );
 }

@@ -57,3 +57,51 @@ export function toPolicyView(policy: Policy, proposal: Proposal): PolicyView {
     })),
   };
 }
+
+/**
+ * One line of the policy listing (OUT-03, OUT-04).
+ *
+ * It answers what the listing exists for: which policies the Usina sold, what
+ * their coverage period is, what state they are in (REQ-020) and when each one
+ * renews (REQ-055). The schedule is absent on purpose — it is detail of a
+ * single policy, which `PolicyView` already carries.
+ *
+ * The policy holds the proposal by id and nothing a human recognises, so what
+ * identifies the business comes from the proposal it originated: the number the
+ * insurer issued (REQ-050) and the client, insurer and product references
+ * REQ-022 keeps. Those travel as they are stored: the registries of IN-01 are
+ * not modelled yet, so there is no name to resolve.
+ */
+export interface PolicyListItemView {
+  readonly id: string;
+  readonly policyNumber: string;
+  readonly proposalId: string;
+  readonly proposalNumber: string | null;
+  readonly clientId: string;
+  readonly insurerId: string;
+  readonly productId: string;
+  readonly status: string;
+  readonly premium: string;
+  readonly coverageStart: string;
+  readonly coverageEnd: string;
+  readonly renewalDate: string;
+  readonly registeredAt: string;
+}
+
+export function toPolicyListItemView(policy: Policy, proposal: Proposal): PolicyListItemView {
+  return {
+    id: policy.id,
+    policyNumber: policy.policyNumber,
+    proposalId: policy.proposalId,
+    proposalNumber: proposal.proposalNumber,
+    clientId: proposal.clientId,
+    insurerId: proposal.insurerId,
+    productId: proposal.productId,
+    status: policy.status,
+    premium: policy.premium.toString(),
+    coverageStart: policy.coverageStart.toString(),
+    coverageEnd: policy.coverageEnd.toString(),
+    renewalDate: policy.renewalDate.toString(),
+    registeredAt: policy.registeredAt.toISOString(),
+  };
+}

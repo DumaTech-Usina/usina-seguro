@@ -16,4 +16,18 @@ export interface CommissionAgreementRepository {
     productId: string,
     on: CalendarDate,
   ): Promise<CommissionAgreement | null>;
+  /**
+   * Every agreement registered, grouped by the pair it applies to (IN-02).
+   *
+   * The order is part of the contract, not an accident of the driver: insurer,
+   * then product, then the most recent validity first. REQ-065 scopes an
+   * agreement to an insurer and a product, and REQ-124 keeps each validity as
+   * a record of its own, so the pair is what a reader looks for and the
+   * validities below it are its history.
+   *
+   * There is no filter. REQ-065 asks for the registry to be maintained and no
+   * requirement narrows the reading of it; the registry is small by nature,
+   * one row per insurer, product and validity.
+   */
+  list(): Promise<readonly CommissionAgreement[]>;
 }

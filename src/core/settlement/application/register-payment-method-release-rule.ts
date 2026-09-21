@@ -3,6 +3,10 @@ import {
   type ReleaseRule,
 } from '../domain/payment-method-release-rule.ts';
 import type { PaymentMethodReleaseRuleRepository } from './payment-method-release-rule-repository.ts';
+import {
+  type PaymentMethodReleaseRuleView,
+  toPaymentMethodReleaseRuleView,
+} from './payment-method-release-rule-view.ts';
 
 export interface RegisterPaymentMethodReleaseRuleInput {
   readonly paymentMethodId: string;
@@ -12,11 +16,6 @@ export interface RegisterPaymentMethodReleaseRuleInput {
 export interface RegisterPaymentMethodReleaseRuleDependencies {
   readonly releaseRules: PaymentMethodReleaseRuleRepository;
   readonly now: () => Date;
-}
-
-export interface PaymentMethodReleaseRuleView {
-  readonly paymentMethodId: string;
-  readonly release: string;
 }
 
 /**
@@ -41,6 +40,6 @@ export class RegisterPaymentMethodReleaseRule {
 
     await this.deps.releaseRules.save(rule);
 
-    return { paymentMethodId: rule.paymentMethodId, release: rule.release };
+    return toPaymentMethodReleaseRuleView(rule);
   }
 }

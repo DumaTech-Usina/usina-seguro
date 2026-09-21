@@ -1,3 +1,5 @@
+import type { Policy } from '../../policy/domain/policy.ts';
+import type { Proposal } from '../../proposal/domain/proposal.ts';
 import type { Commission } from '../domain/commission.ts';
 
 /**
@@ -91,5 +93,63 @@ export function toCommissionView(commission: Commission): CommissionView {
       brokerBaseAmount: basis.brokerBaseAmount.toString(),
       brokerRate: basis.brokerRate.toString(),
     },
+  };
+}
+
+/**
+ * One line of the consolidated panel of OUT-05.
+ *
+ * It answers the question the panel exists for — which policies agree with
+ * what was reported and which do not (REQ-076, CA-016, CA-017) — so it carries
+ * the pair and the flag, like `CommissionView`, and drops the basis, which is
+ * detail of a single policy.
+ *
+ * The commission knows the policy by id and nothing else, so what identifies
+ * the business to a human comes from the records that hold it: the number the
+ * insurer issued for the policy (REQ-020) and for the proposal (REQ-050), and
+ * the client, insurer and product references the proposal carries (REQ-022).
+ * Those references travel as they are stored: the registries of IN-01 are not
+ * modelled yet, so there is no name to resolve.
+ */
+export interface CommissionListItemView {
+  readonly policyId: string;
+  readonly policyNumber: string;
+  readonly proposalNumber: string | null;
+  readonly clientId: string;
+  readonly insurerId: string;
+  readonly productId: string;
+  readonly status: string;
+  readonly calculatedAt: string;
+  /** Calculated from the agreement, before any override (REQ-075). */
+  readonly agreedReceivable: string;
+  /** Agreed values actually in use, override included (REQ-066). */
+  readonly effectiveReceivable: string;
+  readonly effectivePayable: string;
+  /** Apurada na conciliacao (REQ-075); null until a report matches. */
+  readonly realReceivable: string | null;
+  readonly divergent: boolean;
+  readonly reconciledCompetence: string | null;
+}
+
+export function toCommissionListItemView(
+  commission: Commission,
+  policy: Policy,
+  proposal: Proposal,
+): CommissionListItemView {
+  return {
+    policyId: commission.policyId,
+    policyNumber: policy.policyNumber,
+    proposalNumber: proposal.proposalNumber,
+    clientId: proposal.clientId,
+    insurerId: proposal.insurerId,
+    productId: proposal.productId,
+    status: commission.status,
+    calculatedAt: commission.calculatedAt.toISOString(),
+    agreedReceivable: commission.agreedReceivable.toString(),
+    effectiveReceivable: commission.effectiveReceivable.toString(),
+    effectivePayable: commission.effectivePayable.toString(),
+    realReceivable: commission.realReceivable?.toString() ?? null,
+    divergent: commission.isDivergent,
+    reconciledCompetence: commission.reconciledCompetence,
   };
 }

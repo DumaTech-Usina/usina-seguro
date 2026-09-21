@@ -35,19 +35,37 @@ const NAV = [
         href: '/app/proposals/',
         ready: true,
       },
-      // OUT-03: same.
-      { id: 'policies', label: 'Apólices', icon: 'shield', href: '#', ready: false },
+      // OUT-03 and OUT-04 (REQ-055), as one listing with a renewal cut-off.
+      { id: 'policies', label: 'Apólices', icon: 'shield', href: '/app/policies/', ready: true },
     ],
   },
   {
     group: 'Financeiro',
     items: [
       // OUT-05.
-      { id: 'commissions', label: 'Comissões', icon: 'percent', href: '#', ready: false },
-      // OUT-06: the endpoint exists; the page does not.
-      { id: 'reconciliations', label: 'Conciliação', icon: 'sync_alt', href: '#', ready: false },
+      {
+        id: 'commissions',
+        label: 'Comissões',
+        icon: 'percent',
+        href: '/app/commissions/',
+        ready: true,
+      },
+      // FP-02 and OUT-06.
+      {
+        id: 'reconciliations',
+        label: 'Conciliação',
+        icon: 'sync_alt',
+        href: '/app/reconciliations/',
+        ready: true,
+      },
       // OUT-07.
-      { id: 'settlements', label: 'Repasses', icon: 'payments', href: '#', ready: false },
+      {
+        id: 'settlements',
+        label: 'Repasses',
+        icon: 'payments',
+        href: '/app/settlements/',
+        ready: true,
+      },
     ],
   },
   {

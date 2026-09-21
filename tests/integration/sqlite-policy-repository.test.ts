@@ -34,9 +34,9 @@ afterEach(() => {
   rmSync(directory, { recursive: true, force: true });
 });
 
-function transmittedProposal(): Proposal {
+function transmittedProposal(id = 'proposal-1', proposalNumber = 'PRP-9001'): Proposal {
   return Proposal.register({
-    id: 'proposal-1',
+    id,
     clientId: 'client-1',
     brokerId: 'broker-1',
     insurerId: 'insurer-1',
@@ -46,10 +46,42 @@ function transmittedProposal(): Proposal {
     netPremium: Money.fromString('1200.00'),
     registeredAt: new Date('2026-09-17T12:00:00.000Z'),
   }).transmit({
-    proposalNumber: 'PRP-9001',
+    proposalNumber,
     workedCommission: Percentage.fromString('32.5'),
     transmittedAt: new Date('2026-09-18T09:00:00.000Z'),
   });
+}
+
+/**
+ * A policy that renews on a given day, for the listing of OUT-03/OUT-04.
+ *
+ * Each one gets its own proposal because REQ-049 allows a single policy per
+ * proposal and the table enforces it.
+ */
+async function renewingOn(id: string, renewalDate: string): Promise<void> {
+  await proposals.save(transmittedProposal(`proposal-${id}`, `PRP-${id}`));
+
+  await policies.save(
+    Policy.register({
+      id,
+      proposalId: `proposal-${id}`,
+      policyNumber: `APL-${id}`,
+      premium: Money.fromString('1200.00'),
+      coverageStart: CalendarDate.fromString('2026-10-01'),
+      coverageEnd: CalendarDate.fromString(renewalDate),
+      renewalDate: CalendarDate.fromString(renewalDate),
+      registeredAt: new Date('2026-09-20T10:00:00.000Z'),
+      installments: [
+        Installment.create({
+          id: `${id}-installment-1`,
+          policyId: id,
+          number: 1,
+          amount: Money.fromString('1200.00'),
+          dueDate: CalendarDate.fromString('2026-10-10'),
+        }),
+      ],
+    }),
+  );
 }
 
 function policy(id = 'policy-1', proposalId = 'proposal-1', amounts = ['0.10', '0.20']): Policy {
@@ -237,6 +269,41 @@ describe('SqlitePolicyRepository', () => {
 
     expect(await policies.findById('policy-1')).toBeNull();
     expect(db.prepare('SELECT count(*) AS n FROM installment').get()).toEqual({ n: 0 });
+  });
+
+  it('lists the policies nearest renewal first, whatever the insertion order (OUT-03)', async () => {
+    await renewingOn('policy-mid', '2027-06-30');
+    await renewingOn('policy-last', '2027-09-30');
+    await renewingOn('policy-first', '2027-01-14');
+
+    const listing = await policies.list({});
+
+    expect(listing.map((item) => item.id)).toEqual(['policy-first', 'policy-mid', 'policy-last']);
+    // The listing carries whole policies, schedule included, like every other
+    // read of this repository.
+    expect(listing[0]?.installments.map((item) => item.number)).toEqual([1]);
+  });
+
+  it('cuts the listing at the informed renewal day, inclusive (OUT-04, CA-032)', async () => {
+    await renewingOn('policy-mid', '2027-06-30');
+    await renewingOn('policy-last', '2027-09-30');
+    await renewingOn('policy-first', '2027-01-14');
+
+    const upToMid = await policies.list({ renewalUntil: CalendarDate.fromString('2027-06-30') });
+    const beforeMid = await policies.list({
+      renewalUntil: CalendarDate.fromString('2027-06-29'),
+    });
+
+    expect(upToMid.map((item) => item.id)).toEqual(['policy-first', 'policy-mid']);
+    expect(beforeMid.map((item) => item.id)).toEqual(['policy-first']);
+  });
+
+  it('answers an empty listing when nothing renews until the informed day', async () => {
+    await renewingOn('policy-last', '2027-09-30');
+
+    const listing = await policies.list({ renewalUntil: CalendarDate.fromString('2026-12-31') });
+
+    expect(listing).toEqual([]);
   });
 
   it('keeps the data after closing and reopening the connection', async () => {

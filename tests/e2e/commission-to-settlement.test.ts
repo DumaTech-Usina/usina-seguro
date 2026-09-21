@@ -106,11 +106,66 @@ interface CommissionBody {
   divergent: boolean;
 }
 
+/** One line of the panel of OUT-05, as `GET /commissions` answers it. */
+interface CommissionPanelLine {
+  policyId: string;
+  policyNumber: string;
+  proposalNumber: string | null;
+  insurerId: string;
+  status: string;
+  effectiveReceivable: string;
+  realReceivable: string | null;
+  divergent: boolean;
+}
+
+/** The statement of OUT-07, as `GET /broker-commission-statements` answers it. */
+interface BrokerStatementBody {
+  brokerId: string | null;
+  lines: readonly {
+    policyId: string;
+    policyNumber: string;
+    proposalNumber: string | null;
+    clientId: string;
+    brokerId: string;
+    payable: string;
+    commissionStatus: string;
+    divergent: boolean;
+    settlement: { status: string; amount: string; payment: { amount: string } | null } | null;
+  }[];
+  totals: { payable: string; awaitingConfirmation: string; released: string; paid: string };
+}
+
 interface SettlementBody {
   status: string;
   amount: string;
   brokerId: string;
   payment: { amount: string; proofReference: string; userId: string } | null;
+}
+
+/** One agreement, as `GET /commission-agreements` answers it (IN-02). */
+interface AgreementBody {
+  id: string;
+  insurerId: string;
+  productId: string;
+  effectiveFrom: string;
+  insurerRate: string;
+  chain: string;
+  intermediaryId: string | null;
+  intermediaryRate: string | null;
+  brokerBase: string;
+  registeredAt: string;
+}
+
+interface BrokerRateBody {
+  brokerId: string;
+  rate: string;
+  registeredAt: string;
+}
+
+interface ReleaseRuleBody {
+  paymentMethodId: string;
+  release: string;
+  registeredAt: string;
 }
 
 interface ReportBody {
@@ -375,6 +430,77 @@ describe('divergences and pendencies', () => {
     });
   });
 
+  it('lists the panel of every policy and narrows it by state (OUT-05)', async () => {
+    await sellPolicy({
+      paymentMethodId: 'credit',
+      proposalNumber: 'PRP-400',
+      policyNumber: 'APL-400',
+    });
+    await post('/commission-reconciliations', {
+      competence: '2026-10',
+      lines: [{ policyNumber: 'APL-400', proposalNumber: 'PRP-400', producerCommission: '33.00' }],
+    });
+
+    const panel = await json<readonly CommissionPanelLine[]>(await fetch(`${baseUrl}/commissions`));
+    const line = panel.find((entry) => entry.policyNumber === 'APL-400');
+
+    // CA-016: the pair and the flag, with what identifies the business.
+    expect(line?.effectiveReceivable).toBe('40.00');
+    expect(line?.realReceivable).toBe('33.00');
+    expect(line?.divergent).toBe(true);
+    expect(line?.proposalNumber).toBe('PRP-400');
+    expect(line?.insurerId).toBe('insurer-1');
+
+    const divergent = await json<readonly CommissionPanelLine[]>(
+      await fetch(`${baseUrl}/commissions?status=DIVERGENT`),
+    );
+    expect(divergent.map((entry) => entry.policyNumber)).toContain('APL-400');
+    expect(divergent.every((entry) => entry.status === 'DIVERGENT')).toBe(true);
+  });
+
+  it('refuses a state the machine of section 10.5 does not have', async () => {
+    // Shape validation: an unknown state is a 400, never an empty panel that
+    // reads as "nothing diverges".
+    const response = await fetch(`${baseUrl}/commissions?status=WHATEVER`);
+
+    expect(response.status).toBe(400);
+  });
+
+  it('answers the statement of a broker with its totals (OUT-07)', async () => {
+    const policy = await sellPolicy({
+      paymentMethodId: 'credit',
+      proposalNumber: 'PRP-500',
+      policyNumber: 'APL-500',
+    });
+    await post('/commission-reconciliations', {
+      competence: '2026-10',
+      lines: [{ policyNumber: 'APL-500', proposalNumber: 'PRP-500', producerCommission: '40.00' }],
+    });
+    await post(`/policies/${policy.id}/settlement`);
+
+    const statement = await json<BrokerStatementBody>(
+      await fetch(`${baseUrl}/broker-commission-statements?brokerId=broker-1`),
+    );
+    const line = statement.lines.find((entry) => entry.policyId === policy.id);
+
+    expect(statement.brokerId).toBe('broker-1');
+    // REQ-093 on the line, and the transfer of FP-03 beside it.
+    expect(line?.payable).toBe('20.00');
+    expect(line?.settlement?.status).toBe('RELEASED');
+    expect(line?.proposalNumber).toBe('PRP-500');
+    // REQ-120: the totals travel as decimal strings, like every amount.
+    expect(statement.totals.payable).toMatch(/^\d+\.\d{2}$/);
+  });
+
+  it('answers an empty statement for a broker with no business, not a 404', async () => {
+    const statement = await json<BrokerStatementBody>(
+      await fetch(`${baseUrl}/broker-commission-statements?brokerId=corretor-inexistente`),
+    );
+
+    expect(statement.lines).toEqual([]);
+    expect(statement.totals.payable).toBe('0.00');
+  });
+
   it('answers 404 for a policy with no commission (REQ-070)', async () => {
     const response = await fetch(`${baseUrl}/policies/ghost/commission`);
 
@@ -389,5 +515,113 @@ describe('divergences and pendencies', () => {
     });
 
     expect(response.status).toBe(400);
+  });
+});
+
+/**
+ * IN-02, IN-05 and IN-06 read back over HTTP.
+ *
+ * `seedRegistries` above registered them; these are the parameters every
+ * calculation in this file ran on, and REQ-061/REQ-125 make them data rather
+ * than code. Until these routes existed nothing could read them back, so a
+ * wrong percentage was only visible in the commission it had already produced.
+ */
+describe('the registries the Administrator maintains', () => {
+  it('answers the agreements registered, by insurer and product (IN-02)', async () => {
+    const listed = await json<AgreementBody[]>(await fetch(`${baseUrl}/commission-agreements`));
+
+    const auto = listed.find(
+      (agreement) => agreement.insurerId === 'insurer-1' && agreement.productId === 'auto',
+    );
+
+    expect(auto?.insurerRate).toBe('40');
+    // REQ-060, REQ-062: no intermediary was registered for this relation.
+    expect(auto?.chain).toBe('DIRECT');
+    expect(auto?.intermediaryId).toBeNull();
+    expect(auto?.brokerBase).toBe('USINA');
+    expect(auto?.effectiveFrom).toBe('2026-01-01');
+    expect(auto?.registeredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('answers a registration and a reading in the same shape', async () => {
+    const registered = await json<AgreementBody>(
+      await post('/commission-agreements', {
+        insurerId: 'insurer-shape',
+        productId: 'vida',
+        effectiveFrom: '2026-03-01',
+        insurerRate: '37.25',
+        intermediary: { intermediaryId: 'mega', intermediaryRate: '80', brokerBase: 'USINA' },
+      }),
+    );
+
+    const listed = await json<AgreementBody[]>(await fetch(`${baseUrl}/commission-agreements`));
+    const found = listed.find((agreement) => agreement.insurerId === 'insurer-shape');
+
+    expect(found).toEqual(registered);
+    // REQ-121: the scale the administrator informed survives the round trip.
+    expect(found?.insurerRate).toBe('37.25');
+    expect(found?.chain).toBe('INTERMEDIARY');
+    expect(found?.brokerBase).toBe('USINA');
+  });
+
+  it('does not list a corrected validity twice (REQ-065, REQ-124)', async () => {
+    await post('/commission-agreements', {
+      insurerId: 'insurer-fix',
+      productId: 'auto',
+      effectiveFrom: '2026-01-01',
+      insurerRate: '40',
+    });
+    await post('/commission-agreements', {
+      insurerId: 'insurer-fix',
+      productId: 'auto',
+      effectiveFrom: '2026-01-01',
+      insurerRate: '42',
+    });
+
+    const listed = await json<AgreementBody[]>(await fetch(`${baseUrl}/commission-agreements`));
+    const fixed = listed.filter((agreement) => agreement.insurerId === 'insurer-fix');
+
+    expect(fixed).toHaveLength(1);
+    expect(fixed[0]?.insurerRate).toBe('42');
+  });
+
+  it('answers the broker commission table (IN-05, REQ-093)', async () => {
+    const listed = await json<BrokerRateBody[]>(await fetch(`${baseUrl}/broker-commission-rates`));
+
+    expect(listed.find((rate) => rate.brokerId === 'broker-1')?.rate).toBe('50');
+    // One rate per broker: the table has no second dimension.
+    expect(listed.filter((rate) => rate.brokerId === 'broker-1')).toHaveLength(1);
+  });
+
+  it('answers the release rule of each payment method, and no other (IN-06)', async () => {
+    const listed = await json<ReleaseRuleBody[]>(
+      await fetch(`${baseUrl}/payment-method-release-rules`),
+    );
+
+    expect(listed.find((rule) => rule.paymentMethodId === 'credit')?.release).toBe('IMMEDIATE');
+    expect(listed.find((rule) => rule.paymentMethodId === 'bank-slip')?.release).toBe(
+      'REQUIRES_RECEIPT_CONFIRMATION',
+    );
+    // DEC-002: Pix has no rule, and the listing does not invent one to show.
+    expect(listed.some((rule) => rule.paymentMethodId === 'pix')).toBe(false);
+  });
+
+  it('shows a release rule changed by configuration, not by code (CA-024)', async () => {
+    await post('/payment-method-release-rules', {
+      paymentMethodId: 'pagamento-novo',
+      release: 'IMMEDIATE',
+    });
+    await post('/payment-method-release-rules', {
+      paymentMethodId: 'pagamento-novo',
+      release: 'REQUIRES_RECEIPT_CONFIRMATION',
+    });
+
+    const listed = await json<ReleaseRuleBody[]>(
+      await fetch(`${baseUrl}/payment-method-release-rules`),
+    );
+    const changed = listed.filter((rule) => rule.paymentMethodId === 'pagamento-novo');
+
+    expect(changed).toHaveLength(1);
+    expect(changed[0]?.release).toBe('REQUIRES_RECEIPT_CONFIRMATION');
   });
 });

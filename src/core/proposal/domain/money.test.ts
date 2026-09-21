@@ -17,6 +17,21 @@ describe('Money (REQ-120)', () => {
     expect(Number(Money.fromString('0.30').toString())).toBe(0.3);
   });
 
+  it('adds amounts exactly, on cents (OUT-07)', () => {
+    // The sum a statement shows is money, so it never goes through a float.
+    expect(Money.fromString('0.10').plus(Money.fromString('0.20')).toString()).toBe('0.30');
+    expect(Money.fromString('1234.56').plus(Money.fromString('0.44')).toString()).toBe('1235.00');
+    expect(Money.zero().plus(Money.fromString('20.00')).toString()).toBe('20.00');
+    expect(Money.zero().toString()).toBe('0.00');
+  });
+
+  it('keeps the operand untouched when adding', () => {
+    const amount = Money.fromString('10.00');
+    amount.plus(Money.fromString('5.00'));
+
+    expect(amount.toString()).toBe('10.00');
+  });
+
   it('rejects a value with more places than the scale supports, instead of rounding', () => {
     expect(() => Money.fromString('10.005')).toThrow(BusinessRuleViolation);
   });

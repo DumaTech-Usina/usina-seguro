@@ -13,4 +13,11 @@ export class InMemoryPaymentMethodReleaseRuleRepository
   async findByPaymentMethodId(paymentMethodId: string): Promise<PaymentMethodReleaseRule | null> {
     return this.records.get(paymentMethodId) ?? null;
   }
+
+  /** IN-06, by payment method. Code-unit order, as SQLite orders `TEXT`. */
+  async list(): Promise<readonly PaymentMethodReleaseRule[]> {
+    return [...this.records.values()].sort((a, b) =>
+      a.paymentMethodId < b.paymentMethodId ? -1 : 1,
+    );
+  }
 }

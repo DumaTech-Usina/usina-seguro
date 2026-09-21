@@ -1,10 +1,28 @@
-/*
- * Controle de apolices (OUT-03) e apolices a vencer (OUT-04)
- *
- * Lista das apolices vendidas com vigencia e situacao (REQ-020), e a listagem por
- * data de renovacao que REQ-055 pede, para a operacao ver o que vence.
- *
- * Cada linha leva a /app/policies/detail.html, que ja existe.
- *
- * Bloqueio: GET /policies (listagem, filtro por vigencia e por data de renovacao) nao existe.
- */
+/* Only what this page adds to the design system. */
+
+.renewal-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.renewal-field {
+  min-width: 220px;
+}
+
+.renewal-hint {
+  flex: 1 1 320px;
+  margin: 0;
+}
+
+.policy-number {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+/* REQ-055: a data de renovação é o eixo da listagem, e o olho tem de achá-la. */
+.renewal {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}

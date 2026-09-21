@@ -1,4 +1,22 @@
 /*
- * This page needs nothing beyond the design system: three forms in cards.
- * Kept as a file of its own so every page has the same three-file shape.
+ * The forms need nothing beyond the design system. What this page adds is the
+ * region under each form that shows what is already registered.
  */
+
+.registry {
+  border-top: 1px solid var(--outline-variant);
+  padding: var(--space-4) var(--space-6) var(--space-6);
+}
+
+.registry__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+/* The identifier the business uses: read character by character, not as prose. */
+.registry-key {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}

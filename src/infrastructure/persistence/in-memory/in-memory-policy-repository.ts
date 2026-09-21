@@ -1,4 +1,7 @@
-import type { PolicyRepository } from '../../../core/policy/application/policy-repository.ts';
+import type {
+  PolicyListFilter,
+  PolicyRepository,
+} from '../../../core/policy/application/policy-repository.ts';
 import type { Policy } from '../../../core/policy/domain/policy.ts';
 
 /**
@@ -26,6 +29,24 @@ export class InMemoryPolicyRepository implements PolicyRepository {
 
   async findByProposalId(proposalId: string): Promise<Policy | null> {
     return this.find((policy) => policy.proposalId === proposalId);
+  }
+
+  /** OUT-03, OUT-04: nearest renewal first, as the port requires. */
+  async list(filter: PolicyListFilter): Promise<readonly Policy[]> {
+    const { renewalUntil } = filter;
+
+    return [...this.records.values()]
+      .filter(
+        (policy) =>
+          renewalUntil === undefined ||
+          // CA-032: the informed day is inside the window, not one day short.
+          policy.renewalDate.isBefore(renewalUntil) ||
+          policy.renewalDate.equals(renewalUntil),
+      )
+      .sort((a, b) => {
+        const byRenewal = a.renewalDate.toString().localeCompare(b.renewalDate.toString());
+        return byRenewal === 0 ? a.id.localeCompare(b.id) : byRenewal;
+      });
   }
 
   private find(matches: (policy: Policy) => boolean): Policy | null {
