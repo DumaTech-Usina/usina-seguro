@@ -86,3 +86,15 @@
 .proof-link .material-symbols-outlined {
   font-size: 16px;
 }
+
+/*
+ * Dois caminhos no mesmo estado vazio: calcular a comissão agora ou ir aos
+ * cadastros antes. `.empty` empilha os filhos; aqui eles ficam lado a lado,
+ * e quebram a linha em tela estreita.
+ */
+.empty__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}

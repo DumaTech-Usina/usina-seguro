@@ -250,7 +250,9 @@ describe('FP-01 through the web interface', () => {
       expect.arrayContaining([expect.stringContaining('PRP-OPEN-1')]),
     );
     expect(rows.some((row) => row.textContent?.includes('client-draft'))).toBe(false);
-    expect(text('#list')).toContain('Transmitida');
+    // REQ-041: the state reads as the act it records — the insurer issued the
+    // proposal. The stored value is still `TRANSMITTED` (see `proposal.ts`).
+    expect(text('#list')).toContain('Emitida');
 
     // Each row reaches the record it lists.
     const open = document.querySelector('#list tbody a.btn');

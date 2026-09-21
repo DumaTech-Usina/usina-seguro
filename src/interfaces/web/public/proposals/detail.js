@@ -371,7 +371,7 @@ function header() {
   const text = element('div', 'page-head__text');
   text.append(
     element('h1', 'text-display', 'Proposta'),
-    element('p', 'text-muted', 'Registro, transmissão à seguradora e desfecho — aceite ou recusa.'),
+    element('p', 'text-muted', 'Registro, emissão pela seguradora e desfecho — aceite ou recusa.'),
   );
   const actions = element('div', 'page-head__actions');
   actions.append(link('Ver propostas', '/app/proposals/'));

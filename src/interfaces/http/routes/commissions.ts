@@ -155,6 +155,26 @@ export function registerCommissionRoutes(app: FastifyInstance, useCases: UseCase
   });
 
   // IN-14, FA-07, REQ-066: extraordinary agreement on a single policy.
+  /**
+   * FP-01 step 7, run on demand (REQ-075).
+   *
+   * The commission normally appears with the policy. This is for the policy
+   * that was registered before the commercial agreement or the broker table
+   * existed: without it that policy could never have one, because nothing
+   * else creates a commission and REQ-124 forbids deleting the record.
+   *
+   * There is no body: everything the calculation needs is already stored.
+   */
+  app.post(
+    '/policies/:id/commission',
+    { schema: { params: policyIdParams } },
+    async (request, reply) => {
+      const { id } = request.params as PolicyIdParams;
+      const output = await useCases.calculatePolicyCommission.execute({ policyId: id });
+      return reply.code(201).send(output);
+    },
+  );
+
   app.post('/policies/:id/commission/override', { schema: overrideSchema }, async (request) => {
     const { id } = request.params as PolicyIdParams;
     const body = request.body as {

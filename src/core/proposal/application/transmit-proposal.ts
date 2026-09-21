@@ -6,7 +6,7 @@ export interface TransmitProposalInput {
   readonly proposalId: string;
   /** Number issued by the insurer (glossary 5.1, REQ-022). */
   readonly proposalNumber: string;
-  /** Worked commission informed in the act of transmission (REQ-041). */
+  /** Worked commission the insurer informed when it issued it (REQ-041). */
   readonly workedCommission: string;
 }
 
@@ -24,7 +24,12 @@ export interface TransmitProposalDependencies {
 }
 
 /**
- * FP-01, step 4: transmits the proposal to the insurer (REQ-041, REQ-042).
+ * FP-01, step 4: records that the insurer issued the proposal, with the
+ * number and the worked commission it handed back (REQ-041, REQ-042).
+ *
+ * The Usina does not produce either value — it registers what came back
+ * (REQ-002). The insurer returns more fields than these two; inventorying them
+ * is `DEC-015`.
  *
  * The transition rules live in `Proposal.transmit`; the use case only loads,
  * delegates and persists.

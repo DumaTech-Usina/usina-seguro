@@ -239,16 +239,29 @@ function commissionCard(policy, commission) {
   const body = element('div', 'card__body stack');
 
   if (commission === null) {
+    // Estado válido do ciclo de vida, não corrupção: a apólice pode ter sido
+    // registrada antes do acordo comercial ou da tabela do corretor. O que a
+    // tela precisa dizer é o que falta e qual é a ação — REQ-124 impede
+    // apagar a apólice para recomeçar, então o caminho é calcular aqui.
+    const actions = element('div', 'empty__actions');
+    actions.append(
+      button('Calcular comissão', {
+        variant: 'filled',
+        iconName: 'calculate',
+        onClick: () =>
+          perform(() => api.calculatePolicyCommission(policy.id), 'Comissão calculada.'),
+      }),
+    );
+    const link = element('a', 'btn btn--outlined', 'Abrir cadastros');
+    link.href = '/app/settings/';
+    actions.append(link);
+
     body.append(
       emptyState(
         'price_change',
-        'Nenhuma comissão calculada',
-        'A apólice foi registrada sem acordo comercial vigente ou sem tabela do corretor. Cadastre-os e registre um novo negócio.',
-        (() => {
-          const link = element('a', 'btn btn--outlined', 'Abrir cadastros');
-          link.href = '/app/settings/';
-          return link;
-        })(),
+        'Comissão ainda não calculada',
+        'A apólice existe e continua válida. A comissão é calculada pelo acordo comercial vigente na data de registro da apólice e pela tabela do corretor — se algum deles faltava naquele momento, cadastre-o e calcule aqui.',
+        actions,
       ),
     );
     section.append(body);

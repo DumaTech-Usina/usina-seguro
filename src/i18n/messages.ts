@@ -44,16 +44,16 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'proposal.field_required': 'Proposta exige o campo {field}.',
     'proposal.net_premium_must_be_positive': 'Prêmio líquido da proposta deve ser positivo.',
     'proposal.proposal_number_required':
-      'Transmissão exige o número da proposta emitido pela seguradora.',
+      'Registro da emissão exige o número da proposta emitido pela seguradora.',
     'proposal.proposal_number_already_registered':
       "Número de proposta '{proposalNumber}' já registrado em outra proposta.",
     'proposal.only_draft_can_be_transmitted':
-      'Somente proposta em rascunho pode ser transmitida. Estado atual: {status}.',
+      'Somente proposta em rascunho pode receber a emissão da seguradora. Estado atual: {status}.',
     'proposal.only_transmitted_can_be_rejected':
-      'Somente proposta transmitida pode ser recusada. Estado atual: {status}.',
+      'Somente proposta emitida pela seguradora pode ser recusada. Estado atual: {status}.',
     'proposal.rejection_reason_required': 'Recusa de proposta exige motivo.',
     'proposal.only_transmitted_can_be_accepted':
-      'Apólice exige proposta transmitida. Estado atual: {status}.',
+      'Apólice exige proposta emitida pela seguradora. Estado atual: {status}.',
     'proposal.rejected_cannot_originate_policy': 'Proposta recusada não origina apólice.',
     'proposal.already_has_policy': 'Proposta já possui apólice registrada.',
     'proposal.not_found': "Proposta não encontrada: '{id}'.",
@@ -88,6 +88,14 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'commission.broker_rate_field_required':
       'Tabela de comissão do corretor exige o campo {field}.',
     'commission.not_found': "Apólice '{policyId}' não possui comissão calculada.",
+    'commission.already_calculated':
+      'Apólice já possui comissão calculada. Use o ajuste por apólice para alterá-la.',
+    'commission.no_agreement_in_force':
+      "Não há acordo comercial vigente para a seguradora '{insurerId}' e o produto " +
+      "'{productId}' em {on}, data de registro da apólice. Registre o acordo com vigência " +
+      'a partir dessa data, ou anterior.',
+    'commission.no_broker_rate':
+      "Não há tabela de comissão registrada para o corretor '{brokerId}'.",
     'commission.override_justification_required':
       'Ajuste de comissão por apólice exige justificativa.',
     'commission.override_user_required':

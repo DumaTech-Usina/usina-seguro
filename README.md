@@ -8,7 +8,8 @@ documento.
 
 > **Estado atual: `Proposta → Apólice → Parcela → Comissão → Conciliação → Repasse`,
 > com `Notificação` fechando o passo 7 de `FP-01`.**
-> `FP-01` vai do registro da proposta (`REQ-040`), passa pelo rastreio das propostas em
+> `FP-01` vai do registro da proposta (`REQ-040`), passa pela emissão devolvida pela
+> seguradora (`REQ-041`) e pelo rastreio das propostas em
 > aberto (`REQ-043`, `OUT-01`, passo 5) e chega, no momento em que a apólice nasce, ao
 > cálculo da comissão acordada e à **notificação do corretor** (`REQ-048`, `REQ-075`,
 > `REQ-100`, passo 7). `FP-02` concilia o relatório de comissionamento contra as
@@ -100,7 +101,8 @@ curl -X POST http://127.0.0.1:3000/proposals -H 'content-type: application/json'
 }'
 # 201 {"id":"<proposta>","status":"DRAFT","netPremium":"1200.00","registeredAt":"..."}
 
-# 2. Transmitir à seguradora, com número e comissão trabalhada (REQ-041)
+# 2. Registrar a emissão pela seguradora: ela devolve o número e a comissão
+#    trabalhada (REQ-041). A Usina não produz esses valores, registra o que veio.
 curl -X POST http://127.0.0.1:3000/proposals/<proposta>/transmission \
   -H 'content-type: application/json' \
   -d '{"proposalNumber":"PRP-9001","workedCommission":"32.5"}'
@@ -315,9 +317,9 @@ O que existe hoje:
 | Tela | Rota | Estado |
 |------|------|--------|
 | Início | `/app/` | Pronta |
-| Nova proposta (`FP-01` passos 3 e 4) | `/app/proposals/new.html` | Pronta |
+| Nova proposta e emissão pela seguradora (`FP-01` passos 3 e 4) | `/app/proposals/new.html` | Pronta |
 | Propostas, por estado (`OUT-01`, `OUT-02`, passo 5) | `/app/proposals/` | Pronta |
-| Proposta: dados e desfecho — aceite vira apólice, recusa exige motivo (passo 6) | `/app/proposals/detail.html?id=…` | Pronta |
+| Proposta: dados, emissão e desfecho — aceite vira apólice, recusa exige motivo (passo 6) | `/app/proposals/detail.html?id=…` | Pronta |
 | Apólice: parcelas, comissão acordada × real, repasse | `/app/policies/detail.html?id=…` | Pronta — o pagamento do repasse leva o comprovante como anexo (`REQ-095`) |
 | Conciliação do comissionamento (`FP-02`, `OUT-06`) | `/app/reconciliations/` | Pronta — as linhas são digitadas; o arquivo é `DEC-001` |
 | Comissões: acordado × real de todas as apólices (`OUT-05`) | `/app/commissions/` | Pronta |
@@ -326,7 +328,8 @@ O que existe hoje:
 | Apólices: vendidas e a vencer (`OUT-03`, `OUT-04`) | `/app/policies/` | Pronta — o corte por data de renovação é informado pelo operador (`CA-032` não define a janela) |
 | Notificações de emissão efetivada (`OUT-10`, `REQ-100`) | `/app/notifications/` | Pronta — só leitura; a entrega é interna (`REQ-102`) |
 
-O caminho completo pela interface: **nova proposta → transmitir → a proposta aparece em
+O caminho completo pela interface: **nova proposta → registrar a emissão da seguradora →
+a proposta aparece em
 _Propostas / Em aberto_ → abrir → registrar a apólice (ou a recusa) → abrir a apólice**.
 Depois disso a apólice fica encontrável por conta própria, em _Apólices_, e o corretor
 encontra em _Notificações_ o que lhe foi comunicado sobre a emissão (`REQ-100`) — com o

@@ -14,7 +14,9 @@ const NEUTRAL = { label: '—', tone: 'neutral' };
 
 const PROPOSAL = {
   DRAFT: { label: 'Rascunho', tone: 'neutral' },
-  TRANSMITTED: { label: 'Transmitida', tone: 'info' },
+  // REQ-041: o ato registrado é a emissão da proposta pela seguradora. O
+  // identificador do estado continua `TRANSMITTED` — ver a nota no agregado.
+  TRANSMITTED: { label: 'Emitida', tone: 'info' },
   ACCEPTED: { label: 'Aceita', tone: 'success' },
   REJECTED: { label: 'Recusada', tone: 'danger' },
   CANCELLED: { label: 'Cancelada', tone: 'neutral' },

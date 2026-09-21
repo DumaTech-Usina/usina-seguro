@@ -5,6 +5,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Config } from './config/config.ts';
 import type { BrokerCommissionRateRepository } from './core/commission/application/broker-commission-rate-repository.ts';
 import { CalculateAgreedCommission } from './core/commission/application/calculate-agreed-commission.ts';
+import { CalculatePolicyCommission } from './core/commission/application/calculate-policy-commission.ts';
 import type { CommissionAgreementRepository } from './core/commission/application/commission-agreement-repository.ts';
 import type { CommissionRepository } from './core/commission/application/commission-repository.ts';
 import { GetCommission } from './core/commission/application/get-commission.ts';
@@ -96,6 +97,7 @@ export interface UseCases {
   readonly listCommissionAgreements: ListCommissionAgreements;
   readonly listBrokerCommissionRates: ListBrokerCommissionRates;
   readonly getCommission: GetCommission;
+  readonly calculatePolicyCommission: CalculatePolicyCommission;
   readonly listCommissions: ListCommissions;
   readonly overrideCommission: OverrideCommission;
   readonly resolveCommissionDivergence: ResolveCommissionDivergence;
@@ -204,6 +206,16 @@ export function composeApplication(config: Config): Application {
       listCommissionAgreements: new ListCommissionAgreements({ agreements, references }),
       listBrokerCommissionRates: new ListBrokerCommissionRates({ brokerRates }),
       getCommission: new GetCommission({ commissions }),
+      // FP-01 step 7 reached by hand: a policy registered before the
+      // registries existed has no other way back to a commission.
+      calculatePolicyCommission: new CalculatePolicyCommission({
+        policies,
+        proposals,
+        commissions,
+        agreements,
+        brokerRates,
+        agreedCommission,
+      }),
       listCommissions: new ListCommissions({ commissions, policies, proposals, references }),
       overrideCommission: new OverrideCommission({ commissions, now }),
       resolveCommissionDivergence: new ResolveCommissionDivergence({ commissions, now }),

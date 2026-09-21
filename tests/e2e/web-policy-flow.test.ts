@@ -209,6 +209,18 @@ function clickIn(title: string, label: string): void {
 }
 
 /** Fills the dialog the page just opened and confirms it, or cancels it. */
+/**
+ * The labels a card offers, buttons and links alike.
+ *
+ * The icon of a button is a `<span>` inside it, so `textContent` reads
+ * `tuneAjustar comissão`; what the operator sees is the tail.
+ */
+function offeredIn(title: string): string[] {
+  return [...card(title).querySelectorAll('button, a')].map((node: Untyped) =>
+    (node.textContent ?? '').replace(/^[a-z_]+/, '').trim(),
+  );
+}
+
 function answerDialog(id: string, values: Record<string, string>): void {
   const dialog = document.querySelector(id);
   expect(dialog.open, `${id} should be open`).toBe(true);
@@ -544,5 +556,134 @@ describe('the policy screen', () => {
     expect(text()).toContain('Apólice não encontrada');
     // The sentence is the one src/i18n rendered for the 404.
     expect(text()).toContain('does-not-exist');
+  });
+});
+
+/**
+ * The state the product's own front door leads to: a policy registered before
+ * anybody filled in the registries.
+ *
+ * It used to be terminal. The screen said the policy had no commission and
+ * told the operator to register a new business — and REQ-124 forbids deleting
+ * the one that is there. This group walks the way out, entirely through the
+ * page: see what is missing, fix the registry, calculate, and carry on into
+ * FP-03 on the same policy.
+ */
+describe('a policy that reached the screen without a commission', () => {
+  const numbers = { proposalNumber: 'PRP-LATE-1', policyNumber: 'APL-LATE-1' };
+  let policyId: string;
+
+  it('shows the absence as a step of the flow, with the action to take', async () => {
+    // A business whose insurer and product have no agreement registered.
+    const proposal = await callApi('POST', '/proposals', {
+      clientId: 'client-1',
+      brokerId: 'broker-late',
+      insurerId: 'insurer-late',
+      productId: 'residencial',
+      paymentMethodId: 'credit',
+      customerAccepted: true,
+      netPremium: '100.00',
+    });
+    await callApi('POST', `/proposals/${proposal.id}/transmission`, {
+      proposalNumber: numbers.proposalNumber,
+      workedCommission: '40',
+    });
+    const policy = await callApi('POST', '/policies', {
+      proposalId: proposal.id,
+      policyNumber: numbers.policyNumber,
+      premium: '100.00',
+      coverageStart: '2026-10-01',
+      coverageEnd: '2027-09-30',
+      renewalDate: '2027-09-30',
+      installments: [{ number: 1, amount: '100.00', dueDate: '2026-10-10' }],
+    });
+    policyId = policy.id;
+
+    await openPolicy(policyId);
+
+    // Not an error and not corruption: a stage of the life of the policy.
+    expect(card('Comissão').textContent).toContain('Comissão ainda não calculada');
+    expect(card('Comissão').textContent).toContain('A apólice existe e continua válida');
+    // And the way out is offered right there.
+    expect(offeredIn('Comissão')).toContain('Calcular comissão');
+    expect(offeredIn('Comissão')).toContain('Abrir cadastros');
+  });
+
+  it('refuses in Portuguese, naming the registry that is missing (REQ-065)', async () => {
+    await openPolicy(policyId);
+    clickIn('Comissão', 'Calcular comissão');
+
+    await vi.waitFor(() => {
+      expect(lastSnackbar()).toContain('REQ-065');
+    });
+    expect(lastSnackbar()).toContain('insurer-late');
+    expect(lastSnackbar()).toContain('residencial');
+
+    // The refusal changed nothing: the policy is where it was.
+    expect(card('Comissão').textContent).toContain('Comissão ainda não calculada');
+  });
+
+  it('calculates it from the screen once the registry exists, without recreating anything', async () => {
+    await callApi('POST', '/commission-agreements', {
+      insurerId: 'insurer-late',
+      productId: 'residencial',
+      effectiveFrom: '2026-01-01',
+      insurerRate: '40',
+    });
+    await callApi('POST', '/broker-commission-rates', { brokerId: 'broker-late', rate: '50' });
+
+    await openPolicy(policyId);
+    clickIn('Comissão', 'Calcular comissão');
+
+    await vi.waitFor(() => {
+      expect(card('Comissão').textContent).toContain('R$ 40,00');
+    });
+    // REQ-093: what the Usina owes the broker came out with it.
+    expect(card('Comissão').textContent).toContain('R$ 20,00');
+    expect(statusIn('Comissão')).toBe('Prevista');
+    expect(requests).toContain(`POST /policies/${policyId}/commission`);
+
+    // Same policy, same number: nothing was recreated along the way.
+    const policy = await callApi('GET', `/policies/${policyId}`);
+    expect(policy.policyNumber).toBe(numbers.policyNumber);
+  });
+
+  it('carries the same policy through FP-03 to the payment', async () => {
+    await reconciled(numbers, '40.00');
+    await callApi('POST', '/payment-method-release-rules', {
+      paymentMethodId: 'credit',
+      release: 'IMMEDIATE',
+    });
+
+    await openPolicy(policyId);
+    clickIn('Repasse ao corretor', 'Abrir repasse');
+
+    await vi.waitFor(() => {
+      expect(statusIn('Repasse ao corretor')).toBe('Liberado');
+    });
+
+    clickIn('Repasse ao corretor', 'Registrar pagamento');
+    attachProof('#dialog-payment', 'comprovante-late.pdf', 'application/pdf');
+    answerDialog('#dialog-payment', { amount: '20.00', userId: 'fin-3' });
+
+    await vi.waitFor(() => {
+      expect(statusIn('Repasse ao corretor')).toBe('Pago');
+    });
+
+    // The commission and the transfer coexist on the policy that started
+    // without either of them.
+    const commission = await callApi('GET', `/policies/${policyId}/commission`);
+    const settlement = await callApi('GET', `/policies/${policyId}/settlement`);
+    expect(commission.policyId).toBe(policyId);
+    expect(settlement.policyId).toBe(policyId);
+    expect(settlement.payment).toMatchObject({ amount: '20.00', userId: 'fin-3' });
+  });
+
+  it('does not offer the calculation once the commission exists (REQ-124)', async () => {
+    await openPolicy(policyId);
+
+    expect(offeredIn('Comissão')).not.toContain('Calcular comissão');
+    // What changes a calculated value is the override, which records why.
+    expect(offeredIn('Comissão')).toContain('Ajustar comissão');
   });
 });

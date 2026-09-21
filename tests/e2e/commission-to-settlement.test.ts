@@ -798,3 +798,110 @@ describe('the reference registry (IN-01)', () => {
     await post('/references', { kind: 'CLIENT', id: 'client-1', name: 'Ana Lima' });
   });
 });
+
+/**
+ * FP-01 step 7 asked for by hand, over real HTTP (REQ-075).
+ *
+ * The policy of this group is registered before any registry exists, which is
+ * the state the operator reaches by following the product's own front door.
+ * What it proves is that the state is recoverable: the policy is not
+ * recreated, and the refusals along the way say what is missing.
+ */
+describe('calculating the commission of a policy that has none', () => {
+  let orphanId: string;
+
+  async function registerOrphan(): Promise<string> {
+    const proposal = await json<{ id: string }>(
+      await post('/proposals', {
+        clientId: 'client-late',
+        brokerId: 'broker-late',
+        insurerId: 'insurer-late',
+        productId: 'vida',
+        paymentMethodId: 'credit',
+        customerAccepted: true,
+        netPremium: '200.00',
+      }),
+    );
+    await post(`/proposals/${proposal.id}/transmission`, {
+      proposalNumber: 'PRP-LATE',
+      workedCommission: '30',
+    });
+    const policy = await json<{ id: string }>(
+      await post('/policies', {
+        proposalId: proposal.id,
+        policyNumber: 'APL-LATE',
+        premium: '200.00',
+        coverageStart: '2026-10-01',
+        coverageEnd: '2027-09-30',
+        renewalDate: '2027-09-30',
+        installments: [{ number: 1, amount: '200.00', dueDate: '2026-10-10' }],
+      }),
+    );
+    return policy.id;
+  }
+
+  it('registers the policy without a commission, and says so with 404', async () => {
+    orphanId = await registerOrphan();
+
+    const response = await fetch(`${baseUrl}/policies/${orphanId}/commission`);
+    expect(response.status).toBe(404);
+  });
+
+  it('refuses the calculation naming the agreement that is missing (REQ-065)', async () => {
+    const response = await post(`/policies/${orphanId}/commission`, undefined);
+
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as { rule: string; message: string };
+    expect(body.rule).toBe('REQ-065');
+    // The operator has to know which registry and for which day.
+    expect(body.message).toContain('insurer-late');
+    expect(body.message).toContain('vida');
+  });
+
+  it('refuses naming the broker table when only that is missing (IN-05)', async () => {
+    await post('/commission-agreements', {
+      insurerId: 'insurer-late',
+      productId: 'vida',
+      effectiveFrom: '2026-01-01',
+      insurerRate: '40',
+    });
+
+    const response = await post(`/policies/${orphanId}/commission`, undefined);
+
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as { rule: string; message: string };
+    expect(body.rule).toBe('IN-05');
+    expect(body.message).toContain('broker-late');
+  });
+
+  it('calculates it once the registries exist (REQ-075, REQ-062, REQ-093)', async () => {
+    await post('/broker-commission-rates', { brokerId: 'broker-late', rate: '50' });
+
+    const response = await post(`/policies/${orphanId}/commission`, undefined);
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      policyId: orphanId,
+      agreedReceivable: '80.00',
+      agreedPayable: '40.00',
+      status: 'FORECAST',
+    });
+
+    // And the policy now answers it on the read that used to be a 404.
+    const reread = await fetch(`${baseUrl}/policies/${orphanId}/commission`);
+    expect(reread.status).toBe(200);
+  });
+
+  it('refuses to calculate a second time (REQ-124, REJ-011)', async () => {
+    const response = await post(`/policies/${orphanId}/commission`, undefined);
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ rule: 'REQ-124' });
+  });
+
+  it('answers 404 for a policy that does not exist', async () => {
+    const response = await post('/policies/ghost/commission', undefined);
+
+    expect(response.status).toBe(404);
+  });
+});

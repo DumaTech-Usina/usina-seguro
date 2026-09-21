@@ -16,8 +16,21 @@ import type { Percentage } from './percentage.ts';
  * record). It stays in the union because it is part of the documented machine.
  *
  * The identifiers are English; the Portuguese names used by the business
- * (RASCUNHO, TRANSMITIDA, ...) are a presentation concern and live in the i18n
+ * (RASCUNHO, EMITIDA, ...) are a presentation concern and live in the i18n
  * dictionary.
+ *
+ * **On the name `TRANSMITTED`.** REQ-041 was revised on 2026-09-21: the act it
+ * records is the **insurer issuing the proposal** and handing back its number
+ * and the worked commission — not the Usina sending anything out. `ITP-002`
+ * had supplied the wrong agent to a sentence that never named one, and the
+ * glossary contradicted it by calling the number "gerado pela seguradora".
+ *
+ * The identifier kept its name deliberately. It is a stored value: every row
+ * of `proposal.status` holds the string `TRANSMITTED`, and there is no
+ * migration framework, so renaming it would break every database that exists
+ * — for a word no user ever reads. What the operator sees is the Portuguese
+ * label, which says *Emitida* (`shared/status.js`). The day a migration path
+ * exists, this is the first thing to rename.
  */
 export type ProposalStatus = 'DRAFT' | 'TRANSMITTED' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
 
@@ -29,9 +42,9 @@ export type ProposalStatus = 'DRAFT' | 'TRANSMITTED' | 'ACCEPTED' | 'REJECTED' |
  * keeps the reference; validating that those records exist will make sense once
  * the corresponding modules exist.
  *
- * `proposalNumber` and `workedCommission` are absent on purpose: the number is
- * issued by the insurer and the worked commission is informed at transmission
- * time (REQ-041), which happens after registration (FP-01, steps 3 and 4).
+ * `proposalNumber` and `workedCommission` are absent on purpose: both are
+ * informed by the insurer when it issues the proposal (REQ-041), which happens
+ * after registration (FP-01, steps 3 and 4).
  */
 export interface ProposalRegistrationData {
   readonly id: string;
@@ -48,11 +61,16 @@ export interface ProposalRegistrationData {
 }
 
 /**
- * What the transmission to the insurer records (REQ-041).
+ * What the insurer's issuance of the proposal records (REQ-041).
  *
- * The proposal number is issued by the insurer (glossary 5.1) and the worked
- * commission is informed in the act of transmitting, so both only exist from
- * this point on.
+ * Both values come **from the insurer**: it issues the number (glossary 5.1)
+ * and informs the worked commission in the same act, so neither exists before
+ * this point. The Usina registers what came back; it does not produce it
+ * (REQ-002).
+ *
+ * The insurer returns more than these two fields. Which ones, and which of
+ * them the control has to keep, is `DEC-015` — an inventory nobody has done
+ * yet. The two here are the ones confirmed rules consume.
  */
 export interface ProposalTransmissionData {
   readonly proposalNumber: string;
@@ -83,11 +101,11 @@ export class Proposal {
   readonly netPremium: Money;
   readonly registeredAt: Date;
   readonly status: ProposalStatus;
-  /** REQ-022, REQ-050: issued by the insurer, known from transmission on. */
+  /** REQ-022, REQ-050: issued by the insurer, known from the issuance on. */
   readonly proposalNumber: string | null;
-  /** REQ-041: percentage informed in the act of transmission. */
+  /** REQ-041: percentage the insurer informed when it issued the proposal. */
   readonly workedCommission: Percentage | null;
-  /** REQ-041: the moment the proposal was sent to the insurer. */
+  /** REQ-041: the moment the insurer's issuance was recorded. */
   readonly transmittedAt: Date | null;
   /** REQ-045: mandatory when the outcome is a refusal. */
   readonly rejectionReason: string | null;
@@ -151,12 +169,13 @@ export class Proposal {
   }
 
   /**
-   * REQ-041 / REQ-042 / FP-01 step 4: sends the proposal to the insurer,
-   * recording the moment, the number the insurer issued and the worked
-   * commission informed in that act.
+   * REQ-041 / REQ-042 / FP-01 step 4: the insurer issued the proposal. What is
+   * recorded is the moment, the number it issued and the worked commission it
+   * informed in that act.
    *
-   * Only a `DRAFT` can be transmitted (section 10.2). Transmitting twice would
-   * overwrite the first commission informed, which REQ-124 forbids.
+   * Only a `DRAFT` can reach this state (section 10.2). Recording a second
+   * issuance would overwrite the first commission informed, which REQ-124
+   * forbids.
    */
   transmit(data: ProposalTransmissionData): Proposal {
     if (this.status !== 'DRAFT') {

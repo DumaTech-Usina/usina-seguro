@@ -103,6 +103,16 @@ export const api = {
     request(
       status === undefined ? '/commissions' : `/commissions?status=${encodeURIComponent(status)}`,
     ),
+  /**
+   * FP-01 passo 7 sob demanda (REQ-075): calcula a comissão acordada de uma
+   * apólice que ainda não tem uma.
+   *
+   * Sem corpo — tudo o que o cálculo lê já está gravado. Existe para a apólice
+   * registrada antes dos cadastros: nada mais cria uma comissão, e REQ-124
+   * impede apagar o registro para começar de novo.
+   */
+  calculatePolicyCommission: (policyId) =>
+    request(`/policies/${encodeURIComponent(policyId)}/commission`, { method: 'POST' }),
   overrideCommission: (policyId, input) =>
     request(`/policies/${encodeURIComponent(policyId)}/commission/override`, {
       method: 'POST',

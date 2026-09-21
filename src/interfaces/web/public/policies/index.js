@@ -191,7 +191,7 @@ async function load() {
         ? emptyState(
             'shield',
             'Nenhuma apólice registrada',
-            'A apólice nasce do aceite da seguradora, registrado na proposta transmitida.',
+            'A apólice nasce do aceite da seguradora, registrado na proposta emitida.',
           )
         : emptyState(
             'event_available',

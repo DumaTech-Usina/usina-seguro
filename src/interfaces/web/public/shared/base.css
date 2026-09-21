@@ -422,6 +422,14 @@ body.shell {
  * the input and lifts onto the border when the field has focus or content.
  * `placeholder=" "` on the input is what makes `:placeholder-shown` mean
  * "empty" here.
+ *
+ * The label is selected with the general sibling combinator (`~`) and not the
+ * adjacent one (`+`) on purpose: a control may have another element between
+ * itself and its label — the `<datalist>` of the proposal form is one — and
+ * with `+` the label of those fields never lifted, so the typed text landed on
+ * top of it. What the rule actually depends on is that the label comes *after*
+ * its control inside `.field`, which is what `~` says. A label placed before
+ * its control is a deliberate opt-out (see `.field--file`): it stays put.
  */
 .field__input {
   height: 48px;
@@ -455,15 +463,15 @@ body.shell {
   transform-origin: left top;
 }
 
-.field__input:focus + .field__label,
-.field__input:not(:placeholder-shown) + .field__label,
-.field__input[type="date"] + .field__label {
+.field__input:focus ~ .field__label,
+.field__input:not(:placeholder-shown) ~ .field__label,
+.field__input[type="date"] ~ .field__label {
   transform: translateY(-9px);
   font-size: 11px;
   font-weight: 500;
 }
 
-.field__input:focus + .field__label {
+.field__input:focus ~ .field__label {
   color: var(--primary);
 }
 
