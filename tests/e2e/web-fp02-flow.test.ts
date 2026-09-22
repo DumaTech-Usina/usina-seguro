@@ -64,15 +64,6 @@ beforeAll(async () => {
 
   window.scrollTo = () => {};
 
-  // IN-02 and IN-05: without an agreement in force and a broker table the
-  // policy is registered with no commission, and there is nothing to conciliate
-  // against (FP-01 step 7).
-  await callApi('POST', '/commission-agreements', {
-    insurerId: 'insurer-1',
-    productId: 'auto',
-    effectiveFrom: '2026-01-01',
-    insurerRate: '40',
-  });
   await callApi('POST', '/broker-commission-rates', { brokerId: 'broker-1', rate: '50' });
 });
 
@@ -173,12 +164,14 @@ async function registeredPolicy(
     productId: 'auto',
     paymentMethodId: 'credit',
     customerAccepted: true,
+    proposalNumber: proposalNumber,
     netPremium: '100.00',
-  });
-
-  await callApi('POST', `/proposals/${proposal.id}/transmission`, {
-    proposalNumber,
+    coverageStart: '2026-10-01',
+    coverageEnd: '2027-10-01',
     workedCommission: '40',
+    workedCommissionMode: 'INTEGRAL',
+    intermediary: null,
+    userId: 'operator',
   });
 
   const policy = await callApi('POST', '/policies', {

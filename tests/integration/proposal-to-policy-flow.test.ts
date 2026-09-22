@@ -37,17 +37,17 @@ async function registerProposal(): Promise<string> {
     productId: 'auto',
     paymentMethodId: 'bank-slip',
     customerAccepted: true,
+    proposalNumber: 'PRP-9001',
     netPremium: '1200.00',
+    coverageStart: '2026-10-01',
+    coverageEnd: '2027-10-01',
+    installments: [],
+    workedCommission: '32.5',
+    workedCommissionMode: 'INTEGRAL',
+    intermediary: null,
+    author: 'operator',
   });
   return proposal.id;
-}
-
-async function transmit(proposalId: string): Promise<void> {
-  await application.useCases.transmitProposal.execute({
-    proposalId,
-    proposalNumber: 'PRP-9001',
-    workedCommission: '32.5',
-  });
 }
 
 async function registerPolicy(proposalId: string, policyNumber = 'APL-4711') {
@@ -68,7 +68,6 @@ async function registerPolicy(proposalId: string, policyNumber = 'APL-4711') {
 describe('proposal to policy flow on SQLite', () => {
   it('walks FP-01: register, transmit, register the policy with its schedule', async () => {
     const proposalId = await registerProposal();
-    await transmit(proposalId);
 
     const policy = await registerPolicy(proposalId);
 
@@ -84,7 +83,6 @@ describe('proposal to policy flow on SQLite', () => {
 
   it('survives a restart: the policy and its schedule are read back from disk', async () => {
     const proposalId = await registerProposal();
-    await transmit(proposalId);
     const created = await registerPolicy(proposalId);
     await application.shutdown();
 
@@ -96,7 +94,6 @@ describe('proposal to policy flow on SQLite', () => {
 
   it('refuses a second policy for the same proposal, also after a restart (CA-007)', async () => {
     const proposalId = await registerProposal();
-    await transmit(proposalId);
     await registerPolicy(proposalId);
     await application.shutdown();
 
@@ -106,7 +103,6 @@ describe('proposal to policy flow on SQLite', () => {
 
   it('refuses a policy for a refused proposal and keeps the record (CA-005, CA-006)', async () => {
     const proposalId = await registerProposal();
-    await transmit(proposalId);
     await application.useCases.rejectProposal.execute({
       proposalId,
       reason: 'perfil de risco',
@@ -127,7 +123,6 @@ describe('proposal to policy flow on SQLite', () => {
       name: 'Maria Souza',
     });
     const proposalId = await registerProposal();
-    await transmit(proposalId);
 
     const policy = await registerPolicy(proposalId);
 
@@ -162,12 +157,15 @@ describe('proposal to policy flow on SQLite', () => {
         productId: 'auto',
         paymentMethodId: 'bank-slip',
         customerAccepted: true,
-        netPremium: '1200.00',
-      });
-      await application.useCases.transmitProposal.execute({
-        proposalId: proposal.id,
         proposalNumber,
+        netPremium: '1200.00',
+        coverageStart: '2026-10-01',
+        coverageEnd: '2027-10-01',
+        installments: [],
         workedCommission: '32.5',
+        workedCommissionMode: 'INTEGRAL',
+        intermediary: null,
+        author: 'operator',
       });
       await registerPolicy(proposal.id, policyNumber);
     }
@@ -189,7 +187,6 @@ describe('proposal to policy flow on SQLite', () => {
 
   it('keeps the notification readable after a restart (REQ-105)', async () => {
     const proposalId = await registerProposal();
-    await transmit(proposalId);
     const policy = await registerPolicy(proposalId);
     const before = await application.useCases.listNotifications.execute({});
     await application.shutdown();
@@ -203,7 +200,6 @@ describe('proposal to policy flow on SQLite', () => {
 
   it('writes nothing when the policy data is invalid: the proposal stays open', async () => {
     const proposalId = await registerProposal();
-    await transmit(proposalId);
 
     await expect(
       application.useCases.registerPolicy.execute({

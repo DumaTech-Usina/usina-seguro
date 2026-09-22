@@ -1,36 +1,32 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryBrokerCommissionRateRepository } from '../../../infrastructure/persistence/in-memory/in-memory-broker-commission-rate-repository.ts';
-import { InMemoryCommissionAgreementRepository } from '../../../infrastructure/persistence/in-memory/in-memory-commission-agreement-repository.ts';
 import { InMemoryCommissionRepository } from '../../../infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
-import { CalendarDate } from '../../policy/domain/calendar-date.ts';
 import { Installment } from '../../policy/domain/installment.ts';
 import { Policy } from '../../policy/domain/policy.ts';
+import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal } from '../../proposal/domain/proposal.ts';
 import { BrokerCommissionRate } from '../domain/broker-commission-rate.ts';
-import { CommissionAgreement } from '../domain/commission-agreement.ts';
 import { CalculateAgreedCommission } from './calculate-agreed-commission.ts';
 import { CalculatePolicyCommission } from './calculate-policy-commission.ts';
 
-/** The policy was registered on this day: it is what selects the agreement. */
+/** The policy was registered on this day. */
 const REGISTERED_AT = new Date('2026-09-20T10:00:00.000Z');
 
 function scenario() {
   const policies = new InMemoryPolicyRepository();
   const proposals = new InMemoryProposalRepository();
   const commissions = new InMemoryCommissionRepository();
-  const agreements = new InMemoryCommissionAgreementRepository();
   const brokerRates = new InMemoryBrokerCommissionRateRepository();
   let sequence = 0;
 
   const agreedCommission = new CalculateAgreedCommission({
     proposals,
     commissions,
-    agreements,
     brokerRates,
     newId: () => `commission-${++sequence}`,
   });
@@ -39,14 +35,12 @@ function scenario() {
     policies,
     proposals,
     commissions,
-    agreements,
     brokerRates,
     agreedCommission,
     useCase: new CalculatePolicyCommission({
       policies,
       proposals,
       commissions,
-      agreements,
       brokerRates,
       agreedCommission,
     }),
@@ -66,12 +60,16 @@ async function registeredPolicy(
     productId: 'auto',
     paymentMethodId: 'credit',
     customerAccepted: true,
-    netPremium: Money.fromString('100.00'),
-    registeredAt: new Date('2026-09-19T12:00:00.000Z'),
-  }).transmit({
     proposalNumber: 'PRP-1',
+    netPremium: Money.fromString('100.00'),
+    coverageStart: CalendarDate.fromString('2026-10-01'),
+    coverageEnd: CalendarDate.fromString('2027-10-01'),
+    installments: [],
     workedCommission: Percentage.fromString('40'),
-    transmittedAt: new Date('2026-09-19T13:00:00.000Z'),
+    workedCommissionMode: 'INTEGRAL',
+    receipt: { kind: 'DIRECT' },
+    registeredBy: 'operator',
+    registeredAt: new Date('2026-09-19T12:00:00.000Z'),
   });
 
   await proposals.save(proposal.accept());
@@ -98,22 +96,9 @@ async function registeredPolicy(
   );
 }
 
-async function registerRegistries(
-  agreements: InMemoryCommissionAgreementRepository,
+async function registerBrokerRate(
   brokerRates: InMemoryBrokerCommissionRateRepository,
-  effectiveFrom = '2026-01-01',
 ): Promise<void> {
-  await agreements.save(
-    CommissionAgreement.register({
-      id: 'agreement-1',
-      insurerId: 'insurer-1',
-      productId: 'auto',
-      effectiveFrom: CalendarDate.fromString(effectiveFrom),
-      insurerRate: Percentage.fromString('40'),
-      chain: { kind: 'DIRECT' },
-      registeredAt: new Date('2026-01-01T00:00:00.000Z'),
-    }),
-  );
   await brokerRates.save(
     BrokerCommissionRate.register({
       brokerId: 'broker-1',
@@ -125,70 +110,35 @@ async function registerRegistries(
 
 describe('CalculatePolicyCommission', () => {
   it('gives a commission to a policy registered without one (REQ-075)', async () => {
-    const { policies, proposals, commissions, agreements, brokerRates, useCase } = scenario();
+    const { policies, proposals, commissions, brokerRates, useCase } = scenario();
     // The policy exists and the registries did not: FP-01 step 7 produced
     // nothing, which is the state this use case exists for.
     await registeredPolicy(proposals, policies);
     expect(await commissions.findByPolicyId('policy-1')).toBeNull();
 
-    await registerRegistries(agreements, brokerRates);
+    await registerBrokerRate(brokerRates);
     const calculated = await useCase.execute({ policyId: 'policy-1' });
 
     expect(calculated.policyId).toBe('policy-1');
-    // REQ-062, REQ-093: 40% of 100.00 to the Usina, half of it to the broker.
+    // REQ-236: CT 40% of 100.00 to the Usina; the broker table takes half of it.
     expect(calculated.agreedReceivable).toBe('40.00');
     expect(calculated.agreedPayable).toBe('20.00');
     expect(await commissions.findByPolicyId('policy-1')).not.toBeNull();
   });
 
-  it('produces exactly what the registration would have produced (REQ-065)', async () => {
-    const { policies, proposals, agreements, brokerRates, useCase } = scenario();
+  it('dates the calculation at the policy registration, like FP-01 would have', async () => {
+    const { policies, proposals, brokerRates, useCase } = scenario();
     await registeredPolicy(proposals, policies);
-    await registerRegistries(agreements, brokerRates);
+    await registerBrokerRate(brokerRates);
 
     const calculated = await useCase.execute({ policyId: 'policy-1' });
 
-    // The date that selects the agreement is the policy's, not the clock's:
-    // calculating late must not silently change the rates.
     expect(calculated.calculatedAt).toBe(REGISTERED_AT.toISOString());
   });
 
-  it('refuses when the agreement does not reach the policy (REQ-065)', async () => {
-    const { policies, proposals, agreements, brokerRates, useCase } = scenario();
-    await registeredPolicy(proposals, policies);
-    // Registered today, valid from today: it does not cover a policy from
-    // before. The operator has to backdate the validity, and the refusal says
-    // which day it has to reach.
-    await registerRegistries(agreements, brokerRates, '2026-09-25');
-
-    try {
-      await useCase.execute({ policyId: 'policy-1' });
-      expect.unreachable('should have thrown');
-    } catch (error) {
-      expect((error as BusinessRuleViolation).rule).toBe('REQ-065');
-      expect((error as BusinessRuleViolation).params).toMatchObject({
-        insurerId: 'insurer-1',
-        productId: 'auto',
-        on: '2026-09-20',
-      });
-    }
-  });
-
   it('names the broker table when that is what is missing (IN-05)', async () => {
-    const { policies, proposals, agreements, useCase } = scenario();
+    const { policies, proposals, useCase } = scenario();
     await registeredPolicy(proposals, policies);
-    await agreements.save(
-      CommissionAgreement.register({
-        id: 'agreement-1',
-        insurerId: 'insurer-1',
-        productId: 'auto',
-        effectiveFrom: CalendarDate.fromString('2026-01-01'),
-        insurerRate: Percentage.fromString('40'),
-        chain: { kind: 'DIRECT' },
-        registeredAt: new Date('2026-01-01T00:00:00.000Z'),
-      }),
-    );
-
     try {
       await useCase.execute({ policyId: 'policy-1' });
       expect.unreachable('should have thrown');
@@ -199,9 +149,9 @@ describe('CalculatePolicyCommission', () => {
   });
 
   it('refuses to recalculate a commission that exists (REQ-124, REJ-011)', async () => {
-    const { policies, proposals, agreements, brokerRates, commissions, useCase } = scenario();
+    const { policies, proposals, brokerRates, commissions, useCase } = scenario();
     await registeredPolicy(proposals, policies);
-    await registerRegistries(agreements, brokerRates);
+    await registerBrokerRate(brokerRates);
     const first = await useCase.execute({ policyId: 'policy-1' });
 
     try {

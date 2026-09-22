@@ -12,7 +12,6 @@ export const COMMISSION_MESSAGES = {
   BROKER_RATE_FIELD_REQUIRED: 'commission.broker_rate_field_required',
   NOT_FOUND: 'commission.not_found',
   ALREADY_CALCULATED: 'commission.already_calculated',
-  NO_AGREEMENT_IN_FORCE: 'commission.no_agreement_in_force',
   NO_BROKER_RATE: 'commission.no_broker_rate',
   OVERRIDE_JUSTIFICATION_REQUIRED: 'commission.override_justification_required',
   OVERRIDE_USER_REQUIRED: 'commission.override_user_required',

@@ -1,8 +1,8 @@
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
+import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { ReferenceNames } from '../../registry/application/reference-names.ts';
 import type { ReferenceRepository } from '../../registry/application/reference-repository.ts';
-import { CalendarDate } from '../domain/calendar-date.ts';
 import type { PolicyListFilter, PolicyRepository } from './policy-repository.ts';
 import { type PolicyListItemView, toPolicyListItemView } from './policy-view.ts';
 

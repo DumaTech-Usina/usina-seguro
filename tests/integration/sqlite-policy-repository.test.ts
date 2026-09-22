@@ -3,9 +3,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { CalendarDate } from '../../src/core/policy/domain/calendar-date.ts';
 import { Installment } from '../../src/core/policy/domain/installment.ts';
 import { Policy } from '../../src/core/policy/domain/policy.ts';
+import { CalendarDate } from '../../src/core/proposal/domain/calendar-date.ts';
 import { Money } from '../../src/core/proposal/domain/money.ts';
 import { Percentage } from '../../src/core/proposal/domain/percentage.ts';
 import { Proposal } from '../../src/core/proposal/domain/proposal.ts';
@@ -43,12 +43,16 @@ function transmittedProposal(id = 'proposal-1', proposalNumber = 'PRP-9001'): Pr
     productId: 'product-1',
     paymentMethodId: 'bank-slip',
     customerAccepted: true,
-    netPremium: Money.fromString('1200.00'),
-    registeredAt: new Date('2026-09-17T12:00:00.000Z'),
-  }).transmit({
     proposalNumber,
+    netPremium: Money.fromString('1200.00'),
+    coverageStart: CalendarDate.fromString('2026-10-01'),
+    coverageEnd: CalendarDate.fromString('2027-10-01'),
+    installments: [],
     workedCommission: Percentage.fromString('32.5'),
-    transmittedAt: new Date('2026-09-18T09:00:00.000Z'),
+    workedCommissionMode: 'INTEGRAL',
+    receipt: { kind: 'DIRECT' },
+    registeredBy: 'operator',
+    registeredAt: new Date('2026-09-17T12:00:00.000Z'),
   });
 }
 

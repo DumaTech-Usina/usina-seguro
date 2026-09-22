@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ImmediateTransaction } from '../../../infrastructure/persistence/in-memory/immediate-transaction.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
+import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
@@ -61,7 +62,7 @@ function scenario() {
   return { proposals, policies, agreedCommission, notifier, useCase };
 }
 
-function draft(): Proposal {
+function awaiting(): Proposal {
   return Proposal.register({
     id: 'proposal-1',
     clientId: 'client-1',
@@ -70,16 +71,16 @@ function draft(): Proposal {
     productId: 'product-1',
     paymentMethodId: 'bank-slip',
     customerAccepted: true,
-    netPremium: Money.fromString('1200.00'),
-    registeredAt: new Date('2026-09-17T12:00:00.000Z'),
-  });
-}
-
-function transmitted(): Proposal {
-  return draft().transmit({
     proposalNumber: 'PRP-9001',
+    netPremium: Money.fromString('1200.00'),
+    coverageStart: CalendarDate.fromString('2026-10-01'),
+    coverageEnd: CalendarDate.fromString('2027-10-01'),
+    installments: [],
     workedCommission: Percentage.fromString('40'),
-    transmittedAt: new Date('2026-09-18T09:00:00.000Z'),
+    workedCommissionMode: 'INTEGRAL',
+    receipt: { kind: 'DIRECT' },
+    registeredBy: 'operator',
+    registeredAt: new Date('2026-09-17T12:00:00.000Z'),
   });
 }
 
@@ -102,7 +103,7 @@ function input(overrides: Partial<RegisterPolicyInput> = {}): RegisterPolicyInpu
 describe('RegisterPolicy', () => {
   it('registers the policy with its schedule and both numbers (REQ-048, REQ-050)', async () => {
     const { proposals, useCase } = scenario();
-    await proposals.save(transmitted());
+    await proposals.save(awaiting());
 
     const output = await useCase.execute(input());
 
@@ -140,19 +141,19 @@ describe('RegisterPolicy', () => {
     ]);
   });
 
-  it('moves the proposal to ACCEPTED in the same operation (REQ-111)', async () => {
+  it('moves the proposal to ISSUED in the same operation (REQ-111, REQ-251)', async () => {
     const { proposals, policies, useCase } = scenario();
-    await proposals.save(transmitted());
+    await proposals.save(awaiting());
 
     const output = await useCase.execute(input());
 
-    expect((await proposals.findById('proposal-1'))?.status).toBe('ACCEPTED');
+    expect((await proposals.findById('proposal-1'))?.status).toBe('ISSUED');
     expect((await policies.findById(output.id))?.policyNumber).toBe('APL-4711');
   });
 
   it('keeps a policy number that differs from the proposal number (CA-008)', async () => {
     const { proposals, useCase } = scenario();
-    await proposals.save(transmitted());
+    await proposals.save(awaiting());
 
     const output = await useCase.execute(input({ policyNumber: 'APL-0001' }));
 
@@ -160,15 +161,15 @@ describe('RegisterPolicy', () => {
     expect(output.proposalNumber).toBe('PRP-9001');
   });
 
-  it('does not create a policy for a refused proposal (CA-006)', async () => {
+  it('does not create a policy for a refused proposal (REJ-210)', async () => {
     const { proposals, policies, useCase } = scenario();
-    await proposals.save(transmitted().reject('perfil de risco'));
+    await proposals.save(awaiting().reject('perfil de risco'));
 
     try {
       await useCase.execute(input());
       expect.unreachable('should have thrown');
     } catch (error) {
-      expect((error as BusinessRuleViolation).rule).toBe('REQ-047');
+      expect((error as BusinessRuleViolation).rule).toBe('REQ-253');
     }
 
     expect(await policies.findById('id-1')).toBeNull();
@@ -176,7 +177,7 @@ describe('RegisterPolicy', () => {
 
   it('does not create a second policy for the same proposal (CA-007, REJ-005)', async () => {
     const { proposals, useCase } = scenario();
-    await proposals.save(transmitted());
+    await proposals.save(awaiting());
     await useCase.execute(input());
 
     try {
@@ -189,7 +190,7 @@ describe('RegisterPolicy', () => {
 
   it('does not register a policy number another policy already uses (REQ-082, CA-018)', async () => {
     const { proposals, policies, useCase } = scenario();
-    await proposals.save(transmitted());
+    await proposals.save(awaiting());
     await useCase.execute(input());
 
     // A second business, with its own proposal, reusing the same number: the
@@ -202,12 +203,16 @@ describe('RegisterPolicy', () => {
       productId: 'product-1',
       paymentMethodId: 'bank-slip',
       customerAccepted: true,
-      netPremium: Money.fromString('900.00'),
-      registeredAt: new Date('2026-09-17T12:00:00.000Z'),
-    }).transmit({
       proposalNumber: 'PRP-9002',
+      netPremium: Money.fromString('900.00'),
+      coverageStart: CalendarDate.fromString('2026-10-01'),
+      coverageEnd: CalendarDate.fromString('2027-10-01'),
+      installments: [],
       workedCommission: Percentage.fromString('40'),
-      transmittedAt: new Date('2026-09-18T09:00:00.000Z'),
+      workedCommissionMode: 'INTEGRAL',
+      receipt: { kind: 'DIRECT' },
+      registeredBy: 'operator',
+      registeredAt: new Date('2026-09-17T12:00:00.000Z'),
     });
     await proposals.save(second);
 
@@ -217,24 +222,16 @@ describe('RegisterPolicy', () => {
 
     expect(await policies.findByProposalId('proposal-2')).toBeNull();
     // REQ-112: the refused registration leaves the proposal where it was.
-    expect((await proposals.findById('proposal-2'))?.status).toBe('TRANSMITTED');
+    expect((await proposals.findById('proposal-2'))?.status).toBe('AWAITING_ISSUANCE');
   });
 
   it('stores the policy number trimmed, so the conciliation key matches (REQ-082)', async () => {
     const { proposals, policies, useCase } = scenario();
-    await proposals.save(transmitted());
+    await proposals.save(awaiting());
 
     await useCase.execute(input({ policyNumber: '  APL-4711  ' }));
 
     expect(await policies.findByPolicyNumber('APL-4711')).not.toBeNull();
-  });
-
-  it('does not create a policy for a proposal that was never transmitted', async () => {
-    const { proposals, useCase } = scenario();
-    await proposals.save(draft());
-
-    await expect(useCase.execute(input())).rejects.toThrow(BusinessRuleViolation);
-    expect((await proposals.findById('proposal-1'))?.status).toBe('DRAFT');
   });
 
   it('reports an unknown proposal as not found', async () => {
@@ -245,35 +242,34 @@ describe('RegisterPolicy', () => {
 
   it('leaves the proposal untouched when the policy data is invalid', async () => {
     const { proposals, policies, useCase } = scenario();
-    await proposals.save(transmitted());
+    await proposals.save(awaiting());
 
     await expect(useCase.execute(input({ installments: [] }))).rejects.toThrow(
       BusinessRuleViolation,
     );
 
-    expect((await proposals.findById('proposal-1'))?.status).toBe('TRANSMITTED');
+    expect((await proposals.findById('proposal-1'))?.status).toBe('AWAITING_ISSUANCE');
     expect(await policies.findById('id-1')).toBeNull();
   });
 
   it('asks for the agreed commission once the policy is created (FP-01 step 7)', async () => {
     const { proposals, agreedCommission, useCase } = scenario();
-    await proposals.save(transmitted());
+    await proposals.save(awaiting());
 
     const policy = await useCase.execute(input());
 
     expect(agreedCommission.requests).toHaveLength(1);
     expect(agreedCommission.requests[0]).toEqual({
       policyId: policy.id,
+      // REQ-236: the calculation reads the proposal, not the policy premium.
       proposalId: 'proposal-1',
-      // REQ-051: the policy premium is what the other module calculates on.
-      premium: Money.fromString('1200.00'),
       calculatedAt: NOW,
     });
   });
 
   it('asks for nothing when the policy is refused (REQ-070, CA-009)', async () => {
     const { proposals, agreedCommission, notifier, useCase } = scenario();
-    await proposals.save(transmitted());
+    await proposals.save(awaiting());
 
     await expect(useCase.execute(input({ installments: [] }))).rejects.toThrow(
       BusinessRuleViolation,
@@ -286,7 +282,7 @@ describe('RegisterPolicy', () => {
 
   it('notifies the broker once the policy is created (FP-01 step 7, REQ-100)', async () => {
     const { proposals, notifier, useCase } = scenario();
-    await proposals.save(transmitted());
+    await proposals.save(awaiting());
 
     const policy = await useCase.execute(input());
 

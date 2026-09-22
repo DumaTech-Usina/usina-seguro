@@ -1,19 +1,14 @@
-import type { Money } from '../../proposal/domain/money.ts';
-
 /**
  * What the policy hands over so the agreed commission can be calculated.
  *
  * The minimum the other side needs and nothing else: the policy entity is not
- * shipped across the boundary. `premium` travels because REQ-051 makes it the
- * only admissible calculation base, and `proposalId` because the insurer, the
- * product and the broker — which select the commercial agreement (REQ-065) and
- * the broker table (IN-05) — live on the proposal.
+ * shipped across the boundary. `proposalId` is the whole of the input, because
+ * REQ-236 takes the calculation from the proposal — its net premium, CT and
+ * CTU — and the broker whose table applies lives there too.
  */
 export interface AgreedCommissionRequest {
   readonly policyId: string;
   readonly proposalId: string;
-  readonly premium: Money;
-  /** REQ-065: which agreement was in force when the calculation was made. */
   readonly calculatedAt: Date;
 }
 

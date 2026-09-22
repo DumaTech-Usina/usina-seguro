@@ -1,8 +1,11 @@
 /**
- * The registries the Administrator maintains (IN-02 to IN-06).
+ * The registries the Administrator maintains: references (IN-01), the broker
+ * table (IN-05) and the release rule per payment method (IN-06).
  *
- * These are the parameters the calculation reads — commission rates, the
- * chain, the broker table and the release rule per payment method. They are
+ * There is no commercial agreement here any more: the Usina side of a
+ * commission comes from the CT (and CTU) informed on each proposal (REQ-236).
+ *
+ * These are parameters the calculation reads. They are
  * data rather than code so they change without a deploy, which is why no
  * payment method and no rate is ever named here either: the form takes
  * whatever identifier the business uses.
@@ -13,15 +16,10 @@
  * in the commission it had already produced, and a missing release rule only
  * in the repasse it refused.
  *
- * Nothing here decides which agreement is in force. That depends on the date
- * of each calculation (REQ-065, CA-012), and the page has no calculation in
- * front of it; it shows the validities registered, most recent first, and lets
- * the reader see the history REQ-124 keeps.
  */
 
 import { ApiError, api } from '/app/shared/api.js';
-import { formatDate, formatInstant, formatPercentage } from '/app/shared/money.js';
-import { referenceLabel } from '/app/shared/reference.js';
+import { formatInstant, formatPercentage } from '/app/shared/money.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
 
@@ -219,104 +217,6 @@ wire(
   () => references.load(),
 );
 
-/* ---------------------------------------------------------- agreement -- */
-
-const intermediaryToggle = document.querySelector('#has-intermediary');
-const intermediaryFields = document.querySelector('#intermediary-fields');
-
-intermediaryToggle.addEventListener('change', () => {
-  intermediaryFields.classList.toggle('hidden', !intermediaryToggle.checked);
-});
-
-/** REQ-060, REQ-063, REQ-064: how the commission reaches the Usina. */
-function chainCell(agreement) {
-  const cell = element('td');
-
-  if (agreement.chain !== 'INTERMEDIARY') {
-    cell.append(element('span', undefined, 'Direta'));
-    return cell;
-  }
-
-  cell.append(
-    element(
-      'span',
-      undefined,
-      `Via ${referenceLabel(agreement.intermediaryName, agreement.intermediaryId)} · ${formatPercentage(agreement.intermediaryRate)} à Usina`,
-    ),
-    element(
-      'div',
-      'text-muted',
-      agreement.brokerBase === 'USINA'
-        ? 'Base do corretor: valor recebido pela Usina'
-        : 'Base do corretor: valor recebido pela intermediária',
-    ),
-  );
-  return cell;
-}
-
-const agreements = registry({
-  region: '#list-agreements',
-  title: 'Acordos registrados',
-  read: () => api.listCommissionAgreements(),
-  headers: [
-    ['Seguradora / produto', ''],
-    ['Vigente a partir de', ''],
-    ['% seguradora', 'is-numeric'],
-    ['Cadeia', ''],
-    ['Registrado em', ''],
-  ],
-  row: (agreement) => {
-    const line = element('tr');
-
-    const identification = element('td');
-    identification.append(
-      element('span', 'registry-key', agreement.insurerId),
-      element('div', 'text-muted', agreement.productId),
-    );
-
-    line.append(
-      identification,
-      element('td', 'registry-key', formatDate(agreement.effectiveFrom)),
-      element('td', 'is-numeric', formatPercentage(agreement.insurerRate)),
-      chainCell(agreement),
-      element('td', 'text-muted', formatInstant(agreement.registeredAt)),
-    );
-    return line;
-  },
-  empty: {
-    icon: 'handshake',
-    title: 'Nenhum acordo registrado',
-    description:
-      'Sem acordo vigente para a seguradora e o produto, o registro da apólice é recusado.',
-  },
-});
-
-wire(
-  '#form-agreement',
-  (input) => {
-    const body = {
-      insurerId: input.insurerId,
-      productId: input.productId,
-      effectiveFrom: input.effectiveFrom,
-      insurerRate: input.insurerRate,
-    };
-
-    // An absent `intermediary` is what states a direct chain; the default base
-    // when one exists is decided by the server, not restated here.
-    if (intermediaryToggle.checked) {
-      body.intermediary = {
-        intermediaryId: input.intermediaryId,
-        intermediaryRate: input.intermediaryRate,
-        brokerBase: input.brokerBase,
-      };
-    }
-
-    return api.registerCommissionAgreement(body);
-  },
-  (agreement) => `Acordo de ${agreement.insurerId} / ${agreement.productId} registrado.`,
-  () => agreements.load(),
-);
-
 /* -------------------------------------------------------- broker rate -- */
 
 const brokerRates = registry({
@@ -396,6 +296,5 @@ wire(
 /* --------------------------------------------------------------- load -- */
 
 references.load();
-agreements.load();
 brokerRates.load();
 releaseRules.load();

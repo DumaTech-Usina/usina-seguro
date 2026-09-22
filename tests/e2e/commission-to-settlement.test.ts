@@ -70,12 +70,6 @@ async function json<T>(response: Response): Promise<T> {
 
 /** IN-02 to IN-06: what the Administrator maintains (REQ-061, REQ-125). */
 async function seedRegistries(): Promise<void> {
-  await post('/commission-agreements', {
-    insurerId: 'insurer-1',
-    productId: 'auto',
-    effectiveFrom: '2026-01-01',
-    insurerRate: '40',
-  });
   await post('/broker-commission-rates', { brokerId: 'broker-1', rate: '50' });
   await post('/payment-method-release-rules', {
     paymentMethodId: 'credit',
@@ -156,20 +150,6 @@ interface SettlementBody {
   } | null;
 }
 
-/** One agreement, as `GET /commission-agreements` answers it (IN-02). */
-interface AgreementBody {
-  id: string;
-  insurerId: string;
-  productId: string;
-  effectiveFrom: string;
-  insurerRate: string;
-  chain: string;
-  intermediaryId: string | null;
-  intermediaryRate: string | null;
-  brokerBase: string;
-  registeredAt: string;
-}
-
 interface BrokerRateBody {
   brokerId: string;
   rate: string;
@@ -212,14 +192,16 @@ async function sellPolicy(options: {
       productId: 'auto',
       paymentMethodId: options.paymentMethodId,
       customerAccepted: true,
+      proposalNumber: options.proposalNumber,
       netPremium: '100.00',
+      coverageStart: '2026-10-01',
+      coverageEnd: '2027-10-01',
+      workedCommission: '40',
+      workedCommissionMode: 'INTEGRAL',
+      intermediary: null,
+      userId: 'operator',
     }),
   );
-
-  await post(`/proposals/${proposal.id}/transmission`, {
-    proposalNumber: options.proposalNumber,
-    workedCommission: '40',
-  });
 
   return json<PolicyBody>(
     await post('/policies', {
@@ -587,7 +569,7 @@ describe('divergences and pendencies', () => {
 });
 
 /**
- * IN-02, IN-05 and IN-06 read back over HTTP.
+ * IN-05 and IN-06 read back over HTTP.
  *
  * `seedRegistries` above registered them; these are the parameters every
  * calculation in this file ran on, and REQ-061/REQ-125 make them data rather
@@ -595,64 +577,6 @@ describe('divergences and pendencies', () => {
  * wrong percentage was only visible in the commission it had already produced.
  */
 describe('the registries the Administrator maintains', () => {
-  it('answers the agreements registered, by insurer and product (IN-02)', async () => {
-    const listed = await json<AgreementBody[]>(await fetch(`${baseUrl}/commission-agreements`));
-
-    const auto = listed.find(
-      (agreement) => agreement.insurerId === 'insurer-1' && agreement.productId === 'auto',
-    );
-
-    expect(auto?.insurerRate).toBe('40');
-    // REQ-060, REQ-062: no intermediary was registered for this relation.
-    expect(auto?.chain).toBe('DIRECT');
-    expect(auto?.intermediaryId).toBeNull();
-    expect(auto?.brokerBase).toBe('USINA');
-    expect(auto?.effectiveFrom).toBe('2026-01-01');
-    expect(auto?.registeredAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
-  });
-
-  it('answers a registration and a reading in the same shape', async () => {
-    const registered = await json<AgreementBody>(
-      await post('/commission-agreements', {
-        insurerId: 'insurer-shape',
-        productId: 'vida',
-        effectiveFrom: '2026-03-01',
-        insurerRate: '37.25',
-        intermediary: { intermediaryId: 'mega', intermediaryRate: '80', brokerBase: 'USINA' },
-      }),
-    );
-
-    const listed = await json<AgreementBody[]>(await fetch(`${baseUrl}/commission-agreements`));
-    const found = listed.find((agreement) => agreement.insurerId === 'insurer-shape');
-
-    expect(found).toEqual(registered);
-    // REQ-121: the scale the administrator informed survives the round trip.
-    expect(found?.insurerRate).toBe('37.25');
-    expect(found?.chain).toBe('INTERMEDIARY');
-    expect(found?.brokerBase).toBe('USINA');
-  });
-
-  it('does not list a corrected validity twice (REQ-065, REQ-124)', async () => {
-    await post('/commission-agreements', {
-      insurerId: 'insurer-fix',
-      productId: 'auto',
-      effectiveFrom: '2026-01-01',
-      insurerRate: '40',
-    });
-    await post('/commission-agreements', {
-      insurerId: 'insurer-fix',
-      productId: 'auto',
-      effectiveFrom: '2026-01-01',
-      insurerRate: '42',
-    });
-
-    const listed = await json<AgreementBody[]>(await fetch(`${baseUrl}/commission-agreements`));
-    const fixed = listed.filter((agreement) => agreement.insurerId === 'insurer-fix');
-
-    expect(fixed).toHaveLength(1);
-    expect(fixed[0]?.insurerRate).toBe('42');
-  });
-
   it('answers the broker commission table (IN-05, REQ-093)', async () => {
     const listed = await json<BrokerRateBody[]>(await fetch(`${baseUrl}/broker-commission-rates`));
 
@@ -819,13 +743,16 @@ describe('calculating the commission of a policy that has none', () => {
         productId: 'vida',
         paymentMethodId: 'credit',
         customerAccepted: true,
+        proposalNumber: 'PRP-LATE',
         netPremium: '200.00',
+        coverageStart: '2026-10-01',
+        coverageEnd: '2027-10-01',
+        workedCommission: '30',
+        workedCommissionMode: 'INTEGRAL',
+        intermediary: null,
+        userId: 'operator',
       }),
     );
-    await post(`/proposals/${proposal.id}/transmission`, {
-      proposalNumber: 'PRP-LATE',
-      workedCommission: '30',
-    });
     const policy = await json<{ id: string }>(
       await post('/policies', {
         proposalId: proposal.id,
@@ -847,25 +774,7 @@ describe('calculating the commission of a policy that has none', () => {
     expect(response.status).toBe(404);
   });
 
-  it('refuses the calculation naming the agreement that is missing (REQ-065)', async () => {
-    const response = await post(`/policies/${orphanId}/commission`, undefined);
-
-    expect(response.status).toBe(422);
-    const body = (await response.json()) as { rule: string; message: string };
-    expect(body.rule).toBe('REQ-065');
-    // The operator has to know which registry and for which day.
-    expect(body.message).toContain('insurer-late');
-    expect(body.message).toContain('vida');
-  });
-
-  it('refuses naming the broker table when only that is missing (IN-05)', async () => {
-    await post('/commission-agreements', {
-      insurerId: 'insurer-late',
-      productId: 'vida',
-      effectiveFrom: '2026-01-01',
-      insurerRate: '40',
-    });
-
+  it('refuses naming the broker table that is missing (IN-05)', async () => {
     const response = await post(`/policies/${orphanId}/commission`, undefined);
 
     expect(response.status).toBe(422);
@@ -874,7 +783,7 @@ describe('calculating the commission of a policy that has none', () => {
     expect(body.message).toContain('broker-late');
   });
 
-  it('calculates it once the registries exist (REQ-075, REQ-062, REQ-093)', async () => {
+  it('calculates it from the CT of the proposal once the broker table exists (REQ-236)', async () => {
     await post('/broker-commission-rates', { brokerId: 'broker-late', rate: '50' });
 
     const response = await post(`/policies/${orphanId}/commission`, undefined);
@@ -882,8 +791,9 @@ describe('calculating the commission of a policy that has none', () => {
     expect(response.status).toBe(201);
     expect(await response.json()).toMatchObject({
       policyId: orphanId,
-      agreedReceivable: '80.00',
-      agreedPayable: '40.00',
+      // CT 30% of 200.00 to the Usina; the broker table takes half of it.
+      agreedReceivable: '60.00',
+      agreedPayable: '30.00',
       status: 'FORECAST',
     });
 

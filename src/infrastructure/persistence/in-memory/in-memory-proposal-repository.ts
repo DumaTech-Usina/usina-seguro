@@ -21,17 +21,16 @@ export class InMemoryProposalRepository implements ProposalRepository {
     return this.records.get(id) ?? null;
   }
 
+  /** The number is not unique (DEC-207): the first registered answers. */
   async findByProposalNumber(proposalNumber: string): Promise<Proposal | null> {
-    for (const proposal of this.records.values()) {
-      if (proposal.proposalNumber === proposalNumber) {
-        return proposal;
-      }
-    }
+    const matches = [...this.records.values()]
+      .filter((proposal) => proposal.proposalNumber === proposalNumber)
+      .sort((a, b) => a.registeredAt.getTime() - b.registeredAt.getTime());
 
-    return null;
+    return matches[0] ?? null;
   }
 
-  /** REQ-043, OUT-01. Same order the SQLite driver answers: newest first. */
+  /** Same order the SQLite driver answers: newest first. */
   async list(filter: ProposalListFilter): Promise<readonly Proposal[]> {
     return [...this.records.values()]
       .filter((proposal) => filter.status === undefined || proposal.status === filter.status)

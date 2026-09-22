@@ -27,7 +27,7 @@ const NAV = [
         href: '/app/proposals/new.html',
         ready: true,
       },
-      // OUT-01 (REQ-043) and OUT-02 (REQ-045), as a filter over the same list.
+      // The proposals by state of REQ-250, as a filter over the same list.
       {
         id: 'proposals',
         label: 'Propostas',

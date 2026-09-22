@@ -1,6 +1,6 @@
+import type { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { BusinessRuleViolation } from '../../proposal/domain/errors.ts';
 import type { Money } from '../../proposal/domain/money.ts';
-import type { CalendarDate } from './calendar-date.ts';
 import { POLICY_MESSAGES } from './errors.ts';
 
 /**

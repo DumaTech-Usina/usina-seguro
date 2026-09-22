@@ -1,17 +1,20 @@
 /**
- * FP-01 steps 3 and 4: register the proposal and transmit it to the insurer.
+ * FP-01 steps 1 to 6: registers the proposal with everything it holds.
  *
- * The page orchestrates two calls and nothing else. Every rule — the
- * customer's acceptance (REQ-040), the number the insurer issues (REQ-041) —
- * belongs to the domain, and this file learns the answer by being refused.
- * Nothing is validated here beyond the shape the inputs already declare.
- *
- * It stops at the transmitted proposal on purpose. Step 5 (REQ-043) is a wait:
- * the insurer answers later, and the outcome of step 6 is recorded on the
- * proposal itself, at `/app/proposals/detail.html`.
+ * One form, one call. Every rule — the customer's acceptance (REQ-040), the
+ * CTU an intermediary requires (REQ-221), the signature (REQ-216) — belongs to
+ * the domain, and this file learns the answer by being refused. The expected
+ * value (REQ-232) is the server's answer too: this page shows it after the
+ * registration and never computes it.
  */
 
 import { ApiError, api } from '/app/shared/api.js';
+import { formatDate, formatMoney } from '/app/shared/money.js';
+import {
+  bindReceiptFields,
+  intermediaryOf,
+  offerRegisteredIntermediaries,
+} from '/app/shared/receipt.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
 
@@ -20,14 +23,8 @@ import { statusChip } from '/app/shared/status.js';
 /**
  * Offers the identifiers already registered in IN-01, with their names.
  *
- * A suggestion, never a constraint: no requirement says a proposal must name a
- * registered client, and REQ-002 makes this system reflect a control that
- * happens outside it. The field stays free text — the list only spares the
- * operator from retyping an identifier the registry already holds, which is
- * what keeps the two sides matching.
- *
- * A registry that cannot be read leaves the fields exactly as they were: this
- * is an aid, so its absence must not stop a proposal from being registered.
+ * A suggestion, never a constraint: the field stays free text. A registry that
+ * cannot be read leaves the fields exactly as they were.
  */
 async function offerRegisteredReferences() {
   const fields = [
@@ -64,53 +61,80 @@ async function offerRegisteredReferences() {
   }
 }
 
+const form = document.querySelector('#form-proposal');
+
 offerRegisteredReferences();
+offerRegisteredIntermediaries(document.querySelector('#intermediary-options'));
+bindReceiptFields(form);
 
-/** What the wizard has accumulated. `null` means "this step has not run". */
-const state = {
-  proposalId: null,
-};
+/* ------------------------------------------------------------ renewal -- */
 
-const panels = {
-  1: document.querySelector('[data-panel="1"]'),
-  2: document.querySelector('[data-panel="2"]'),
-  done: document.querySelector('[data-panel="done"]'),
-};
+// REQ-203: the renewal is the end of coverage. Shown as it is typed, never
+// asked for.
+const coverageEnd = form.querySelector('[name="coverageEnd"]');
+coverageEnd.addEventListener('input', () => {
+  document.querySelector('#renewal').textContent =
+    coverageEnd.value === '' ? 'igual ao fim da vigência' : formatDate(coverageEnd.value);
+});
 
-function goToStep(step) {
-  for (const [key, panel] of Object.entries(panels)) {
-    panel.classList.toggle('hidden', key !== String(step));
-  }
+/* ------------------------------------------------------- installments -- */
 
-  for (const marker of document.querySelectorAll('.step')) {
-    const position = Number(marker.dataset.step);
-    const current = Number(step);
+const installments = document.querySelector('#installments');
 
-    if (Number.isNaN(current)) {
-      marker.dataset.state = 'done';
-      continue;
-    }
-
-    if (position < current) {
-      marker.dataset.state = 'done';
-      marker.querySelector('.step__bullet').textContent = 'check';
-      marker.querySelector('.step__bullet').className = 'step__bullet material-symbols-outlined';
-    } else if (position === current) {
-      marker.dataset.state = 'current';
-    } else {
-      marker.removeAttribute('data-state');
-    }
-  }
-
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+function renumber() {
+  [...installments.querySelectorAll('.installment-row')].forEach((row, index) => {
+    // REQ-204: the number is the position, never typed.
+    row.querySelector('.installment-row__number').textContent = String(index + 1);
+  });
 }
 
-function values(form) {
-  return Object.fromEntries(new FormData(form).entries());
+function addInstallmentRow() {
+  const row = document.createElement('div');
+  row.className = 'installment-row';
+  row.innerHTML = `
+    <div class="installment-row__number"></div>
+    <div class="field">
+      <input class="field__input" name="amount" placeholder=" " inputmode="decimal"
+             pattern="\\d+(\\.\\d{1,2})?" required />
+      <label class="field__label">Valor</label>
+    </div>
+    <div class="field installment-row__date">
+      <input class="field__input" type="date" name="dueDate" />
+      <label class="field__label">Vencimento (opcional)</label>
+    </div>
+    <button class="installment-row__remove" type="button" title="Remover parcela">
+      <span class="material-symbols-outlined">close</span>
+    </button>`;
+
+  row.querySelector('.installment-row__remove').addEventListener('click', () => {
+    row.remove();
+    renumber();
+  });
+
+  installments.append(row);
+  renumber();
 }
 
-/** Keeps a submit button from firing twice while the request is in flight. */
-async function submitting(form, work) {
+document.querySelector('#add-installment').addEventListener('click', addInstallmentRow);
+
+function schedule() {
+  return [...installments.querySelectorAll('.installment-row')].map((row) => {
+    const dueDate = row.querySelector('[name="dueDate"]').value;
+    return {
+      amount: row.querySelector('[name="amount"]').value,
+      dueDate: dueDate === '' ? null : dueDate,
+    };
+  });
+}
+
+/* ------------------------------------------------------------- submit -- */
+
+function value(name) {
+  return form.querySelector(`[name="${name}"]`).value;
+}
+
+/** Keeps the submit button from firing twice while the request is in flight. */
+async function submitting(work) {
   const button = form.querySelector('button[type="submit"]');
   const label = button.textContent;
   button.disabled = true;
@@ -130,53 +154,31 @@ async function submitting(form, work) {
   }
 }
 
-/* ------------------------------------------------------------- step 1 -- */
-
-const proposalForm = document.querySelector('#form-proposal');
-
-proposalForm.addEventListener('submit', (event) => {
+form.addEventListener('submit', (event) => {
   event.preventDefault();
-  const input = values(proposalForm);
 
-  submitting(proposalForm, async () => {
+  submitting(async () => {
     const proposal = await api.registerProposal({
-      clientId: input.clientId,
-      brokerId: input.brokerId,
-      insurerId: input.insurerId,
-      productId: input.productId,
-      paymentMethodId: input.paymentMethodId,
-      // The checkbox is absent from the payload when unchecked; the domain is
-      // what refuses it (REQ-040), so it travels as the boolean it is.
-      customerAccepted: input.customerAccepted === 'on',
-      netPremium: input.netPremium,
+      clientId: value('clientId'),
+      brokerId: value('brokerId'),
+      insurerId: value('insurerId'),
+      productId: value('productId'),
+      paymentMethodId: value('paymentMethodId'),
+      // The domain is what refuses a missing acceptance (REQ-040), so it
+      // travels as the boolean it is.
+      customerAccepted: form.querySelector('[name="customerAccepted"]').checked,
+      proposalNumber: value('proposalNumber'),
+      netPremium: value('netPremium'),
+      coverageStart: value('coverageStart'),
+      coverageEnd: value('coverageEnd'),
+      installments: schedule(),
+      workedCommission: value('workedCommission'),
+      workedCommissionMode: value('workedCommissionMode'),
+      intermediary: intermediaryOf(form),
+      userId: value('userId'),
     });
 
-    state.proposalId = proposal.id;
-
-    document
-      .querySelector('#proposal-chip')
-      .replaceChildren(statusChip('proposal', proposal.status));
-
-    showSnackbar('Proposta registrada.', { tone: 'success' });
-    goToStep(2);
-  });
-});
-
-/* ------------------------------------------------------------- step 2 -- */
-
-const transmissionForm = document.querySelector('#form-transmission');
-
-transmissionForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const input = values(transmissionForm);
-
-  submitting(transmissionForm, async () => {
-    const proposal = await api.transmitProposal(state.proposalId, {
-      proposalNumber: input.proposalNumber,
-      workedCommission: input.workedCommission,
-    });
-
-    showSnackbar(`Proposta ${proposal.proposalNumber} transmitida.`, { tone: 'success' });
+    showSnackbar(`Proposta ${proposal.proposalNumber} registrada.`, { tone: 'success' });
     finish(proposal);
   });
 });
@@ -190,26 +192,27 @@ function finish(proposal) {
 
   const symbol = document.createElement('span');
   symbol.className = 'material-symbols-outlined';
-  symbol.textContent = 'send';
+  symbol.textContent = 'hourglass_top';
 
   const heading = document.createElement('h2');
   heading.className = 'text-title';
-  heading.textContent = `Proposta ${proposal.proposalNumber} transmitida`;
+  heading.textContent = `Proposta ${proposal.proposalNumber} registrada`;
+
+  const chip = statusChip('proposal', proposal.status);
+
+  // REQ-232, CA-203: what the Usina expects, known before the issuance.
+  const expected = document.createElement('p');
+  expected.textContent = `A Usina espera receber ${formatMoney(proposal.expectedReceipt.usina)}.`;
 
   const text = document.createElement('p');
   text.className = 'text-muted';
   text.textContent =
-    'Fica em aberto e rastreável até a seguradora responder. O desfecho — aceite com a apólice, ou recusa com motivo — é registrado na própria proposta.';
+    'Enquanto aguarda a emissão, a CT e o recebimento podem ser corrigidos na própria proposta.';
 
   const open = document.createElement('a');
   open.className = 'btn btn--filled';
   open.href = `/app/proposals/detail.html?id=${encodeURIComponent(proposal.id)}`;
   open.textContent = 'Abrir proposta';
-
-  const listing = document.createElement('a');
-  listing.className = 'btn btn--outlined';
-  listing.href = '/app/proposals/';
-  listing.textContent = 'Ver propostas em aberto';
 
   const again = document.createElement('a');
   again.className = 'btn btn--outlined';
@@ -219,9 +222,12 @@ function finish(proposal) {
   const actions = document.createElement('div');
   actions.className = 'row';
   actions.style.marginTop = 'var(--space-2)';
-  actions.append(open, listing, again);
+  actions.append(open, again);
 
-  empty.append(symbol, heading, text, actions);
+  empty.append(symbol, heading, chip, expected, text, actions);
   body.replaceChildren(empty);
-  goToStep('done');
+
+  form.classList.add('hidden');
+  document.querySelector('[data-panel="done"]').classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }

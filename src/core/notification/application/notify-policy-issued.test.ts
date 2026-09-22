@@ -3,6 +3,7 @@ import { InMemoryNotificationRepository } from '../../../infrastructure/persiste
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { InMemoryReferenceRepository } from '../../../infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
 import type { PolicyIssuedEvent } from '../../policy/application/policy-issued-notifier.ts';
+import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
@@ -58,12 +59,16 @@ function transmitted(): Proposal {
     productId: 'auto',
     paymentMethodId: 'bank-slip',
     customerAccepted: true,
-    netPremium: Money.fromString('1200.00'),
-    registeredAt: new Date('2026-09-17T12:00:00.000Z'),
-  }).transmit({
     proposalNumber: 'PRP-9001',
+    netPremium: Money.fromString('1200.00'),
+    coverageStart: CalendarDate.fromString('2026-10-01'),
+    coverageEnd: CalendarDate.fromString('2027-10-01'),
+    installments: [],
     workedCommission: Percentage.fromString('32.5'),
-    transmittedAt: new Date('2026-09-18T09:00:00.000Z'),
+    workedCommissionMode: 'INTEGRAL',
+    receipt: { kind: 'DIRECT' },
+    registeredBy: 'operator',
+    registeredAt: new Date('2026-09-17T12:00:00.000Z'),
   });
 }
 

@@ -99,14 +99,6 @@ beforeAll(async () => {
   window.scrollTo = () => {};
   installDialogSupport();
 
-  // IN-02 and IN-05: premium 100.00 with these rates makes the agreed
-  // receivable 40.00 and the payable to the broker 20.00 (REQ-062, REQ-093).
-  await callApi('POST', '/commission-agreements', {
-    insurerId: 'insurer-1',
-    productId: 'auto',
-    effectiveFrom: '2026-01-01',
-    insurerRate: '40',
-  });
   await callApi('POST', '/broker-commission-rates', { brokerId: 'broker-1', rate: '50' });
 
   // The three states FP-02 can leave a policy in: reported short, reported as
@@ -270,12 +262,14 @@ async function registeredPolicy(proposalNumber: string, policyNumber: string): P
     productId: 'auto',
     paymentMethodId: 'credit',
     customerAccepted: true,
+    proposalNumber: proposalNumber,
     netPremium: '100.00',
-  });
-
-  await callApi('POST', `/proposals/${proposal.id}/transmission`, {
-    proposalNumber,
+    coverageStart: '2026-10-01',
+    coverageEnd: '2027-10-01',
     workedCommission: '40',
+    workedCommissionMode: 'INTEGRAL',
+    intermediary: null,
+    userId: 'operator',
   });
 
   const policy = await callApi('POST', '/policies', {

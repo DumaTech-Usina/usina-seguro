@@ -160,145 +160,20 @@ function snackbars(): string[] {
 
 /* -------------------------------------------------------------- tests -- */
 
-describe('the registry screen (IN-02, IN-05, IN-06)', () => {
+describe('the registry screen (IN-05, IN-06)', () => {
   it('says the registries are empty before anything is configured', async () => {
     await openSettings();
 
     // Each registry is read from the backend on its own, and the empty state
     // says what the absence costs, not just that there is nothing.
-    expect(requests).toContain('GET /commission-agreements');
+    expect(requests).not.toContain('GET /commission-agreements');
     expect(requests).toContain('GET /broker-commission-rates');
     expect(requests).toContain('GET /payment-method-release-rules');
 
-    expect(text('#list-agreements')).toContain('Nenhum acordo registrado');
-    expect(text('#list-agreements')).toContain('o registro da apólice é recusado');
+    // REQ-236: there is no commercial agreement to register any more.
+    expect(document.querySelector('#form-agreement')).toBeNull();
     expect(text('#list-broker-rates')).toContain('Nenhuma tabela registrada');
     expect(text('#list-release-rules')).toContain('Nenhuma regra registrada');
-  });
-
-  it('shows the commercial agreement the moment it is registered (IN-02)', async () => {
-    await openSettings();
-
-    fill('#form-agreement', {
-      insurerId: 'insurer-1',
-      productId: 'auto',
-      effectiveFrom: '2026-01-01',
-      insurerRate: '40',
-    });
-    await submit('#form-agreement', '#list-agreements', '/commission-agreements');
-
-    expect(requests).toContain('POST /commission-agreements');
-    // The listing is re-read from the backend, not patched into the page.
-    expect(requests.at(-1)).toBe('GET /commission-agreements');
-    expect(snackbars().join(' ')).toContain('Acordo de insurer-1 / auto registrado');
-
-    const [line] = rows('#list-agreements');
-    expect(line.textContent).toContain('insurer-1');
-    expect(line.textContent).toContain('auto');
-    expect(line.textContent).toContain('01/01/2026');
-    expect(line.textContent).toContain('40%');
-    // REQ-060, REQ-062: nobody sits between the insurer and the Usina.
-    expect(line.textContent).toContain('Direta');
-  });
-
-  it('registers a chain with an intermediary and shows its base (REQ-063, REQ-064)', async () => {
-    await openSettings();
-
-    fill('#form-agreement', {
-      insurerId: 'insurer-2',
-      productId: 'vida',
-      effectiveFrom: '2026-01-01',
-      insurerRate: '40',
-      intermediaryId: 'mega',
-      intermediaryRate: '80',
-      brokerBase: 'INTERMEDIARY',
-    });
-    document.querySelector('#has-intermediary').click();
-    await submit('#form-agreement', '#list-agreements', '/commission-agreements');
-
-    const line = rows('#list-agreements').find((row: Untyped) =>
-      row.textContent.includes('insurer-2'),
-    );
-
-    expect(line.textContent).toContain('Via mega');
-    expect(line.textContent).toContain('80%');
-    // REQ-063: the default base, shown as what it is rather than as a code.
-    expect(line.textContent).toContain('Base do corretor: valor recebido pela intermediária');
-  });
-
-  it('refuses an incomplete chain in Portuguese and leaves the registry alone', async () => {
-    await openSettings();
-    const before = rows('#list-agreements').length;
-
-    // Reachable from the screen: the intermediary fields carry no `required`,
-    // so the operator can tick the switch and inform only the percentage.
-    fill('#form-agreement', {
-      insurerId: 'insurer-3',
-      productId: 'auto',
-      effectiveFrom: '2026-01-01',
-      insurerRate: '40',
-      intermediaryId: '',
-      intermediaryRate: '80',
-    });
-    document.querySelector('#has-intermediary').click();
-    document
-      .querySelector('#form-agreement')
-      .dispatchEvent(new window.Event('submit', { cancelable: true }));
-
-    await vi.waitFor(() => {
-      expect(snackbars().length).toBeGreaterThan(0);
-    });
-
-    // REQ-060: the server's own sentence, with the rule that produced it.
-    expect(snackbars().join(' ')).toContain('intermediária');
-    expect(snackbars().join(' ')).toContain('REQ-060');
-    expect(rows('#list-agreements')).toHaveLength(before);
-  });
-
-  it('keeps a new validity beside the old one, most recent first (REQ-065, REQ-124)', async () => {
-    await openSettings();
-
-    fill('#form-agreement', {
-      insurerId: 'insurer-1',
-      productId: 'auto',
-      effectiveFrom: '2026-07-01',
-      insurerRate: '45',
-    });
-    await submit('#form-agreement', '#list-agreements', '/commission-agreements');
-
-    const auto = rows('#list-agreements').filter(
-      (row: Untyped) => row.textContent.includes('insurer-1') && row.textContent.includes('auto'),
-    );
-
-    // CA-012: a new validity is a new record; the earlier percentage is still
-    // there, which is what makes a calculation already made auditable.
-    expect(auto).toHaveLength(2);
-    expect(auto[0].textContent).toContain('01/07/2026');
-    expect(auto[0].textContent).toContain('45%');
-    expect(auto[1].textContent).toContain('01/01/2026');
-    expect(auto[1].textContent).toContain('40%');
-  });
-
-  it('replaces a validity corrected in place instead of listing it twice', async () => {
-    await openSettings();
-
-    fill('#form-agreement', {
-      insurerId: 'insurer-1',
-      productId: 'auto',
-      effectiveFrom: '2026-07-01',
-      insurerRate: '46',
-    });
-    await submit('#form-agreement', '#list-agreements', '/commission-agreements');
-
-    const july = rows('#list-agreements').filter(
-      (row: Untyped) =>
-        row.textContent.includes('insurer-1') &&
-        row.textContent.includes('auto') &&
-        row.textContent.includes('01/07/2026'),
-    );
-
-    expect(july).toHaveLength(1);
-    expect(july[0].textContent).toContain('46%');
   });
 
   it('shows the broker table and corrects a rate in place (IN-05, REQ-093)', async () => {
@@ -366,9 +241,8 @@ describe('the registry screen (IN-02, IN-05, IN-06)', () => {
     // are in SQLite and not in the page that wrote them.
     await openSettings();
 
-    expect(rows('#list-agreements').length).toBeGreaterThan(0);
     expect(rows('#list-broker-rates').length).toBeGreaterThan(0);
     expect(rows('#list-release-rules').length).toBeGreaterThan(0);
-    expect(text('#list-agreements')).toContain('registros');
+    expect(text('#list-broker-rates')).toContain('registro');
   });
 });

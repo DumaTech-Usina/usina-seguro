@@ -12,17 +12,18 @@
 
 const NEUTRAL = { label: '—', tone: 'neutral' };
 
+// Os três estados de REQ-250.
 const PROPOSAL = {
-  // Etapa comercial, não estado de edição: o registro está completo e o que
-  // falta é a seguradora emitir a proposta (REQ-041). "Rascunho" dizia o
-  // contrário — que faltava alguém terminar de preencher.
-  DRAFT: { label: 'Aguardando emissão', tone: 'warning' },
-  // REQ-041: o ato registrado é a emissão da proposta pela seguradora. O
-  // identificador do estado continua `TRANSMITTED` — ver a nota no agregado.
-  TRANSMITTED: { label: 'Emitida', tone: 'info' },
-  ACCEPTED: { label: 'Aceita', tone: 'success' },
+  AWAITING_ISSUANCE: { label: 'Aguardando emissão', tone: 'warning' },
+  // REQ-251: emitida é o estado que confirma que a proposta gerou a apólice.
+  ISSUED: { label: 'Emitida', tone: 'success' },
   REJECTED: { label: 'Recusada', tone: 'danger' },
-  CANCELLED: { label: 'Cancelada', tone: 'neutral' },
+};
+
+/** REQ-213: como a comissão trabalhada é recebida. */
+export const WORKED_COMMISSION_MODE = {
+  INTEGRAL: 'Integral',
+  PARCELLED: 'Parcelada',
 };
 
 const POLICY = {
@@ -96,9 +97,9 @@ const MAPS = {
  *   (`REQ-030`, `FA-01`) — não está implementado, então a etapa aparece como
  *   não registrada em vez de sumir da tira. Dizer que ela existe seria mentir;
  *   escondê-la faria a progressão parecer começar na proposta;
- * - **Proposta** é o registro que existe desde o aceite do cliente, com as
- *   subetapas da seção 10.2: aguardando emissão → emitida → aceita/recusada;
- * - **Apólice** é a evolução da proposta aceita (`REQ-048`).
+ * - **Proposta** é o registro que existe desde o aceite do cliente, com os
+ *   estados de `REQ-250`: aguardando emissão → emitida | recusada;
+ * - **Apólice** é a proposta emitida (`REQ-240`, `REQ-251`).
  *
  * Isto é apresentação: nenhuma decisão de domínio é tomada aqui.
  */
@@ -110,7 +111,7 @@ const STAGES = [
 
 /** Em que etapa comercial um estado da proposta coloca o negócio. */
 export function stageOfProposal(status) {
-  return status === 'ACCEPTED' ? 'policy' : 'proposal';
+  return status === 'ISSUED' ? 'policy' : 'proposal';
 }
 
 /**

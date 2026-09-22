@@ -7,11 +7,8 @@ export interface GetProposalDependencies {
 }
 
 /**
- * Reads one proposal (FP-01 step 5).
- *
- * REQ-043 makes a transmitted proposal trackable, and REQ-045/REQ-046 keep a
- * refused one consultable after the commercial cycle ended. Both read through
- * here.
+ * Reads one proposal, with what the Usina expects to receive (REQ-232). A
+ * refused proposal stays consultable (REQ-253).
  */
 export class GetProposal {
   private readonly deps: GetProposalDependencies;

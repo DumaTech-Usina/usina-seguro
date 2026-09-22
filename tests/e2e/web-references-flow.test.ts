@@ -182,12 +182,6 @@ async function callApi(method: string, apiPath: string, body?: unknown): Promise
 
 /** IN-02 and IN-05: without them the policy is registered with no commission. */
 async function seedRegistries(): Promise<void> {
-  await callApi('POST', '/commission-agreements', {
-    insurerId: 'insurer-1',
-    productId: 'auto',
-    effectiveFrom: '2026-01-01',
-    insurerRate: '40',
-  });
   await callApi('POST', '/broker-commission-rates', { brokerId: 'broker-1', rate: '50' });
   await callApi('POST', '/payment-method-release-rules', {
     paymentMethodId: 'credit',
@@ -207,12 +201,14 @@ async function registeredPolicy(options: {
     productId: 'auto',
     paymentMethodId: 'credit',
     customerAccepted: true,
-    netPremium: '1200.00',
-  });
-
-  await callApi('POST', `/proposals/${proposal.id}/transmission`, {
     proposalNumber: options.proposalNumber,
+    netPremium: '1200.00',
+    coverageStart: '2026-10-01',
+    coverageEnd: '2027-10-01',
     workedCommission: '40',
+    workedCommissionMode: 'INTEGRAL',
+    intermediary: null,
+    userId: 'operator',
   });
 
   await callApi('POST', '/policies', {

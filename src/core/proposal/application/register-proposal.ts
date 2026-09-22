@@ -1,12 +1,29 @@
+import { CalendarDate } from '../domain/calendar-date.ts';
 import { Money } from '../domain/money.ts';
+import { Percentage } from '../domain/percentage.ts';
 import { Proposal } from '../domain/proposal.ts';
+import { declareReceipt } from '../domain/receipt.ts';
+import type { WorkedCommissionMode } from '../domain/worked-commission.ts';
 import type { ProposalRepository } from './proposal-repository.ts';
+import { type ProposalView, toProposalView } from './proposal-view.ts';
+
+/** REQ-221: an intermediary and its CTU, as the user declared them. */
+export interface IntermediaryDeclarationInput {
+  readonly intermediaryId: string;
+  /** Decimal string; `null` when not informed, which the domain refuses. */
+  readonly ctu: string | null;
+}
+
+export interface RegisterProposalInstallmentInput {
+  readonly amount: string;
+  /** REQ-204: optional. */
+  readonly dueDate: string | null;
+}
 
 /**
- * Use case input: raw data at the core boundary.
- *
- * `netPremium` arrives as a decimal string (REQ-120) and only becomes `Money`
- * in here — the caller does not need to know the value object.
+ * Use case input: raw data at the core boundary. Money and percentages arrive
+ * as decimal strings (REQ-120, REQ-121) and dates as `YYYY-MM-DD`; they only
+ * become value objects in here.
  */
 export interface RegisterProposalInput {
   readonly clientId: string;
@@ -15,22 +32,22 @@ export interface RegisterProposalInput {
   readonly productId: string;
   readonly paymentMethodId: string;
   readonly customerAccepted: boolean;
+  readonly proposalNumber: string;
   readonly netPremium: string;
-}
-
-export interface RegisterProposalOutput {
-  readonly id: string;
-  readonly status: string;
-  readonly netPremium: string;
-  readonly registeredAt: string;
+  readonly coverageStart: string;
+  readonly coverageEnd: string;
+  readonly installments: readonly RegisterProposalInstallmentInput[];
+  readonly workedCommission: string;
+  readonly workedCommissionMode: WorkedCommissionMode;
+  /** REQ-220: `null` declares a direct receipt. */
+  readonly intermediary: IntermediaryDeclarationInput | null;
+  /** REQ-216: who signs the CT and the receipt declaration. */
+  readonly author: string;
 }
 
 /**
- * Use case dependencies.
- *
  * `newId` and `now` are injected rather than called directly: they are the two
  * sources of non-determinism in this flow and the tests need to control them.
- * They are function types, not ceremonial interfaces.
  */
 export interface RegisterProposalDependencies {
   readonly proposals: ProposalRepository;
@@ -39,10 +56,11 @@ export interface RegisterProposalDependencies {
 }
 
 /**
- * FP-01, step 3: registers the proposal from the customer's acceptance.
+ * FP-01 steps 1 to 6: registers the proposal with its commercial and
+ * standardized data, the CT and the receipt declaration, leaving it awaiting
+ * issuance with the expected value visible (REQ-232).
  *
- * The use case only orchestrates — the acceptance rule lives in
- * `Proposal.register` (REQ-040).
+ * The use case only converts and orchestrates — the rules live in the domain.
  */
 export class RegisterProposal {
   private readonly deps: RegisterProposalDependencies;
@@ -51,7 +69,7 @@ export class RegisterProposal {
     this.deps = deps;
   }
 
-  async execute(input: RegisterProposalInput): Promise<RegisterProposalOutput> {
+  async execute(input: RegisterProposalInput): Promise<ProposalView> {
     const proposal = Proposal.register({
       id: this.deps.newId(),
       clientId: input.clientId,
@@ -60,17 +78,35 @@ export class RegisterProposal {
       productId: input.productId,
       paymentMethodId: input.paymentMethodId,
       customerAccepted: input.customerAccepted,
+      proposalNumber: input.proposalNumber,
       netPremium: Money.fromString(input.netPremium),
+      coverageStart: CalendarDate.fromString(input.coverageStart),
+      coverageEnd: CalendarDate.fromString(input.coverageEnd),
+      installments: input.installments.map((installment) => ({
+        amount: Money.fromString(installment.amount),
+        dueDate: installment.dueDate === null ? null : CalendarDate.fromString(installment.dueDate),
+      })),
+      workedCommission: Percentage.fromString(input.workedCommission),
+      workedCommissionMode: input.workedCommissionMode,
+      receipt: declareReceipt(toIntermediary(input.intermediary)),
+      registeredBy: input.author,
       registeredAt: this.deps.now(),
     });
 
     await this.deps.proposals.save(proposal);
 
-    return {
-      id: proposal.id,
-      status: proposal.status,
-      netPremium: proposal.netPremium.toString(),
-      registeredAt: proposal.registeredAt.toISOString(),
-    };
+    return toProposalView(proposal);
   }
+}
+
+/** Shared with `ReviseReceipt`: the CTU only becomes a percentage when present. */
+export function toIntermediary(input: IntermediaryDeclarationInput | null) {
+  if (input === null) {
+    return null;
+  }
+
+  return {
+    intermediaryId: input.intermediaryId,
+    ctu: input.ctu === null ? null : Percentage.fromString(input.ctu),
+  };
 }

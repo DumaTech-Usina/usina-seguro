@@ -3,7 +3,7 @@ import type { ProposalRepository } from './proposal-repository.ts';
 
 export interface RejectProposalInput {
   readonly proposalId: string;
-  /** REQ-045: mandatory. Free text; the set of categories is DEC-014. */
+  /** REQ-253: mandatory. Free text. */
   readonly reason: string;
 }
 
@@ -18,8 +18,8 @@ export interface RejectProposalDependencies {
 }
 
 /**
- * FP-01, step 6 (refusal branch): records the insurer's refusal (REQ-044,
- * REQ-045). The record stays in the system (REQ-046, OUT-02).
+ * FP-01 step 8, refusal branch (REQ-253, FA-208): the insurer did not issue
+ * the proposal. The refusal is final and the record stays consultable.
  */
 export class RejectProposal {
   private readonly deps: RejectProposalDependencies;

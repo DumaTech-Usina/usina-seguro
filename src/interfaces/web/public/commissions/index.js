@@ -238,7 +238,7 @@ async function load() {
           ? 'Nenhuma divergência a tratar'
           : 'Nenhuma comissão neste estado',
         current.status === 'DIVERGENT'
-          ? 'Toda comissão apurada até aqui bate com o acordo vigente.'
+          ? 'Toda comissão apurada até aqui bate com o valor previsto.'
           : 'Troque o filtro ou concilie um relatório de comissionamento.',
       ),
     );

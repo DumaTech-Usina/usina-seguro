@@ -97,7 +97,7 @@ function settlementCell(line) {
   if (line.settlement === null) {
     // FP-03 passo 1: o repasse é aberto por ato do Financeiro, na apólice.
     cell.append(element('span', 'chip', 'Repasse não aberto'));
-    cell.append(element('div', 'text-muted', 'Previsto pelo acordo vigente'));
+    cell.append(element('div', 'text-muted', 'Previsto na comissão da apólice'));
     return cell;
   }
 

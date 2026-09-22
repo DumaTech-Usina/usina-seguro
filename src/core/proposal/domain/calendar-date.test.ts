@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BusinessRuleViolation } from '../../proposal/domain/errors.ts';
 import { CalendarDate } from './calendar-date.ts';
+import { BusinessRuleViolation } from './errors.ts';
 
 describe('CalendarDate', () => {
   it('keeps the calendar day exactly as informed', () => {

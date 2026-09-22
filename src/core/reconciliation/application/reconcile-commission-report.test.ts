@@ -6,9 +6,9 @@ import { InMemoryProposalRepository } from '../../../infrastructure/persistence/
 import { InMemoryReconciliationPendencyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-reconciliation-pendency-repository.ts';
 import type { CommissionBasis } from '../../commission/domain/commission-basis.ts';
 import { Commission } from '../../commission/domain/commission.ts';
-import { CalendarDate } from '../../policy/domain/calendar-date.ts';
 import { Installment } from '../../policy/domain/installment.ts';
 import { Policy } from '../../policy/domain/policy.ts';
+import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { BusinessRuleViolation } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
@@ -63,15 +63,17 @@ async function registeredPolicy(
       productId: 'auto',
       paymentMethodId: 'credit',
       customerAccepted: true,
+      proposalNumber: 'PRP-1',
       netPremium: Money.fromString('100.00'),
+      coverageStart: CalendarDate.fromString('2026-10-01'),
+      coverageEnd: CalendarDate.fromString('2027-10-01'),
+      installments: [],
+      workedCommission: Percentage.fromString('40'),
+      workedCommissionMode: 'INTEGRAL',
+      receipt: { kind: 'DIRECT' },
+      registeredBy: 'operator',
       registeredAt: new Date('2026-09-17T12:00:00.000Z'),
-    })
-      .transmit({
-        proposalNumber: 'PRP-1',
-        workedCommission: Percentage.fromString('40'),
-        transmittedAt: new Date('2026-09-18T12:00:00.000Z'),
-      })
-      .accept(),
+    }).accept(),
   );
 
   await policies.save(

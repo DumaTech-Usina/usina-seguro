@@ -100,15 +100,6 @@ beforeAll(async () => {
   window.scrollTo = () => {};
   installDialogSupport();
 
-  // IN-02 and IN-05: premium 100.00 at 40% makes 40.00 for the Usina, and the
-  // broker table decides what goes out — half for one broker, a quarter for
-  // the other (REQ-093).
-  await callApi('POST', '/commission-agreements', {
-    insurerId: 'insurer-1',
-    productId: 'auto',
-    effectiveFrom: '2026-01-01',
-    insurerRate: '40',
-  });
   await callApi('POST', '/broker-commission-rates', { brokerId: 'broker-1', rate: '50' });
   await callApi('POST', '/broker-commission-rates', { brokerId: 'broker-2', rate: '25' });
 
@@ -320,12 +311,14 @@ async function registeredPolicy(
     productId: 'auto',
     paymentMethodId,
     customerAccepted: true,
+    proposalNumber: proposalNumber,
     netPremium: '100.00',
-  });
-
-  await callApi('POST', `/proposals/${proposal.id}/transmission`, {
-    proposalNumber,
+    coverageStart: '2026-10-01',
+    coverageEnd: '2027-10-01',
     workedCommission: '40',
+    workedCommissionMode: 'INTEGRAL',
+    intermediary: null,
+    userId: 'operator',
   });
 
   const policy = await callApi('POST', '/policies', {

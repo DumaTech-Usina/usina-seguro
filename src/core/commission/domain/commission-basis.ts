@@ -1,88 +1,83 @@
+import { type ExpectedReceipt, commissionBase } from '../../proposal/domain/expected-receipt.ts';
 import type { Money } from '../../proposal/domain/money.ts';
 import type { Percentage } from '../../proposal/domain/percentage.ts';
+import type { Proposal } from '../../proposal/domain/proposal.ts';
 import type { BrokerCommissionRate } from './broker-commission-rate.ts';
-import type { BrokerBase, CommissionAgreement } from './commission-agreement.ts';
+
+/**
+ * REQ-234: which amount the broker's rate is applied to — what the
+ * intermediary received, or what the Usina received.
+ */
+export type BrokerBase = 'INTERMEDIARY' | 'USINA';
 
 /**
  * Everything the calculation consumed, kept next to its result.
  *
- * The rates are **copied**, not looked up again when the commission is read.
- * That is what makes editing an agreement or a broker table change future
- * calculations only (CA-012, REJ-011) and what makes the agreed-versus-real
- * comparison of REQ-076 auditable: the record says which numbers produced it.
+ * The rates are **copied**, not looked up again when the commission is read:
+ * the record says which numbers produced it, which keeps the agreed-versus-real
+ * comparison auditable.
  */
 export interface CommissionBasis {
-  /** REQ-051: the policy premium, the only admissible calculation base. */
+  /** REQ-235: the amount the CT was applied to — the net premium. */
   readonly premium: Money;
+  /** REQ-212: the CT of the proposal. */
   readonly insurerRate: Percentage;
-  /** REQ-069: what the insurer paid, to the intermediary or to the Usina. */
+  /** Premium x CT: what the insurer paid, to the intermediary or to the Usina. */
   readonly insurerAmount: Money;
   readonly intermediaryId: string | null;
+  /** REQ-221: the CTU, when there is an intermediary. */
   readonly intermediaryRate: Percentage | null;
   readonly brokerBase: BrokerBase;
-  /** REQ-062, REQ-063, REQ-064: the amount the broker's rate was applied to. */
+  /** REQ-234: the amount the broker's rate was applied to. */
   readonly brokerBaseAmount: Money;
   readonly brokerRate: Percentage;
 }
 
 export interface CalculatedCommission {
   readonly basis: CommissionBasis;
-  /** What the Usina expects to receive (REQ-075, receivable side). */
+  /** What the Usina expects to receive. */
   readonly receivable: Money;
-  /** What the Usina expects to pay the broker (REQ-075, payable side). */
+  /** What the Usina expects to pay the broker. */
   readonly payable: Money;
 }
 
 /**
- * Walks the commission chain of REQ-060 over the policy premium.
+ * REQ-234: the base of the broker payout, kept apart so another rule can
+ * coexist without rewriting what the Usina receives (CA-211). Today it is what
+ * the Usina received.
+ */
+function brokerBaseOf(expected: ExpectedReceipt): { base: BrokerBase; amount: Money } {
+  return { base: 'USINA', amount: expected.usina };
+}
+
+/**
+ * REQ-236: the agreed commission of a policy comes from its proposal — the CT,
+ * or CT then CTU through the intermediary (REQ-230, REQ-231) — and never from
+ * a registered commercial agreement (REJ-203). What the Usina receives is the
+ * proposal's own expected receipt, so the rule lives in one place.
  *
- * Direct chain (REQ-062, REQ-068):
- * ```
- * premium x insurerRate                 -> the Usina receives
- * received by the Usina x brokerRate    -> the broker receives
- * ```
- *
- * Chain with an intermediary (REQ-063, REQ-064, REQ-069):
- * ```
- * premium x insurerRate                 -> the intermediary receives
- * that x intermediaryRate               -> the Usina receives
- * base (intermediary's by default, the Usina's when configured) x brokerRate
- *                                       -> the broker receives
- * ```
- *
- * The premium is the base because REQ-051 admits no other, and the function is
- * pure: it neither reads nor writes anything, so the rule is testable on its
- * own.
+ * The broker side is the broker table (IN-05) applied to the base of REQ-234.
  */
 export function calculateCommission(
-  premium: Money,
-  agreement: CommissionAgreement,
+  proposal: Proposal,
   brokerRate: BrokerCommissionRate,
 ): CalculatedCommission {
-  const insurerAmount = premium.applyRate(agreement.insurerRate);
-  const chain = agreement.chain;
-
-  const receivable =
-    chain.kind === 'DIRECT' ? insurerAmount : insurerAmount.applyRate(chain.intermediaryRate);
-
-  // REQ-062: without an intermediary there is only one candidate, what the
-  // Usina received. REQ-063/REQ-064: with one, the configuration decides.
-  const brokerBase: BrokerBase = chain.kind === 'DIRECT' ? 'USINA' : chain.brokerBase;
-  const brokerBaseAmount = brokerBase === 'USINA' ? receivable : insurerAmount;
+  const expected = proposal.expectedReceipt();
+  const receipt = proposal.receipt;
+  const broker = brokerBaseOf(expected);
 
   return {
     basis: {
-      premium,
-      insurerRate: agreement.insurerRate,
-      insurerAmount,
-      intermediaryId: chain.kind === 'INTERMEDIARY' ? chain.intermediaryId : null,
-      intermediaryRate: chain.kind === 'INTERMEDIARY' ? chain.intermediaryRate : null,
-      brokerBase,
-      brokerBaseAmount,
+      premium: commissionBase(proposal.netPremium, proposal.workedCommissionMode),
+      insurerRate: proposal.workedCommission,
+      insurerAmount: expected.intermediary ?? expected.usina,
+      intermediaryId: receipt.kind === 'INTERMEDIARY' ? receipt.intermediaryId : null,
+      intermediaryRate: receipt.kind === 'INTERMEDIARY' ? receipt.ctu : null,
+      brokerBase: broker.base,
+      brokerBaseAmount: broker.amount,
       brokerRate: brokerRate.rate,
     },
-    receivable,
-    // REQ-093: the broker's table applied to the base defined by the chain.
-    payable: brokerBaseAmount.applyRate(brokerRate.rate),
+    receivable: expected.usina,
+    payable: broker.amount.applyRate(brokerRate.rate),
   };
 }

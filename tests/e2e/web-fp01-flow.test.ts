@@ -10,7 +10,9 @@ import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 
 /**
- * FP-01 driven the way an operator drives it: through the pages.
+ * FP-01 of V2, from the registration of the proposal up to — not including —
+ * the recognition of issuance, driven the way an operator drives it: through
+ * the pages.
  *
  * Nothing here is a mock. The server is the real one, listening on an ephemeral
  * port over SQLite on disk; the modules under test are the same files the
@@ -138,103 +140,165 @@ async function callApi(method: string, apiPath: string, body?: unknown): Promise
   return response.status === 204 ? null : await response.json();
 }
 
-async function transmittedProposal(proposalNumber: string): Promise<string> {
-  const proposal = await callApi('POST', '/proposals', {
+/** The registration body of a V2 proposal awaiting issuance, over the API. */
+function proposalBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
     clientId: 'client-1',
     brokerId: 'broker-1',
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'bank-slip',
     customerAccepted: true,
-    netPremium: '1200.00',
-  });
+    proposalNumber: 'PRP-API',
+    netPremium: '100.00',
+    coverageStart: '2026-10-01',
+    coverageEnd: '2027-10-01',
+    workedCommission: '20',
+    workedCommissionMode: 'INTEGRAL',
+    intermediary: null,
+    userId: 'ana.souza',
+    ...overrides,
+  };
+}
 
-  await callApi('POST', `/proposals/${proposal.id}/transmission`, {
-    proposalNumber,
-    workedCommission: '32.5',
-  });
-
+async function awaitingProposal(overrides: Record<string, unknown> = {}): Promise<string> {
+  const proposal = await callApi('POST', '/proposals', proposalBody(overrides));
   return proposal.id;
+}
+
+/** Fills the registration form of `new.html` with a complete, valid proposal. */
+function fillRegistration(): void {
+  field('#form-proposal', 'clientId').value = 'client-web';
+  field('#form-proposal', 'brokerId').value = 'broker-1';
+  field('#form-proposal', 'insurerId').value = 'insurer-1';
+  field('#form-proposal', 'productId').value = 'auto';
+  field('#form-proposal', 'paymentMethodId').value = 'bank-slip';
+  field('#form-proposal', 'customerAccepted').checked = true;
+  field('#form-proposal', 'proposalNumber').value = 'PRP-WEB-1';
+  field('#form-proposal', 'netPremium').value = '100.00';
+  field('#form-proposal', 'coverageStart').value = '2026-10-01';
+  field('#form-proposal', 'coverageEnd').value = '2027-10-01';
+  field('#form-proposal', 'workedCommission').value = '20';
+  field('#form-proposal', 'workedCommissionMode').value = 'INTEGRAL';
+  field('#form-proposal', 'userId').value = 'ana.souza';
+}
+
+function choose(form: string, name: string, value: string): void {
+  const select = field(form, name);
+  select.value = value;
+  select.dispatchEvent(new Event('change'));
+}
+
+async function openProposal(id: string): Promise<void> {
+  vi.resetModules();
+  openPage('proposals/detail.html', `?id=${id}`);
+  await import('/app/proposals/detail.js');
+  await vi.waitFor(() => {
+    expect(document.querySelector('.stage-strip')).not.toBeNull();
+  });
+}
+
+function hidden(selector: string): boolean {
+  return document.querySelector(selector)?.classList.contains('hidden') ?? true;
 }
 
 /* -------------------------------------------------------------- tests -- */
 
 describe('FP-01 through the web interface', () => {
-  it('registers and transmits a proposal from the form (steps 3 and 4)', async () => {
+  it('registers a proposal awaiting issuance from one form (steps 1 to 6)', async () => {
     openPage('proposals/new.html');
     await import('/app/proposals/new.js');
 
-    field('#form-proposal', 'clientId').value = 'client-web';
-    field('#form-proposal', 'brokerId').value = 'broker-1';
-    field('#form-proposal', 'insurerId').value = 'insurer-1';
-    field('#form-proposal', 'productId').value = 'auto';
-    field('#form-proposal', 'paymentMethodId').value = 'bank-slip';
-    field('#form-proposal', 'netPremium').value = '1200.00';
-    // REQ-040: without it the domain refuses, which the next test exercises.
-    field('#form-proposal', 'customerAccepted').checked = true;
+    fillRegistration();
+    // REQ-204, FA-205: one installment, with no due date.
+    click('#add-installment');
+    field('#installments', 'amount').value = '100.00';
+    // REQ-220, REQ-221: through the one intermediary, with its CTU.
+    choose('#form-proposal', 'receiptKind', 'INTERMEDIARY');
+    field('#form-proposal', 'intermediaryId').value = 'intermediary-1';
+    field('#form-proposal', 'ctu').value = '50';
     submit('#form-proposal');
-
-    // The transmission panel only opens once the proposal exists.
-    await vi.waitFor(() => {
-      expect(document.querySelector('[data-panel="2"]')?.className).not.toContain('hidden');
-    });
-    expect(requests).toContain('POST /proposals');
-
-    field('#form-transmission', 'proposalNumber').value = 'PRP-WEB-1';
-    field('#form-transmission', 'workedCommission').value = '32.5';
-    submit('#form-transmission');
 
     await vi.waitFor(() => {
       expect(text('#done-body')).toContain('PRP-WEB-1');
     });
+    expect(requests).toContain('POST /proposals');
+    // REQ-232, CA-203: the expected value, before any issuance.
+    expect(text('#done-body')).toContain('R$ 10,00');
 
     // What the screen says happened, the backend has to agree with.
-    const [stored] = await callApi('GET', '/proposals?status=TRANSMITTED');
-    expect(stored.proposalNumber).toBe('PRP-WEB-1');
-    expect(stored.clientId).toBe('client-web');
-    expect(stored.workedCommission).toBe('32.5');
+    const [stored] = await callApi('GET', '/proposals?status=AWAITING_ISSUANCE');
+    expect(stored).toMatchObject({
+      proposalNumber: 'PRP-WEB-1',
+      clientId: 'client-web',
+      coverageEnd: '2027-10-01',
+      renewalDate: '2027-10-01',
+      installments: [{ number: 1, amount: '100.00', dueDate: null }],
+      workedCommission: '20',
+      workedCommissionMode: 'INTEGRAL',
+      intermediaryId: 'intermediary-1',
+      ctu: '50',
+      expectedReceipt: { intermediary: '20.00', usina: '10.00' },
+    });
+    expect(stored.workedCommissionHistory[0].informedBy).toBe('ana.souza');
 
-    // And the page hands the operator the record it just created.
     const link = document.querySelector('#done-body a.btn--filled');
     expect(link?.href).toContain(`/app/proposals/detail.html?id=${stored.id}`);
   });
 
-  it('shows the refusal the server rendered when a rule is broken (REQ-040)', async () => {
+  it('asks for the CTU only when the receipt goes through an intermediary (REQ-221)', async () => {
     openPage('proposals/new.html');
     await import('/app/proposals/new.js');
 
-    field('#form-proposal', 'clientId').value = 'client-x';
-    field('#form-proposal', 'brokerId').value = 'broker-1';
-    field('#form-proposal', 'insurerId').value = 'insurer-1';
-    field('#form-proposal', 'productId').value = 'auto';
-    field('#form-proposal', 'paymentMethodId').value = 'bank-slip';
-    field('#form-proposal', 'netPremium').value = '1200.00';
-    // The customer's acceptance is missing (CA-001, REJ-004).
+    expect(hidden('#intermediary-fields')).toBe(true);
+
+    choose('#form-proposal', 'receiptKind', 'INTERMEDIARY');
+    expect(hidden('#intermediary-fields')).toBe(false);
+    // The field explains how the percentage affects what the Usina receives.
+    expect(text('#intermediary-fields')).toContain('sobre o valor que a intermediária recebe');
+
+    choose('#form-proposal', 'receiptKind', 'DIRECT');
+    expect(hidden('#intermediary-fields')).toBe(true);
+  });
+
+  it('shows the refusal the server rendered when an intermediary has no CTU (REJ-202)', async () => {
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+
+    fillRegistration();
+    choose('#form-proposal', 'receiptKind', 'INTERMEDIARY');
+    field('#form-proposal', 'intermediaryId').value = 'intermediary-1';
     submit('#form-proposal');
 
     await vi.waitFor(() => {
       expect(snackbars().length).toBeGreaterThan(0);
     });
-
-    // The sentence is the one src/i18n rendered, with the rule beside it.
-    expect(snackbars()[0]).toContain('Proposta exige aceite do cliente registrado.');
-    expect(snackbars()[0]).toContain('REQ-040');
-    // The screen stayed on the step that was refused.
-    expect(document.querySelector('[data-panel="2"]')?.className).toContain('hidden');
+    expect(snackbars()[0]).toContain(
+      'Com intermediária, a CTU (comissão trabalhada da Usina) é obrigatória.',
+    );
+    expect(snackbars()[0]).toContain('REQ-221');
+    expect(hidden('[data-panel="done"]')).toBe(true);
   });
 
-  it('lists the proposals still open and filters by state (step 5, OUT-01)', async () => {
-    const openId = await transmittedProposal('PRP-OPEN-1');
-    // A draft: registered, not yet transmitted, so out of the open worklist.
-    await callApi('POST', '/proposals', {
-      clientId: 'client-draft',
-      brokerId: 'broker-1',
-      insurerId: 'insurer-1',
-      productId: 'auto',
-      paymentMethodId: 'bank-slip',
-      customerAccepted: true,
-      netPremium: '800.00',
+  it('shows the refusal the server rendered without the customer acceptance (REQ-040)', async () => {
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+
+    fillRegistration();
+    field('#form-proposal', 'customerAccepted').checked = false;
+    submit('#form-proposal');
+
+    await vi.waitFor(() => {
+      expect(snackbars().length).toBeGreaterThan(0);
     });
+    expect(snackbars()[0]).toContain('Proposta exige aceite do cliente registrado.');
+    expect(snackbars()[0]).toContain('REQ-040');
+  });
+
+  it('lists the proposals awaiting issuance with the expected value, and filters by state', async () => {
+    await awaitingProposal({ proposalNumber: 'PRP-OPEN-1' });
+    const refusedId = await awaitingProposal({ proposalNumber: 'PRP-REFUSED-1' });
+    await callApi('POST', `/proposals/${refusedId}/rejection`, { reason: 'perfil de risco' });
 
     openPage('proposals/index.html');
     await import('/app/proposals/index.js');
@@ -243,107 +307,138 @@ describe('FP-01 through the web interface', () => {
       expect(document.querySelectorAll('#list tbody tr').length).toBeGreaterThan(0);
     });
 
-    // The default worklist is the open one, and it asked the API for exactly that.
-    expect(requests).toContain('GET /proposals?status=TRANSMITTED');
-    const rows: Untyped[] = [...document.querySelectorAll('#list tbody tr')];
-    expect(rows.map((row) => row.textContent)).toEqual(
-      expect.arrayContaining([expect.stringContaining('PRP-OPEN-1')]),
-    );
-    expect(rows.some((row) => row.textContent?.includes('client-draft'))).toBe(false);
-    // REQ-041: the state reads as the act it records — the insurer issued the
-    // proposal. The stored value is still `TRANSMITTED` (see `proposal.ts`).
-    expect(text('#list')).toContain('Emitida');
+    // The default worklist is what awaits issuance, asked for by state.
+    expect(requests).toContain('GET /proposals?status=AWAITING_ISSUANCE');
+    expect(text('#list')).toContain('PRP-OPEN-1');
+    expect(text('#list')).toContain('R$ 20,00');
+    expect(text('#list')).toContain('Aguardando emissão');
+    expect(text('#list')).not.toContain('PRP-REFUSED-1');
 
-    // Each row reaches the record it lists.
     const open = document.querySelector('#list tbody a.btn');
     expect(open?.href).toContain('/app/proposals/detail.html?id=');
 
-    // Switching the filter is a new read, not a client-side slice of the same one.
-    click('[data-tab="draft"]');
+    click('[data-tab="rejected"]');
     await vi.waitFor(() => {
-      expect(text('#list')).toContain('client-draft');
+      expect(text('#list')).toContain('PRP-REFUSED-1');
     });
-    expect(requests).toContain('GET /proposals?status=DRAFT');
-    expect(text('#list')).not.toContain('PRP-OPEN-1');
-    expect(openId).not.toBe('');
+    expect(requests).toContain('GET /proposals?status=REJECTED');
+    expect(text('#list')).toContain('perfil de risco');
   });
 
-  it('registers the policy from the proposal being tracked (step 6, acceptance)', async () => {
-    const proposalId = await transmittedProposal('PRP-ACCEPT-1');
-
-    openPage('proposals/detail.html', `?id=${proposalId}`);
-    await import('/app/proposals/detail.js');
-
-    await vi.waitFor(() => {
-      expect(text('#page')).toContain('PRP-ACCEPT-1');
-    });
-    // A transmitted proposal is the only one that offers an outcome.
-    expect(document.querySelector('[data-panel="outcome"]')?.className).not.toContain('hidden');
-    expect(document.querySelector('[data-panel="transmission"]')?.className).toContain('hidden');
-
-    field('#form-policy', 'policyNumber').value = 'APL-WEB-1';
-    field('#form-policy', 'premium').value = '1200.00';
-    field('#form-policy', 'coverageStart').value = '2026-10-01';
-    field('#form-policy', 'coverageEnd').value = '2027-09-30';
-    field('#form-policy', 'renewalDate').value = '2027-09-30';
-    click('#add-installment');
-    const amounts: Untyped[] = [...document.querySelectorAll('#installments [name="amount"]')];
-    const dates: Untyped[] = [...document.querySelectorAll('#installments [name="dueDate"]')];
-    amounts[0].value = '600.00';
-    dates[0].value = '2026-10-10';
-    amounts[1].value = '600.00';
-    dates[1].value = '2026-11-10';
-
-    submit('#form-policy');
-
-    await vi.waitFor(() => {
-      expect(text('#page')).toContain('Apólice registrada');
+  it('shows everything the proposal holds and who informed it (REQ-202, REQ-215, CA-203)', async () => {
+    const id = await awaitingProposal({
+      proposalNumber: 'PRP-SHOW-1',
+      installments: [{ amount: '100.00', dueDate: '2026-10-10' }],
+      intermediary: { intermediaryId: 'intermediary-1', ctu: '50' },
     });
 
-    expect(requests).toContain('POST /policies');
-    expect(snackbars().some((message) => message.includes('APL-WEB-1'))).toBe(true);
-    // The proposal now shows its outcome and no longer offers one.
-    expect(text('#page')).toContain('Aceita');
-    expect(document.querySelector('[data-panel="outcome"]')?.className).toContain('hidden');
+    await openProposal(id);
 
-    const policyLink = document.querySelector('a[href^="/app/policies/detail.html"]');
-    expect(policyLink).not.toBeNull();
-    const policyId = new URL(policyLink?.href ?? '', baseUrl).searchParams.get('id');
-
-    // It crossed the whole way down: the policy and its schedule are stored,
-    // and the proposal moved to ACCEPTED (REQ-111).
-    const policy = await callApi('GET', `/policies/${policyId}`);
-    expect(policy.policyNumber).toBe('APL-WEB-1');
-    expect(policy.proposalNumber).toBe('PRP-ACCEPT-1');
-    expect(policy.status).toBe('ACTIVE');
-    expect(policy.installments).toHaveLength(2);
-    expect(policy.installments[0].amount).toBe('600.00');
-
-    const proposal = await callApi('GET', `/proposals/${proposalId}`);
-    expect(proposal.status).toBe('ACCEPTED');
+    const page = text('#page');
+    expect(page).toContain('PRP-SHOW-1');
+    expect(page).toContain('01/10/2026');
+    // REQ-203: the renewal is the end of coverage.
+    expect(text('[data-definition="renewal"]')).toContain('01/10/2027');
+    expect(page).toContain('10/10/2026');
+    expect(text('[data-definition="workedCommission"]')).toContain('20%');
+    expect(text('[data-definition="workedCommission"]')).toContain('Integral');
+    expect(text('[data-definition="receipt"]')).toContain('intermediary-1');
+    expect(text('[data-definition="receipt"]')).toContain('50%');
+    expect(text('#expected')).toContain('R$ 20,00');
+    expect(text('#expected')).toContain('R$ 10,00');
+    expect(text('#history')).toContain('ana.souza');
   });
 
-  it('refuses a rejection with no reason and records one with it (step 6, refusal)', async () => {
-    const proposalId = await transmittedProposal('PRP-REJECT-1');
+  it('corrects the CT and its mode before issuance, signed (FA-203, CA-204, CA-217)', async () => {
+    const id = await awaitingProposal({ proposalNumber: 'PRP-CT-1' });
+    await openProposal(id);
 
-    openPage('proposals/detail.html', `?id=${proposalId}`);
-    await import('/app/proposals/detail.js');
+    expect(hidden('[data-panel="corrections"]')).toBe(false);
+
+    field('#form-worked-commission', 'workedCommission').value = '25';
+    field('#form-worked-commission', 'workedCommissionMode').value = 'PARCELLED';
+    field('#form-worked-commission', 'userId').value = 'bruno.lima';
+    submit('#form-worked-commission');
 
     await vi.waitFor(() => {
-      expect(text('#page')).toContain('PRP-REJECT-1');
+      expect(text('#expected')).toContain('R$ 25,00');
     });
+    expect(requests).toContain(`POST /proposals/${id}/worked-commission`);
+    expect(text('[data-definition="workedCommission"]')).toContain('Parcelada');
+    // REQ-215, REQ-124: both entries, each with its author.
+    expect(text('#history')).toContain('ana.souza');
+    expect(text('#history')).toContain('bruno.lima');
+
+    const stored = await callApi('GET', `/proposals/${id}`);
+    expect(stored.workedCommissionHistory.map((entry: Untyped) => entry.informedBy)).toEqual([
+      'ana.souza',
+      'bruno.lima',
+    ]);
+  });
+
+  it('refuses an unsigned correction with the sentence the server rendered (REQ-216)', async () => {
+    const id = await awaitingProposal({ proposalNumber: 'PRP-CT-2' });
+    await openProposal(id);
+
+    field('#form-worked-commission', 'workedCommission').value = '25';
+    field('#form-worked-commission', 'userId').value = '  ';
+    submit('#form-worked-commission');
+
+    await vi.waitFor(() => {
+      expect(snackbars().length).toBeGreaterThan(0);
+    });
+    expect(snackbars()[0]).toContain('Informe quem está registrando esta informação.');
+    expect((await callApi('GET', `/proposals/${id}`)).workedCommission).toBe('20');
+  });
+
+  it('declares and then removes the intermediary before issuance (FA-204, FA-209, CA-214)', async () => {
+    const id = await awaitingProposal({ proposalNumber: 'PRP-INT-1' });
+    await openProposal(id);
+
+    choose('#form-receipt', 'receiptKind', 'INTERMEDIARY');
+    field('#form-receipt', 'intermediaryId').value = 'intermediary-1';
+    field('#form-receipt', 'ctu').value = '50';
+    field('#form-receipt', 'userId').value = 'bruno.lima';
+    submit('#form-receipt');
+
+    await vi.waitFor(() => {
+      expect(text('#expected')).toContain('R$ 10,00');
+    });
+    expect(text('[data-definition="receipt"]')).toContain('intermediary-1');
+
+    choose('#form-receipt', 'receiptKind', 'DIRECT');
+    field('#form-receipt', 'userId').value = 'bruno.lima';
+    submit('#form-receipt');
+
+    await vi.waitFor(() => {
+      expect(text('[data-definition="receipt"]')).toContain('Direto da seguradora');
+    });
+    expect(text('#expected')).toContain('R$ 20,00');
+    expect(text('#expected')).not.toContain('R$ 10,00');
+
+    const stored = await callApi('GET', `/proposals/${id}`);
+    expect(stored.receiptHistory.map((entry: Untyped) => entry.intermediaryId)).toEqual([
+      null,
+      'intermediary-1',
+      null,
+    ]);
+  });
+
+  it('refuses a rejection with no reason, records one with it, and then offers nothing (REQ-253)', async () => {
+    const id = await awaitingProposal({ proposalNumber: 'PRP-REJECT-1' });
+    await openProposal(id);
 
     click('[data-outcome="reject"]');
-    expect(document.querySelector('#form-rejection')?.className).not.toContain('hidden');
+    expect(hidden('#form-rejection')).toBe(false);
 
-    // REQ-045 / REJ-003: the reason is mandatory, and it is the domain that says so.
+    // REJ-208: the reason is mandatory, and it is the domain that says so.
     submit('#form-rejection');
     await vi.waitFor(() => {
       expect(snackbars().length).toBeGreaterThan(0);
     });
     expect(snackbars()[0]).toContain('Recusa de proposta exige motivo.');
-    expect(snackbars()[0]).toContain('REQ-045');
-    expect((await callApi('GET', `/proposals/${proposalId}`)).status).toBe('TRANSMITTED');
+    expect(snackbars()[0]).toContain('REQ-253');
+    expect((await callApi('GET', `/proposals/${id}`)).status).toBe('AWAITING_ISSUANCE');
 
     field('#form-rejection', 'reason').value = 'perfil de risco';
     submit('#form-rejection');
@@ -351,13 +446,44 @@ describe('FP-01 through the web interface', () => {
     await vi.waitFor(() => {
       expect(text('#page')).toContain('Proposta recusada');
     });
-    // REQ-046, ITP-004: the record stays, with the reason on it.
     expect(text('#page')).toContain('perfil de risco');
-    expect(document.querySelector('[data-panel="outcome"]')?.className).toContain('hidden');
+    // REJ-212: a refused proposal is final — no correction, no outcome.
+    expect(hidden('[data-panel="outcome"]')).toBe(true);
+    expect(hidden('[data-panel="corrections"]')).toBe(true);
+
+    const stored = await callApi('GET', `/proposals/${id}`);
+    expect(stored.status).toBe('REJECTED');
+    expect(stored.rejectionReason).toBe('perfil de risco');
+  });
+
+  it('still registers the V1 policy from a proposal awaiting issuance (bridge)', async () => {
+    const proposalId = await awaitingProposal({ proposalNumber: 'PRP-ACCEPT-1' });
+    await openProposal(proposalId);
+
+    field('#form-policy', 'policyNumber').value = 'APL-WEB-1';
+    field('#form-policy', 'premium').value = '100.00';
+    field('#form-policy', 'coverageStart').value = '2026-10-01';
+    field('#form-policy', 'coverageEnd').value = '2027-09-30';
+    field('#form-policy', 'renewalDate').value = '2027-09-30';
+    const amounts: Untyped[] = [
+      ...document.querySelectorAll('#policy-installments [name="amount"]'),
+    ];
+    const dates: Untyped[] = [
+      ...document.querySelectorAll('#policy-installments [name="dueDate"]'),
+    ];
+    amounts[0].value = '100.00';
+    dates[0].value = '2026-10-10';
+    submit('#form-policy');
+
+    await vi.waitFor(() => {
+      expect(text('#page')).toContain('Apólice registrada');
+    });
+    expect(requests).toContain('POST /policies');
+    expect(hidden('[data-panel="outcome"]')).toBe(true);
+    expect(hidden('[data-panel="corrections"]')).toBe(true);
 
     const proposal = await callApi('GET', `/proposals/${proposalId}`);
-    expect(proposal.status).toBe('REJECTED');
-    expect(proposal.rejectionReason).toBe('perfil de risco');
+    expect(proposal.status).toBe('ISSUED');
   });
 });
 
@@ -366,8 +492,7 @@ describe('FP-01 through the web interface', () => {
  *
  * Three stages of a business, not three states of one record. What this group
  * protects is that each screen says which stage the record is in, and that
- * the three are reachable from one another — the policy used to name its
- * proposal in plain text, with no way to get to it.
+ * the three are reachable from one another.
  */
 describe('the commercial progression on screen', () => {
   /** The stage marked `current` on the strip, and the sentence under it. */
@@ -379,67 +504,38 @@ describe('the commercial progression on screen', () => {
     };
   }
 
-  async function openProposal(id: string): Promise<void> {
-    vi.resetModules();
-    openPage('proposals/detail.html', `?id=${id}`);
-    await import('/app/proposals/detail.js');
-    await vi.waitFor(() => {
-      expect(document.querySelector('.stage-strip')).not.toBeNull();
-    });
-  }
-
   it('shows a business waiting for the insurer to issue the proposal', async () => {
-    const proposal = await callApi('POST', '/proposals', {
-      clientId: 'client-stage',
-      brokerId: 'broker-1',
-      insurerId: 'insurer-1',
-      productId: 'auto',
-      paymentMethodId: 'credit',
-      customerAccepted: true,
-      netPremium: '1200.00',
-    });
+    const id = await awaitingProposal({ proposalNumber: 'PRP-STAGE-1' });
 
-    await openProposal(proposal.id);
+    await openProposal(id);
 
     expect(stage().current).toBe('proposal');
-    // The phrase the operator has to read at this point.
     expect(stage().note).toBe('Aguardando proposta ser emitida pela seguradora.');
-    // Not "a draft somebody forgot to finish".
     expect(text('#page')).toContain('Aguardando emissão');
-    expect(text('#page')).not.toContain('Rascunho');
     // Cotação is shown as a stage of the business, and as one this system
-    // does not hold (REQ-030, FA-01).
+    // does not hold.
     const quote = document.querySelector('.stage-strip .step[data-stage="quote"]');
     expect(quote?.textContent).toContain('Cotação');
     expect(quote?.textContent).toContain('fora do sistema');
     expect(quote?.dataset.state).toBeUndefined();
   });
 
-  it('moves the sentence on when the insurer issues it', async () => {
-    const proposalId = await transmittedProposal('PRP-STAGE-2');
-
-    await openProposal(proposalId);
-
-    expect(stage().current).toBe('proposal');
-    expect(stage().note).toBe('Proposta emitida pela seguradora, aguardando o desfecho.');
-  });
-
-  it('carries the accepted proposal into the policy stage, both ways', async () => {
-    const proposalId = await transmittedProposal('PRP-STAGE-3');
+  it('carries the issued proposal into the policy stage, both ways', async () => {
+    const proposalId = await awaitingProposal({ proposalNumber: 'PRP-STAGE-3' });
     const policy = await callApi('POST', '/policies', {
       proposalId,
       policyNumber: 'APL-STAGE-3',
-      premium: '1200.00',
+      premium: '100.00',
       coverageStart: '2026-10-01',
       coverageEnd: '2027-09-30',
       renewalDate: '2027-09-30',
-      installments: [{ number: 1, amount: '1200.00', dueDate: '2026-10-10' }],
+      installments: [{ number: 1, amount: '100.00', dueDate: '2026-10-10' }],
     });
 
-    // On the proposal: accepted, and the business has moved on.
     await openProposal(proposalId);
     expect(stage().current).toBe('policy');
-    expect(stage().note).toBe('Proposta aceita: o negócio evoluiu para apólice.');
+    expect(stage().note).toBe('Proposta emitida: o negócio evoluiu para apólice.');
+    expect(text('#page')).toContain('Emitida');
 
     // On the policy: the third stage, and the way back to where it came from.
     vi.resetModules();
@@ -455,7 +551,7 @@ describe('the commercial progression on screen', () => {
     expect(origin.getAttribute('href')).toBe(`/app/proposals/detail.html?id=${proposalId}`);
   });
 
-  it('names the filters after the stages, not after an editing cycle', async () => {
+  it('names the filters after the states of REQ-250', async () => {
     vi.resetModules();
     openPage('proposals/index.html');
     await import('/app/proposals/index.js');
@@ -466,6 +562,6 @@ describe('the commercial progression on screen', () => {
     const labels = [...document.querySelectorAll('.filters__option')].map(
       (tab: Untyped) => tab.textContent,
     );
-    expect(labels).toEqual(['Emitidas', 'Aguardando emissão', 'Aceitas', 'Recusadas', 'Todas']);
+    expect(labels).toEqual(['Aguardando emissão', 'Emitidas', 'Recusadas', 'Todas']);
   });
 });

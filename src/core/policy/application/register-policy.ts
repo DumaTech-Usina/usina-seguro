@@ -1,11 +1,11 @@
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
+import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import {
   BusinessRuleViolation,
   PROPOSAL_MESSAGES,
   RecordNotFound,
 } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
-import { CalendarDate } from '../domain/calendar-date.ts';
 import { POLICY_MESSAGES } from '../domain/errors.ts';
 import { Installment } from '../domain/installment.ts';
 import { Policy } from '../domain/policy.ts';
@@ -128,7 +128,6 @@ export class RegisterPolicy {
       await this.deps.agreedCommission.calculateFor({
         policyId: policy.id,
         proposalId: accepted.id,
-        premium: policy.premium,
         calculatedAt: policy.registeredAt,
       });
       await this.deps.notifier.notify({

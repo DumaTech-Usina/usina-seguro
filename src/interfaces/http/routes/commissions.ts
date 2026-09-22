@@ -1,40 +1,11 @@
 import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
 import type { ListCommissionsInput } from '../../../core/commission/application/list-commissions.ts';
-import type { RegisterCommissionAgreementInput } from '../../../core/commission/application/register-commission-agreement.ts';
 
 /**
- * Request shape validation only. Which rate applies, how the chain is walked
- * and what an override requires are domain rules (REQ-060..REQ-067) and are
- * not restated here.
+ * Request shape validation only. What the commission is worth and what an
+ * override requires are domain rules and are not restated here.
  */
-const registerAgreementSchema: FastifySchema = {
-  body: {
-    type: 'object',
-    required: ['insurerId', 'productId', 'effectiveFrom', 'insurerRate'],
-    additionalProperties: false,
-    properties: {
-      insurerId: { type: 'string' },
-      productId: { type: 'string' },
-      effectiveFrom: { type: 'string' },
-      // Percentage as a decimal string, never a number (REQ-121).
-      insurerRate: { type: 'string' },
-      // Absent means a direct chain (REQ-060, REQ-062).
-      intermediary: {
-        type: 'object',
-        required: ['intermediaryId', 'intermediaryRate'],
-        additionalProperties: false,
-        properties: {
-          intermediaryId: { type: 'string' },
-          intermediaryRate: { type: 'string' },
-          // REQ-064; omitted falls back to the default of REQ-063.
-          brokerBase: { type: 'string', enum: ['USINA', 'INTERMEDIARY'] },
-        },
-      },
-    },
-  },
-};
-
 const registerBrokerRateSchema: FastifySchema = {
   body: {
     type: 'object',
@@ -106,18 +77,6 @@ interface PolicyIdParams {
 }
 
 export function registerCommissionRoutes(app: FastifyInstance, useCases: UseCases): void {
-  // IN-02, IN-03, IN-04, REQ-065: the Administrator maintains the agreement.
-  app.post(
-    '/commission-agreements',
-    { schema: registerAgreementSchema },
-    async (request, reply) => {
-      const output = await useCases.registerCommissionAgreement.execute(
-        request.body as RegisterCommissionAgreementInput,
-      );
-      return reply.code(201).send(output);
-    },
-  );
-
   // IN-05: the broker's commission table.
   app.post(
     '/broker-commission-rates',
@@ -128,13 +87,6 @@ export function registerCommissionRoutes(app: FastifyInstance, useCases: UseCase
       return reply.code(201).send(output);
     },
   );
-
-  // IN-02, IN-03, IN-04: the agreements already registered. No filter — the
-  // requirements ask for the registry to be maintained, not narrowed, and the
-  // agreement a calculation uses is chosen by its date (REQ-065), not here.
-  app.get('/commission-agreements', async () => {
-    return useCases.listCommissionAgreements.execute();
-  });
 
   // IN-05: the broker commission table as it stands.
   app.get('/broker-commission-rates', async () => {

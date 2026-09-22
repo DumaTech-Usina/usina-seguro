@@ -1,16 +1,15 @@
 import type { Proposal } from '../domain/proposal.ts';
+import type { Receipt } from '../domain/receipt.ts';
 
 /**
  * Representation of a proposal at the core boundary.
  *
- * It carries what FP-01 step 5 has to show to be useful (REQ-043, OUT-01): who
- * the business is for, the number the insurer issued, the worked commission
- * informed at transmission (REQ-041) and, when the cycle ended in a refusal,
- * the mandatory reason REQ-045 keeps on the record.
+ * Money and percentages are decimal strings (REQ-120, REQ-121); calendar
+ * dates are `YYYY-MM-DD`; instants are ISO-8601.
  *
- * The registry ids travel as they are stored: client, broker, insurer, product
- * and payment method are references to registries of IN-01/IN-06 that are not
- * modelled yet, so there is no name to resolve.
+ * The registry ids travel as they are stored. The CT, its mode and the
+ * receipt are the ones in force; the histories carry every entry with who
+ * signed it (REQ-215, REQ-223).
  */
 export interface ProposalView {
   readonly id: string;
@@ -20,18 +19,58 @@ export interface ProposalView {
   readonly productId: string;
   readonly paymentMethodId: string;
   readonly status: string;
+  readonly proposalNumber: string;
   readonly netPremium: string;
-  /** REQ-022, REQ-050: known from the transmission on. */
-  readonly proposalNumber: string | null;
-  /** REQ-041: percentage informed in the act of transmission. */
-  readonly workedCommission: string | null;
+  readonly coverageStart: string;
+  readonly coverageEnd: string;
+  /** REQ-203: always equal to `coverageEnd`. */
+  readonly renewalDate: string;
+  readonly installments: readonly ProposalInstallmentView[];
+  readonly workedCommission: string;
+  readonly workedCommissionMode: string;
+  /** REQ-220: `null` when the receipt is direct. */
+  readonly intermediaryId: string | null;
+  /** REQ-221: present exactly when there is an intermediary. */
+  readonly ctu: string | null;
+  /** REQ-232, CA-203: what the Usina expects, before issuance. */
+  readonly expectedReceipt: {
+    readonly intermediary: string | null;
+    readonly usina: string;
+  };
+  readonly workedCommissionHistory: readonly {
+    readonly workedCommission: string;
+    readonly workedCommissionMode: string;
+    readonly informedBy: string;
+    readonly informedAt: string;
+  }[];
+  readonly receiptHistory: readonly {
+    readonly intermediaryId: string | null;
+    readonly ctu: string | null;
+    readonly declaredBy: string;
+    readonly declaredAt: string;
+  }[];
   readonly registeredAt: string;
-  readonly transmittedAt: string | null;
-  /** REQ-045: present exactly when the outcome was a refusal. */
+  /** REQ-253: present exactly when the proposal was refused. */
   readonly rejectionReason: string | null;
 }
 
+export interface ProposalInstallmentView {
+  /** Position in the list, starting at 1. */
+  readonly number: number;
+  readonly amount: string;
+  /** REQ-204: optional. */
+  readonly dueDate: string | null;
+}
+
+function receiptFields(receipt: Receipt) {
+  return receipt.kind === 'DIRECT'
+    ? { intermediaryId: null, ctu: null }
+    : { intermediaryId: receipt.intermediaryId, ctu: receipt.ctu.toString() };
+}
+
 export function toProposalView(proposal: Proposal): ProposalView {
+  const expected = proposal.expectedReceipt();
+
   return {
     id: proposal.id,
     clientId: proposal.clientId,
@@ -40,11 +79,35 @@ export function toProposalView(proposal: Proposal): ProposalView {
     productId: proposal.productId,
     paymentMethodId: proposal.paymentMethodId,
     status: proposal.status,
-    netPremium: proposal.netPremium.toString(),
     proposalNumber: proposal.proposalNumber,
-    workedCommission: proposal.workedCommission?.toString() ?? null,
+    netPremium: proposal.netPremium.toString(),
+    coverageStart: proposal.coverageStart.toString(),
+    coverageEnd: proposal.coverageEnd.toString(),
+    renewalDate: proposal.renewalDate.toString(),
+    installments: proposal.installments.map((installment, index) => ({
+      number: index + 1,
+      amount: installment.amount.toString(),
+      dueDate: installment.dueDate?.toString() ?? null,
+    })),
+    workedCommission: proposal.workedCommission.toString(),
+    workedCommissionMode: proposal.workedCommissionMode,
+    ...receiptFields(proposal.receipt),
+    expectedReceipt: {
+      intermediary: expected.intermediary?.toString() ?? null,
+      usina: expected.usina.toString(),
+    },
+    workedCommissionHistory: proposal.workedCommissionHistory.map((entry) => ({
+      workedCommission: entry.rate.toString(),
+      workedCommissionMode: entry.mode,
+      informedBy: entry.informed.author,
+      informedAt: entry.informed.at.toISOString(),
+    })),
+    receiptHistory: proposal.receiptHistory.map((declaration) => ({
+      ...receiptFields(declaration.receipt),
+      declaredBy: declaration.declared.author,
+      declaredAt: declaration.declared.at.toISOString(),
+    })),
     registeredAt: proposal.registeredAt.toISOString(),
-    transmittedAt: proposal.transmittedAt?.toISOString() ?? null,
     rejectionReason: proposal.rejectionReason,
   };
 }

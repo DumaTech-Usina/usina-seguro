@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
+import { CalendarDate } from '../domain/calendar-date.ts';
 import { RecordNotFound } from '../domain/errors.ts';
 import { Money } from '../domain/money.ts';
 import { Percentage } from '../domain/percentage.ts';
@@ -11,51 +12,43 @@ function scenario() {
   return { proposals, useCase: new GetProposal({ proposals }) };
 }
 
-function transmitted(): Proposal {
+function awaiting(id = 'proposal-1', registeredAt = '2026-09-22T12:00:00.000Z'): Proposal {
   return Proposal.register({
-    id: 'proposal-1',
+    id,
     clientId: 'client-1',
     brokerId: 'broker-1',
     insurerId: 'insurer-1',
-    productId: 'auto',
+    productId: 'product-1',
     paymentMethodId: 'bank-slip',
     customerAccepted: true,
-    netPremium: Money.fromString('1200.00'),
-    registeredAt: new Date('2026-09-17T12:00:00.000Z'),
-  }).transmit({
-    proposalNumber: 'PRP-9001',
-    workedCommission: Percentage.fromString('32.5'),
-    transmittedAt: new Date('2026-09-18T09:00:00.000Z'),
+    proposalNumber: `PRP-${id}`,
+    netPremium: Money.fromString('100.00'),
+    coverageStart: CalendarDate.fromString('2026-10-01'),
+    coverageEnd: CalendarDate.fromString('2027-10-01'),
+    installments: [],
+    workedCommission: Percentage.fromString('20'),
+    workedCommissionMode: 'INTEGRAL',
+    receipt: { kind: 'DIRECT' },
+    registeredBy: 'ana.souza',
+    registeredAt: new Date(registeredAt),
   });
 }
 
 describe('GetProposal', () => {
-  it('returns the proposal an operator is tracking (REQ-043)', async () => {
+  it('returns the proposal with what the Usina expects to receive (REQ-232, CA-203)', async () => {
     const { proposals, useCase } = scenario();
-    await proposals.save(transmitted());
+    await proposals.save(awaiting());
 
     const view = await useCase.execute('proposal-1');
 
-    expect(view).toEqual({
-      id: 'proposal-1',
-      clientId: 'client-1',
-      brokerId: 'broker-1',
-      insurerId: 'insurer-1',
-      productId: 'auto',
-      paymentMethodId: 'bank-slip',
-      status: 'TRANSMITTED',
-      netPremium: '1200.00',
-      proposalNumber: 'PRP-9001',
-      workedCommission: '32.5',
-      registeredAt: '2026-09-17T12:00:00.000Z',
-      transmittedAt: '2026-09-18T09:00:00.000Z',
-      rejectionReason: null,
-    });
+    expect(view.status).toBe('AWAITING_ISSUANCE');
+    expect(view.proposalNumber).toBe('PRP-proposal-1');
+    expect(view.expectedReceipt).toEqual({ intermediary: null, usina: '20.00' });
   });
 
-  it('keeps a refused proposal consultable with its reason (REQ-045, REQ-046)', async () => {
+  it('keeps a refused proposal consultable with its reason (REQ-253, CA-212)', async () => {
     const { proposals, useCase } = scenario();
-    await proposals.save(transmitted().reject('perfil de risco'));
+    await proposals.save(awaiting().reject('perfil de risco'));
 
     const view = await useCase.execute('proposal-1');
 

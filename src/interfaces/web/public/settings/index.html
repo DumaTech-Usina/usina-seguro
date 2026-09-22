@@ -32,9 +32,10 @@
         <div class="banner">
           <span class="material-symbols-outlined">info</span>
           <div class="banner__text">
-            Registrar novamente a mesma chave substitui o valor anterior. No acordo
-            comercial a chave inclui a data de vigência: uma nova vigência é um novo
-            registro, e os cálculos já feitos guardam os percentuais que usaram.
+            Registrar novamente a mesma chave substitui o valor anterior; os cálculos já
+            feitos guardam os percentuais que usaram. O que a Usina recebe não é cadastrado
+            aqui: vem da comissão trabalhada (CT, e CTU com intermediária) informada em cada
+            proposta.
           </div>
         </div>
 
@@ -80,85 +81,6 @@
             </div>
           </form>
           <div class="registry" id="list-references"></div>
-        </section>
-
-        <!-- Acordo comercial (IN-02, IN-03, IN-04). -->
-        <section class="card">
-          <div class="card__header">
-            <span class="material-symbols-outlined">handshake</span>
-            <h2 class="text-title">Acordo comercial</h2>
-          </div>
-          <form id="form-agreement">
-            <div class="card__body stack">
-              <p class="text-muted">
-                O percentual varia por seguradora e por produto, e vale a partir de uma
-                data. Um novo acordo é um novo registro: cálculos já feitos guardam os
-                percentuais que usaram.
-              </p>
-              <div class="form-grid">
-                <div class="field">
-                  <input class="field__input" name="insurerId" placeholder=" " required />
-                  <label class="field__label">Seguradora</label>
-                </div>
-                <div class="field">
-                  <input class="field__input" name="productId" placeholder=" " required />
-                  <label class="field__label">Produto / ramo</label>
-                </div>
-                <div class="field">
-                  <input class="field__input" type="date" name="effectiveFrom" required />
-                  <label class="field__label">Vigente a partir de</label>
-                </div>
-                <div class="field">
-                  <input
-                    class="field__input"
-                    name="insurerRate"
-                    placeholder=" "
-                    inputmode="decimal"
-                    pattern="\d+(\.\d+)?"
-                    required
-                  />
-                  <label class="field__label">% pago pela seguradora</label>
-                  <span class="field__hint">Sobre o prêmio da apólice.</span>
-                </div>
-              </div>
-
-              <label class="switch">
-                <input type="checkbox" id="has-intermediary" />
-                <span>
-                  <strong>A cadeia tem intermediária</strong>
-                  <span class="text-muted"> — ex.: a seguradora paga a ela, que repassa à Usina.</span>
-                </span>
-              </label>
-
-              <div class="form-grid form-grid--three hidden" id="intermediary-fields">
-                <div class="field">
-                  <input class="field__input" name="intermediaryId" placeholder=" " />
-                  <label class="field__label">Intermediária</label>
-                </div>
-                <div class="field">
-                  <input
-                    class="field__input"
-                    name="intermediaryRate"
-                    placeholder=" "
-                    inputmode="decimal"
-                    pattern="\d+(\.\d+)?"
-                  />
-                  <label class="field__label">% que chega à Usina</label>
-                </div>
-                <div class="field">
-                  <select class="field__input" name="brokerBase">
-                    <option value="INTERMEDIARY">Valor recebido pela intermediária</option>
-                    <option value="USINA">Valor recebido pela Usina</option>
-                  </select>
-                  <label class="field__label">Base do corretor</label>
-                </div>
-              </div>
-            </div>
-            <div class="card__footer">
-              <button class="btn btn--filled" type="submit">Registrar acordo</button>
-            </div>
-          </form>
-          <div class="registry" id="list-agreements"></div>
         </section>
 
         <!-- Tabela do corretor (IN-05). -->

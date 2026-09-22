@@ -3,7 +3,7 @@ import type {
   CommissionListFilter,
   CommissionRepository,
 } from '../../../core/commission/application/commission-repository.ts';
-import type { BrokerBase } from '../../../core/commission/domain/commission-agreement.ts';
+import type { BrokerBase } from '../../../core/commission/domain/commission-basis.ts';
 import { Commission, type CommissionStatus } from '../../../core/commission/domain/commission.ts';
 import { Money } from '../../../core/proposal/domain/money.ts';
 import { Percentage } from '../../../core/proposal/domain/percentage.ts';

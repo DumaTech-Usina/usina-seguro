@@ -15,6 +15,7 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="/app/shared/base.css" />
+    <link rel="stylesheet" href="/app/proposals/detail.css" />
   </head>
   <body class="shell" data-nav="proposals-new">
     <main class="content">
@@ -23,42 +24,27 @@
           <div class="page-head__text">
             <h1 class="text-display">Nova proposta</h1>
             <p class="text-muted">
-              FP-01 passos 3 e 4: registro da proposta e da emissão devolvida pela
-              seguradora. O desfecho é registrado depois, na proposta já emitida.
+              Tudo o que a proposta guarda é informado aqui, no registro. Depois dele, só a
+              comissão trabalhada e o recebimento podem ser corrigidos, enquanto a proposta
+              aguarda emissão.
             </p>
           </div>
         </div>
 
-        <section class="card">
-          <!-- Stepper: o passo corrente é marcado por new.js. -->
-          <div class="stepper" id="stepper">
-            <div class="step" data-step="1" data-state="current">
-              <span class="step__bullet">1</span>
-              <span>Proposta</span>
+        <form id="form-proposal" class="stack" data-panel="form">
+          <!-- ------------------------------------ dados comerciais -- -->
+          <section class="card">
+            <div class="card__header">
+              <span class="material-symbols-outlined">handshake</span>
+              <h2 class="text-title">Dados comerciais</h2>
             </div>
-            <div class="step__connector"></div>
-            <div class="step" data-step="2">
-              <span class="step__bullet">2</span>
-              <span>Emissão</span>
-            </div>
-          </div>
-        </section>
-
-        <!-- ------------------------------------------------ passo 1 -- -->
-        <section class="card" data-panel="1">
-          <div class="card__header">
-            <span class="material-symbols-outlined">description</span>
-            <h2 class="text-title">Dados da proposta</h2>
-          </div>
-          <form id="form-proposal">
             <div class="card__body stack">
               <div class="banner">
                 <span class="material-symbols-outlined">info</span>
                 <div class="banner__text">
-                  Cliente, corretor, seguradora e produto são informados por
-                  identificador. Os que já estão em <strong>Cadastros</strong> aparecem como
-                  sugestão, com o nome ao lado; um identificador novo continua sendo aceito —
-                  nada aqui exige cadastro prévio.
+                  Cliente, corretor, seguradora e produto são informados por identificador. Os
+                  que já estão em <strong>Cadastros</strong> aparecem como sugestão; um
+                  identificador novo continua sendo aceito.
                 </div>
               </div>
 
@@ -84,7 +70,6 @@
                   />
                   <datalist id="broker-options"></datalist>
                   <label class="field__label">Corretor</label>
-                  <span class="field__hint">Define a tabela de comissão aplicada.</span>
                 </div>
                 <div class="field">
                   <input
@@ -107,16 +92,35 @@
                   />
                   <datalist id="product-options"></datalist>
                   <label class="field__label">Produto / ramo</label>
-                  <span class="field__hint">
-                    Com a seguradora, seleciona o acordo comercial vigente.
-                  </span>
                 </div>
                 <div class="field">
                   <input class="field__input" name="paymentMethodId" placeholder=" " required />
                   <label class="field__label">Forma de pagamento</label>
-                  <span class="field__hint">
-                    O mesmo identificador da regra de liberação cadastrada.
-                  </span>
+                </div>
+              </div>
+
+              <label class="switch">
+                <input type="checkbox" name="customerAccepted" />
+                <span>
+                  <strong>Aceite do cliente registrado</strong>
+                  <span class="text-muted"> — sem ele a proposta não existe.</span>
+                </span>
+              </label>
+            </div>
+          </section>
+
+          <!-- --------------------------------- dados da seguradora -- -->
+          <section class="card">
+            <div class="card__header">
+              <span class="material-symbols-outlined">description</span>
+              <h2 class="text-title">Dados da proposta</h2>
+            </div>
+            <div class="card__body stack">
+              <div class="form-grid">
+                <div class="field">
+                  <input class="field__input" name="proposalNumber" placeholder=" " required />
+                  <label class="field__label">Número da proposta</label>
+                  <span class="field__hint">Emitido pela seguradora; consta do documento.</span>
                 </div>
                 <div class="field">
                   <input
@@ -131,36 +135,42 @@
                   <span class="field__hint">Decimal com ponto, ex.: 1200.00</span>
                 </div>
               </div>
+              <div class="form-grid form-grid--three">
+                <div class="field">
+                  <input class="field__input" type="date" name="coverageStart" required />
+                  <label class="field__label">Início da vigência</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" type="date" name="coverageEnd" required />
+                  <label class="field__label">Fim da vigência</label>
+                </div>
+                <div class="definition">
+                  <span class="text-label">Renovação</span>
+                  <span class="definition__value" id="renewal">igual ao fim da vigência</span>
+                </div>
+              </div>
 
-              <label class="switch">
-                <input type="checkbox" name="customerAccepted" />
-                <span>
-                  <strong>Aceite do cliente registrado</strong>
-                  <span class="text-muted"> — sem ele a proposta não existe.</span>
-                </span>
-              </label>
+              <div>
+                <div class="row row--between" style="margin-bottom: var(--space-3)">
+                  <span class="text-label">Parcelas (opcionais; vencimento opcional)</span>
+                  <button class="btn btn--sm btn--outlined" type="button" id="add-installment">
+                    <span class="material-symbols-outlined">add</span>
+                    Adicionar parcela
+                  </button>
+                </div>
+                <div class="installments" id="installments"></div>
+              </div>
             </div>
-            <div class="card__footer">
-              <button class="btn btn--filled" type="submit">Registrar proposta</button>
-            </div>
-          </form>
-        </section>
+          </section>
 
-        <!-- ------------------------------------------------ passo 2 -- -->
-        <section class="card hidden" data-panel="2">
-          <div class="card__header">
-            <span class="material-symbols-outlined">send</span>
-            <h2 class="text-title">A proposta foi emitida pela seguradora</h2>
-            <div class="card__header-actions" id="proposal-chip"></div>
-          </div>
-          <form id="form-transmission">
+          <!-- ------------------------------- comissão trabalhada -- -->
+          <section class="card">
+            <div class="card__header">
+              <span class="material-symbols-outlined">percent</span>
+              <h2 class="text-title">Comissão trabalhada (CT)</h2>
+            </div>
             <div class="card__body stack">
               <div class="form-grid">
-                <div class="field">
-                  <input class="field__input" name="proposalNumber" placeholder=" " required />
-                  <label class="field__label">Número da proposta</label>
-                  <span class="field__hint">Emitido pela seguradora.</span>
-                </div>
                 <div class="field">
                   <input
                     class="field__input"
@@ -170,16 +180,89 @@
                     pattern="\d+(\.\d+)?"
                     required
                   />
-                  <label class="field__label">Comissão trabalhada (%)</label>
-                  <span class="field__hint">Informada pela seguradora na emissão.</span>
+                  <label class="field__label">CT (%)</label>
+                  <span class="field__hint">
+                    Levantada pela comunicação interna da Usina; a seguradora não a informa.
+                  </span>
+                </div>
+                <div class="field">
+                  <select class="field__input" name="workedCommissionMode" required>
+                    <option value="INTEGRAL">Integral</option>
+                    <option value="PARCELLED">Parcelada</option>
+                  </select>
+                  <label class="field__label">Modo da CT</label>
+                  <span class="field__hint">Recebida em um valor total ou por parcela.</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- -------------------------------------- recebimento -- -->
+          <section class="card">
+            <div class="card__header">
+              <span class="material-symbols-outlined">account_balance</span>
+              <h2 class="text-title">Recebimento</h2>
+            </div>
+            <div class="card__body stack">
+              <div class="form-grid">
+                <div class="field">
+                  <select class="field__input" name="receiptKind" required>
+                    <option value="DIRECT">Direto da seguradora</option>
+                    <option value="INTERMEDIARY">Através de intermediária</option>
+                  </select>
+                  <label class="field__label">Como a Usina recebe</label>
+                </div>
+              </div>
+              <div class="form-grid hidden" id="intermediary-fields">
+                <div class="field">
+                  <input
+                    class="field__input"
+                    name="intermediaryId"
+                    placeholder=" "
+                    list="intermediary-options"
+                  />
+                  <datalist id="intermediary-options"></datalist>
+                  <label class="field__label">Intermediária</label>
+                </div>
+                <div class="field">
+                  <input
+                    class="field__input"
+                    name="ctu"
+                    placeholder=" "
+                    inputmode="decimal"
+                    pattern="\d+(\.\d+)?"
+                  />
+                  <label class="field__label">CTU — comissão trabalhada da Usina (%)</label>
+                  <span class="field__hint">
+                    Percentual que a Usina recebe sobre o valor que a intermediária recebe. A
+                    intermediária recebe prêmio líquido × CT; a Usina recebe esse valor × CTU.
+                    Ex.: 100,00 × 20% = 20,00 para a intermediária, e 20,00 × 50% = 10,00 para a
+                    Usina.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <!-- ------------------------------------------ assinatura -- -->
+          <section class="card">
+            <div class="card__body stack">
+              <div class="form-grid">
+                <div class="field">
+                  <input class="field__input" name="userId" placeholder=" " required />
+                  <label class="field__label">Seu identificador</label>
+                  <span class="field__hint">
+                    Assina a CT e a declaração de recebimento — fica registrado quem informou e
+                    quando.
+                  </span>
                 </div>
               </div>
             </div>
             <div class="card__footer">
-              <button class="btn btn--filled" type="submit">Registrar emissão</button>
+              <button class="btn btn--filled" type="submit">Registrar proposta</button>
             </div>
-          </form>
-        </section>
+          </section>
+        </form>
 
         <!-- ---------------------------------------------- conclusão -- -->
         <section class="card hidden" data-panel="done">

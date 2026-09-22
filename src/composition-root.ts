@@ -6,15 +6,12 @@ import type { Config } from './config/config.ts';
 import type { BrokerCommissionRateRepository } from './core/commission/application/broker-commission-rate-repository.ts';
 import { CalculateAgreedCommission } from './core/commission/application/calculate-agreed-commission.ts';
 import { CalculatePolicyCommission } from './core/commission/application/calculate-policy-commission.ts';
-import type { CommissionAgreementRepository } from './core/commission/application/commission-agreement-repository.ts';
 import type { CommissionRepository } from './core/commission/application/commission-repository.ts';
 import { GetCommission } from './core/commission/application/get-commission.ts';
 import { ListBrokerCommissionRates } from './core/commission/application/list-broker-commission-rates.ts';
-import { ListCommissionAgreements } from './core/commission/application/list-commission-agreements.ts';
 import { ListCommissions } from './core/commission/application/list-commissions.ts';
 import { OverrideCommission } from './core/commission/application/override-commission.ts';
 import { RegisterBrokerCommissionRate } from './core/commission/application/register-broker-commission-rate.ts';
-import { RegisterCommissionAgreement } from './core/commission/application/register-commission-agreement.ts';
 import { ResolveCommissionDivergence } from './core/commission/application/resolve-commission-divergence.ts';
 import { ListNotifications } from './core/notification/application/list-notifications.ts';
 import type { NotificationChannel } from './core/notification/application/notification-channel.ts';
@@ -32,7 +29,8 @@ import { ListProposals } from './core/proposal/application/list-proposals.ts';
 import type { ProposalRepository } from './core/proposal/application/proposal-repository.ts';
 import { RegisterProposal } from './core/proposal/application/register-proposal.ts';
 import { RejectProposal } from './core/proposal/application/reject-proposal.ts';
-import { TransmitProposal } from './core/proposal/application/transmit-proposal.ts';
+import { ReviseReceipt } from './core/proposal/application/revise-receipt.ts';
+import { ReviseWorkedCommission } from './core/proposal/application/revise-worked-commission.ts';
 import { ListReconciliationPendencies } from './core/reconciliation/application/list-reconciliation-pendencies.ts';
 import { ReconcileCommissionReport } from './core/reconciliation/application/reconcile-commission-report.ts';
 import type { ReconciliationPendencyRepository } from './core/reconciliation/application/reconciliation-pendency-repository.ts';
@@ -52,7 +50,6 @@ import { ReleaseSettlement } from './core/settlement/application/release-settlem
 import type { SettlementRepository } from './core/settlement/application/settlement-repository.ts';
 import { ImmediateTransaction } from './infrastructure/persistence/in-memory/immediate-transaction.ts';
 import { InMemoryBrokerCommissionRateRepository } from './infrastructure/persistence/in-memory/in-memory-broker-commission-rate-repository.ts';
-import { InMemoryCommissionAgreementRepository } from './infrastructure/persistence/in-memory/in-memory-commission-agreement-repository.ts';
 import { InMemoryCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
 import { InMemoryDocumentStorage } from './infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryNotificationRepository } from './infrastructure/persistence/in-memory/in-memory-notification-repository.ts';
@@ -63,7 +60,6 @@ import { InMemoryReconciliationPendencyRepository } from './infrastructure/persi
 import { InMemoryReferenceRepository } from './infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
 import { InMemorySettlementRepository } from './infrastructure/persistence/in-memory/in-memory-settlement-repository.ts';
 import { SqliteBrokerCommissionRateRepository } from './infrastructure/persistence/sqlite/sqlite-broker-commission-rate-repository.ts';
-import { SqliteCommissionAgreementRepository } from './infrastructure/persistence/sqlite/sqlite-commission-agreement-repository.ts';
 import { SqliteCommissionRepository } from './infrastructure/persistence/sqlite/sqlite-commission-repository.ts';
 import { openSqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.ts';
 import { SqliteDocumentStorage } from './infrastructure/persistence/sqlite/sqlite-document-storage.ts';
@@ -83,7 +79,8 @@ import { SqliteTransaction } from './infrastructure/persistence/sqlite/sqlite-tr
  */
 export interface UseCases {
   readonly registerProposal: RegisterProposal;
-  readonly transmitProposal: TransmitProposal;
+  readonly reviseWorkedCommission: ReviseWorkedCommission;
+  readonly reviseReceipt: ReviseReceipt;
   readonly rejectProposal: RejectProposal;
   readonly getProposal: GetProposal;
   readonly listProposals: ListProposals;
@@ -92,9 +89,7 @@ export interface UseCases {
   readonly getPolicyByProposal: GetPolicyByProposal;
   readonly listPolicies: ListPolicies;
   readonly payInstallment: PayInstallment;
-  readonly registerCommissionAgreement: RegisterCommissionAgreement;
   readonly registerBrokerCommissionRate: RegisterBrokerCommissionRate;
-  readonly listCommissionAgreements: ListCommissionAgreements;
   readonly listBrokerCommissionRates: ListBrokerCommissionRates;
   readonly getCommission: GetCommission;
   readonly calculatePolicyCommission: CalculatePolicyCommission;
@@ -132,7 +127,6 @@ export function composeApplication(config: Config): Application {
     proposals,
     policies,
     commissions,
-    agreements,
     brokerRates,
     pendencies,
     releaseRules,
@@ -151,7 +145,6 @@ export function composeApplication(config: Config): Application {
   const agreedCommission = new CalculateAgreedCommission({
     proposals,
     commissions,
-    agreements,
     brokerRates,
     newId,
   });
@@ -177,7 +170,8 @@ export function composeApplication(config: Config): Application {
   return {
     useCases: {
       registerProposal: new RegisterProposal({ proposals, newId, now }),
-      transmitProposal: new TransmitProposal({ proposals, now }),
+      reviseWorkedCommission: new ReviseWorkedCommission({ proposals, now }),
+      reviseReceipt: new ReviseReceipt({ proposals, now }),
       rejectProposal: new RejectProposal({ proposals }),
       getProposal: new GetProposal({ proposals }),
       listProposals: new ListProposals({ proposals }),
@@ -194,16 +188,9 @@ export function composeApplication(config: Config): Application {
       getPolicyByProposal: new GetPolicyByProposal({ proposals, policies }),
       listPolicies: new ListPolicies({ policies, proposals, references }),
       payInstallment: new PayInstallment({ proposals, policies, now }),
-      registerCommissionAgreement: new RegisterCommissionAgreement({
-        agreements,
-        references,
-        newId,
-        now,
-      }),
       registerBrokerCommissionRate: new RegisterBrokerCommissionRate({ brokerRates, now }),
-      // IN-02 to IN-06 read back: the parameters the calculation uses are data
-      // (REQ-061, REQ-125), and an administrator has to be able to see them.
-      listCommissionAgreements: new ListCommissionAgreements({ agreements, references }),
+      // IN-05 read back: the broker table the calculation uses is data, and an
+      // administrator has to be able to see it.
       listBrokerCommissionRates: new ListBrokerCommissionRates({ brokerRates }),
       getCommission: new GetCommission({ commissions }),
       // FP-01 step 7 reached by hand: a policy registered before the
@@ -212,7 +199,6 @@ export function composeApplication(config: Config): Application {
         policies,
         proposals,
         commissions,
-        agreements,
         brokerRates,
         agreedCommission,
       }),
@@ -275,7 +261,6 @@ interface Persistence {
   readonly proposals: ProposalRepository;
   readonly policies: PolicyRepository;
   readonly commissions: CommissionRepository;
-  readonly agreements: CommissionAgreementRepository;
   readonly brokerRates: BrokerCommissionRateRepository;
   readonly pendencies: ReconciliationPendencyRepository;
   readonly releaseRules: PaymentMethodReleaseRuleRepository;
@@ -294,7 +279,6 @@ function composePersistence(config: Config): Persistence {
         proposals: new InMemoryProposalRepository(),
         policies: new InMemoryPolicyRepository(),
         commissions: new InMemoryCommissionRepository(),
-        agreements: new InMemoryCommissionAgreementRepository(),
         brokerRates: new InMemoryBrokerCommissionRateRepository(),
         pendencies: new InMemoryReconciliationPendencyRepository(),
         releaseRules: new InMemoryPaymentMethodReleaseRuleRepository(),
@@ -312,7 +296,6 @@ function composePersistence(config: Config): Persistence {
         proposals: new SqliteProposalRepository(db),
         policies: new SqlitePolicyRepository(db),
         commissions: new SqliteCommissionRepository(db),
-        agreements: new SqliteCommissionAgreementRepository(db),
         brokerRates: new SqliteBrokerCommissionRateRepository(db),
         pendencies: new SqliteReconciliationPendencyRepository(db),
         releaseRules: new SqlitePaymentMethodReleaseRuleRepository(db),

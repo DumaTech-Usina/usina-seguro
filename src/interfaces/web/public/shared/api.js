@@ -49,18 +49,24 @@ async function request(path, { method = 'GET', body } = {}) {
 }
 
 export const api = {
-  // FP-01 — proposal, transmission, outcome.
+  // FP-01 — the proposal, its corrections while it awaits issuance, and the
+  // refusal. Every correction is signed: `input.userId` (REQ-216).
   registerProposal: (input) => request('/proposals', { method: 'POST', body: input }),
-  transmitProposal: (id, input) =>
-    request(`/proposals/${encodeURIComponent(id)}/transmission`, { method: 'POST', body: input }),
+  reviseWorkedCommission: (id, input) =>
+    request(`/proposals/${encodeURIComponent(id)}/worked-commission`, {
+      method: 'POST',
+      body: input,
+    }),
+  reviseReceipt: (id, input) =>
+    request(`/proposals/${encodeURIComponent(id)}/receipt`, { method: 'POST', body: input }),
   rejectProposal: (id, reason) =>
     request(`/proposals/${encodeURIComponent(id)}/rejection`, {
       method: 'POST',
       body: { reason },
     }),
 
-  // FP-01 step 5 (REQ-043, OUT-01/OUT-02): the proposals still being followed.
-  // `status` is the state to filter by, or nothing for all of them.
+  // The proposals being followed. `status` is the state of REQ-250 to filter
+  // by, or nothing for all of them.
   listProposals: (status) =>
     request(
       status === undefined ? '/proposals' : `/proposals?status=${encodeURIComponent(status)}`,
@@ -69,7 +75,8 @@ export const api = {
   /** The policy this proposal originated, at most one (REQ-049, REQ-050). */
   getPolicyByProposal: (id) => request(`/proposals/${encodeURIComponent(id)}/policy`),
 
-  // FP-01 step 6 and the policy the operator works on afterwards.
+  // The V1 policy registration — kept as it was until the recognition of
+  // issuance (REQ-209) is defined — and the policy worked on afterwards.
   registerPolicy: (input) => request('/policies', { method: 'POST', body: input }),
   getPolicy: (id) => request(`/policies/${encodeURIComponent(id)}`),
   /**
@@ -177,16 +184,12 @@ export const api = {
   /** OUT-06: the lines with no matching policy, waiting for a human. */
   listReconciliationPendencies: () => request('/commission-reconciliations/pendencies'),
 
-  // Registries the Administrator maintains (IN-02 to IN-06).
+  // Registries the Administrator maintains (IN-05, IN-06).
   //
-  // These are the parameters the calculation reads — they are data and not
-  // code (REQ-061, REQ-125), so each one is written and read back through the
-  // same shape: what a registration answers is one line of what the listing
-  // answers.
-  registerCommissionAgreement: (input) =>
-    request('/commission-agreements', { method: 'POST', body: input }),
-  /** IN-02, IN-03, IN-04: every agreement registered, by insurer and product. */
-  listCommissionAgreements: () => request('/commission-agreements'),
+  // Parameters the calculation reads, written and read back through the same
+  // shape: what a registration answers is one line of what the listing
+  // answers. The Usina side of a commission is not here: it is the CT of each
+  // proposal (REQ-236).
   registerBrokerRate: (input) =>
     request('/broker-commission-rates', { method: 'POST', body: input }),
   /** IN-05: the broker commission table (REQ-093). */

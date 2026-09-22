@@ -13,16 +13,17 @@ export const PROPOSAL_MESSAGES = {
   FIELD_REQUIRED: 'proposal.field_required',
   NET_PREMIUM_MUST_BE_POSITIVE: 'proposal.net_premium_must_be_positive',
   PROPOSAL_NUMBER_REQUIRED: 'proposal.proposal_number_required',
-  PROPOSAL_NUMBER_ALREADY_REGISTERED: 'proposal.proposal_number_already_registered',
-  ONLY_DRAFT_CAN_BE_TRANSMITTED: 'proposal.only_draft_can_be_transmitted',
-  ONLY_TRANSMITTED_CAN_BE_REJECTED: 'proposal.only_transmitted_can_be_rejected',
+  AUTHOR_REQUIRED: 'proposal.author_required',
+  INTERMEDIARY_REQUIRES_CTU: 'proposal.intermediary_requires_ctu',
+  ISSUED_PROPOSAL_IS_FROZEN: 'proposal.issued_proposal_is_frozen',
+  REJECTED_PROPOSAL_IS_FINAL: 'proposal.rejected_proposal_is_final',
   REJECTION_REASON_REQUIRED: 'proposal.rejection_reason_required',
-  ONLY_TRANSMITTED_CAN_BE_ACCEPTED: 'proposal.only_transmitted_can_be_accepted',
   REJECTED_CANNOT_ORIGINATE_POLICY: 'proposal.rejected_cannot_originate_policy',
   ALREADY_HAS_POLICY: 'proposal.already_has_policy',
   NOT_FOUND: 'proposal.not_found',
   INVALID_MONEY_FORMAT: 'money.invalid_format',
   INVALID_PERCENTAGE_FORMAT: 'percentage.invalid_format',
+  INVALID_DATE_FORMAT: 'calendar_date.invalid_format',
   PERCENTAGE_OUT_OF_RANGE: 'percentage.out_of_range',
 } as const;
 
@@ -52,7 +53,7 @@ export type MessageParams = Readonly<Record<string, string>>;
  * module yet.
  */
 export class BusinessRuleViolation extends Error {
-  /** Requirement id from `requisitos_refinados.md`, e.g. `REQ-040`. */
+  /** Requirement id, e.g. `REQ-221` (V2) or a V1 id kept by V2. */
   readonly rule: string;
   readonly messageKey: string;
   readonly params: MessageParams;

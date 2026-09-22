@@ -42,17 +42,13 @@ function open(): Application {
   return composeApplication(loadConfig({ PERSISTENCE_DRIVER: 'sqlite', SQLITE_FILE: file }));
 }
 
-/** IN-02 to IN-06: the cadastral data the calculation reads. */
+/**
+ * IN-05 and IN-06: the cadastral data the calculation reads. The Usina side is
+ * the CT of 40% the proposal carries (REQ-236).
+ */
 async function registries(): Promise<void> {
   const { useCases } = application;
 
-  // Direct chain of REQ-068: insurer pays 40% of the premium to the Usina.
-  await useCases.registerCommissionAgreement.execute({
-    insurerId: 'insurer-1',
-    productId: 'auto',
-    effectiveFrom: '2026-01-01',
-    insurerRate: '40',
-  });
   // IN-05: the broker gets half of what the Usina received.
   await useCases.registerBrokerCommissionRate.execute({ brokerId: 'broker-1', rate: '50' });
   // REQ-091: credit releases at once, bank slip waits for the first installment.
@@ -86,13 +82,15 @@ async function registerPolicy(options: PolicyOptions = {}) {
     productId: 'auto',
     paymentMethodId: options.paymentMethodId ?? 'credit',
     customerAccepted: true,
-    netPremium: premium,
-  });
-
-  await useCases.transmitProposal.execute({
-    proposalId: proposal.id,
     proposalNumber: options.proposalNumber ?? 'PRP-9001',
+    netPremium: premium,
+    coverageStart: '2026-10-01',
+    coverageEnd: '2027-10-01',
+    installments: [],
     workedCommission: '40',
+    workedCommissionMode: 'INTEGRAL',
+    intermediary: null,
+    author: 'operator',
   });
 
   return useCases.registerPolicy.execute({
@@ -156,22 +154,25 @@ describe('policy to agreed commission (FP-01 step 7)', () => {
     application = open();
   });
 
-  it('registers the policy even when no agreement covers it', async () => {
+  it('registers the policy even when the broker has no commission table (IN-05)', async () => {
     const { useCases } = application;
     const proposal = await useCases.registerProposal.execute({
       clientId: 'client-1',
-      brokerId: 'broker-1',
-      // No agreement was registered for this insurer.
-      insurerId: 'insurer-unknown',
+      // No commission table was registered for this broker.
+      brokerId: 'broker-unknown',
+      insurerId: 'insurer-1',
       productId: 'auto',
       paymentMethodId: 'credit',
       customerAccepted: true,
-      netPremium: '100.00',
-    });
-    await useCases.transmitProposal.execute({
-      proposalId: proposal.id,
       proposalNumber: 'PRP-2',
+      netPremium: '100.00',
+      coverageStart: '2026-10-01',
+      coverageEnd: '2027-10-01',
+      installments: [],
       workedCommission: '40',
+      workedCommissionMode: 'INTEGRAL',
+      intermediary: null,
+      author: 'operator',
     });
 
     const policy = await useCases.registerPolicy.execute({
@@ -186,30 +187,6 @@ describe('policy to agreed commission (FP-01 step 7)', () => {
 
     expect(policy.status).toBe('ACTIVE');
     await expect(useCases.getCommission.execute(policy.id)).rejects.toThrow();
-  });
-});
-
-describe('commercial agreement registry (IN-02, REQ-065)', () => {
-  it('replaces the whole record when the same validity is registered again', async () => {
-    const replacement = await application.useCases.registerCommissionAgreement.execute({
-      insurerId: 'insurer-1',
-      productId: 'auto',
-      effectiveFrom: '2026-01-01',
-      insurerRate: '45',
-    });
-
-    // The id answered to the caller is the id the row carries: the rates and
-    // the identity of the record cannot come apart.
-    await application.shutdown();
-    const db = new DatabaseSync(file);
-    const rows = db
-      .prepare('SELECT id, insurer_rate FROM commission_agreement WHERE insurer_id = ?')
-      .all('insurer-1') as unknown as { id: string; insurer_rate: string }[];
-    db.close();
-
-    expect(rows).toEqual([{ id: replacement.id, insurer_rate: '45' }]);
-
-    application = open();
   });
 });
 

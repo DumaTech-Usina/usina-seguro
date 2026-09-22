@@ -105,14 +105,6 @@ beforeAll(async () => {
   window.scrollTo = () => {};
   installDialogSupport();
 
-  // IN-02 and IN-05: premium 100.00 with these rates makes the agreed
-  // receivable 40.00 and the payable to the broker 20.00 (REQ-062, REQ-093).
-  await callApi('POST', '/commission-agreements', {
-    insurerId: 'insurer-1',
-    productId: 'auto',
-    effectiveFrom: '2026-01-01',
-    insurerRate: '40',
-  });
   await callApi('POST', '/broker-commission-rates', { brokerId: 'broker-1', rate: '50' });
 
   // IN-06, REQ-090/REQ-091: configuration, never named in code. One method
@@ -278,12 +270,14 @@ async function registeredPolicy(
     productId: 'auto',
     paymentMethodId,
     customerAccepted: true,
-    netPremium: '100.00',
-  });
-
-  await callApi('POST', `/proposals/${proposal.id}/transmission`, {
     proposalNumber: numbers.proposalNumber,
+    netPremium: '100.00',
+    coverageStart: '2026-10-01',
+    coverageEnd: '2027-10-01',
     workedCommission: '40',
+    workedCommissionMode: 'INTEGRAL',
+    intermediary: null,
+    userId: 'operator',
   });
 
   const policy = await callApi('POST', '/policies', {
@@ -574,7 +568,7 @@ describe('a policy that reached the screen without a commission', () => {
   let policyId: string;
 
   it('shows the absence as a step of the flow, with the action to take', async () => {
-    // A business whose insurer and product have no agreement registered.
+    // A business whose broker has no commission table registered (IN-05).
     const proposal = await callApi('POST', '/proposals', {
       clientId: 'client-1',
       brokerId: 'broker-late',
@@ -582,11 +576,14 @@ describe('a policy that reached the screen without a commission', () => {
       productId: 'residencial',
       paymentMethodId: 'credit',
       customerAccepted: true,
-      netPremium: '100.00',
-    });
-    await callApi('POST', `/proposals/${proposal.id}/transmission`, {
       proposalNumber: numbers.proposalNumber,
+      netPremium: '100.00',
+      coverageStart: '2026-10-01',
+      coverageEnd: '2027-10-01',
       workedCommission: '40',
+      workedCommissionMode: 'INTEGRAL',
+      intermediary: null,
+      userId: 'operator',
     });
     const policy = await callApi('POST', '/policies', {
       proposalId: proposal.id,
@@ -609,27 +606,20 @@ describe('a policy that reached the screen without a commission', () => {
     expect(offeredIn('Comissão')).toContain('Abrir cadastros');
   });
 
-  it('refuses in Portuguese, naming the registry that is missing (REQ-065)', async () => {
+  it('refuses in Portuguese, naming the registry that is missing (IN-05)', async () => {
     await openPolicy(policyId);
     clickIn('Comissão', 'Calcular comissão');
 
     await vi.waitFor(() => {
-      expect(lastSnackbar()).toContain('REQ-065');
+      expect(lastSnackbar()).toContain('IN-05');
     });
-    expect(lastSnackbar()).toContain('insurer-late');
-    expect(lastSnackbar()).toContain('residencial');
+    expect(lastSnackbar()).toContain('broker-late');
 
     // The refusal changed nothing: the policy is where it was.
     expect(card('Comissão').textContent).toContain('Comissão ainda não calculada');
   });
 
   it('calculates it from the screen once the registry exists, without recreating anything', async () => {
-    await callApi('POST', '/commission-agreements', {
-      insurerId: 'insurer-late',
-      productId: 'residencial',
-      effectiveFrom: '2026-01-01',
-      insurerRate: '40',
-    });
     await callApi('POST', '/broker-commission-rates', { brokerId: 'broker-late', rate: '50' });
 
     await openPolicy(policyId);

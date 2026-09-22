@@ -63,7 +63,8 @@ describe('core dependency rule', () => {
     // is listed here with its justification.
     //
     // Every module also reuses the vocabulary the proposal module declares
-    // (`Money`, `Percentage`, `BusinessRuleViolation`, `RecordNotFound`),
+    // (`Money`, `Percentage`, `CalendarDate`, `BusinessRuleViolation`,
+    // `RecordNotFound`),
     // which is where it lives because the proposal is the module everything
     // else already depends on. That is stated once here rather than repeated
     // in each entry.

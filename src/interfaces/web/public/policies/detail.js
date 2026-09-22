@@ -125,9 +125,7 @@ function policyCard(policy) {
   const body = element('div', 'card__body stack');
 
   // A apólice é a terceira etapa, e a tira diz de onde ela veio.
-  section.append(
-    stageStrip('policy', 'Apólice registrada: evolução da proposta aceita (REQ-048).'),
-  );
+  section.append(stageStrip('policy', 'Apólice registrada: a proposta foi emitida (REQ-251).'));
 
   const head = element('div', 'policy-head');
   const numbers = element('div', 'policy-head__numbers');
@@ -253,7 +251,7 @@ function commissionCard(policy, commission) {
 
   if (commission === null) {
     // Estado válido do ciclo de vida, não corrupção: a apólice pode ter sido
-    // registrada antes do acordo comercial ou da tabela do corretor. O que a
+    // registrada antes da tabela do corretor (IN-05). O que a
     // tela precisa dizer é o que falta e qual é a ação — REQ-124 impede
     // apagar a apólice para recomeçar, então o caminho é calcular aqui.
     const actions = element('div', 'empty__actions');
@@ -273,7 +271,7 @@ function commissionCard(policy, commission) {
       emptyState(
         'price_change',
         'Comissão ainda não calculada',
-        'A apólice existe e continua válida. A comissão é calculada pelo acordo comercial vigente na data de registro da apólice e pela tabela do corretor — se algum deles faltava naquele momento, cadastre-o e calcule aqui.',
+        'A apólice existe e continua válida. A comissão é calculada pela comissão trabalhada (CT, e CTU com intermediária) da proposta e pela tabela do corretor — se a tabela faltava naquele momento, cadastre-a e calcule aqui.',
         actions,
       ),
     );

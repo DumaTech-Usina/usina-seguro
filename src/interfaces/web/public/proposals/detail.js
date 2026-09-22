@@ -1,14 +1,14 @@
 /**
- * The proposal an operator is following (REQ-043) and where its cycle ends.
+ * The proposal an operator is following, from registration until its outcome.
  *
- * FP-01 keeps steps 4, 5 and 6 apart in time: a proposal is transmitted, waits
- * for the insurer, and only then gets an outcome. This page is where the wait
- * ends — it shows the record and offers the act the state admits.
+ * While it awaits issuance it shows what the Usina expects to receive
+ * (REQ-232) and offers the corrections REQ-252 allows — the CT with its mode,
+ * and the receipt — plus the outcome: the refusal (REQ-253), or the V1 policy
+ * registration kept as it was until the recognition of issuance is defined.
+ * Once issued or refused, it offers nothing (REQ-260, REQ-253).
  *
- * Which act is admissible is the domain's answer, not this file's. What is
- * hidden here is only what cannot exist yet: a proposal with no number has no
- * outcome to record, and one already accepted has a policy instead of a form.
- * Every refusal shown is the sentence the server rendered through `src/i18n`.
+ * Which act is admissible is the domain's answer, not this file's; every
+ * refusal shown is the sentence the server rendered through `src/i18n`.
  */
 
 import { ApiError, api } from '/app/shared/api.js';
@@ -19,14 +19,24 @@ import {
   formatPercentage,
   sumMoney,
 } from '/app/shared/money.js';
+import {
+  bindReceiptFields,
+  intermediaryOf,
+  offerRegisteredIntermediaries,
+} from '/app/shared/receipt.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
-import { stageOfProposal, stageStrip, statusChip } from '/app/shared/status.js';
+import {
+  WORKED_COMMISSION_MODE,
+  stageOfProposal,
+  stageStrip,
+  statusChip,
+} from '/app/shared/status.js';
 
 const proposalId = new URLSearchParams(window.location.search).get('id');
 const page = document.querySelector('#page');
 
 const panels = {
-  transmission: document.querySelector('[data-panel="transmission"]'),
+  corrections: document.querySelector('[data-panel="corrections"]'),
   outcome: document.querySelector('[data-panel="outcome"]'),
 };
 
@@ -47,8 +57,11 @@ function icon(name) {
   return element('span', 'material-symbols-outlined', name);
 }
 
-function definition(label, value) {
+function definition(label, value, key) {
   const wrapper = element('div', 'definition');
+  if (key !== undefined) {
+    wrapper.dataset.definition = key;
+  }
   wrapper.append(element('span', 'text-label', label), element('span', 'definition__value', value));
   return wrapper;
 }
@@ -95,14 +108,18 @@ async function submitting(form, work) {
 
 /* ------------------------------------------------------------ summary -- */
 
-/** Onde o negócio está, em uma frase, por etapa da seção 10.2. */
+/** Onde o negócio está, em uma frase, por estado de REQ-250. */
 const STAGE_NOTE = {
-  DRAFT: 'Aguardando proposta ser emitida pela seguradora.',
-  TRANSMITTED: 'Proposta emitida pela seguradora, aguardando o desfecho.',
-  ACCEPTED: 'Proposta aceita: o negócio evoluiu para apólice.',
+  AWAITING_ISSUANCE: 'Aguardando proposta ser emitida pela seguradora.',
+  ISSUED: 'Proposta emitida: o negócio evoluiu para apólice.',
   REJECTED: 'Proposta recusada. O ciclo comercial está encerrado.',
-  CANCELLED: 'Proposta cancelada.',
 };
+
+function receiptText(intermediaryId, ctu) {
+  return intermediaryId === null
+    ? 'Direto da seguradora'
+    : `Através de ${intermediaryId} — CTU ${formatPercentage(ctu)}`;
+}
 
 function summaryCard(proposal) {
   const section = element('section', 'card');
@@ -116,12 +133,7 @@ function summaryCard(proposal) {
   const numbers = element('div', 'proposal-head__numbers');
   numbers.append(
     element('span', 'text-label', 'Número da proposta'),
-    element(
-      'span',
-      'proposal-head__number',
-      // REQ-041: the insurer issues it in the act of transmitting.
-      proposal.proposalNumber ?? 'aguardando emissão',
-    ),
+    element('span', 'proposal-head__number', proposal.proposalNumber),
   );
 
   const chip = statusChip('proposal', proposal.status);
@@ -137,22 +149,135 @@ function summaryCard(proposal) {
     definition('Forma de pagamento', proposal.paymentMethodId),
     definition('Prêmio líquido', formatMoney(proposal.netPremium)),
     definition(
-      'Comissão trabalhada',
-      proposal.workedCommission === null ? '—' : formatPercentage(proposal.workedCommission),
+      'Vigência',
+      `${formatDate(proposal.coverageStart)} — ${formatDate(proposal.coverageEnd)}`,
     ),
-    definition('Registro', formatInstant(proposal.registeredAt)),
+    // REQ-203: the renewal is the end of coverage.
+    definition('Renovação', formatDate(proposal.renewalDate), 'renewal'),
     definition(
-      'Emissão pela seguradora',
-      proposal.transmittedAt === null ? '—' : formatInstant(proposal.transmittedAt),
+      'Comissão trabalhada',
+      `${formatPercentage(proposal.workedCommission)} · ${
+        WORKED_COMMISSION_MODE[proposal.workedCommissionMode] ?? proposal.workedCommissionMode
+      }`,
+      'workedCommission',
     ),
+    definition('Recebimento', receiptText(proposal.intermediaryId, proposal.ctu), 'receipt'),
+    definition('Registro', formatInstant(proposal.registeredAt)),
   );
 
-  body.append(head, details);
+  body.append(head, details, installmentsBlock(proposal.installments));
   section.append(body);
   return section;
 }
 
-/** REQ-045, REQ-046: the cycle ended, the record and its reason remain. */
+/** REQ-204: the installments informed at registration, due date optional. */
+function installmentsBlock(installments) {
+  const block = element('div', 'stack');
+  block.append(element('span', 'text-label', 'Parcelas'));
+
+  if (installments.length === 0) {
+    block.append(element('p', 'text-muted', 'Nenhuma parcela informada.'));
+    return block;
+  }
+
+  const list = element('div', 'definitions');
+  for (const installment of installments) {
+    list.append(
+      definition(
+        `Parcela ${installment.number}`,
+        `${formatMoney(installment.amount)} · ${
+          installment.dueDate === null
+            ? 'sem vencimento informado'
+            : `vence em ${formatDate(installment.dueDate)}`
+        }`,
+      ),
+    );
+  }
+  block.append(list);
+  return block;
+}
+
+/** REQ-230, REQ-231, REQ-232: what the Usina expects, as the server calculated it. */
+function expectedCard(proposal) {
+  const section = element('section', 'card');
+  section.id = 'expected';
+  const header = element('div', 'card__header');
+  header.append(icon('payments'), element('h2', 'text-title', 'Quanto a Usina espera receber'));
+
+  const body = element('div', 'card__body stack');
+  const metrics = element('div', 'definitions');
+
+  if (proposal.expectedReceipt.intermediary !== null) {
+    metrics.append(
+      definition(
+        `A intermediária recebe (prêmio × CT ${formatPercentage(proposal.workedCommission)})`,
+        formatMoney(proposal.expectedReceipt.intermediary),
+      ),
+      definition(
+        `A Usina recebe (valor da intermediária × CTU ${formatPercentage(proposal.ctu)})`,
+        formatMoney(proposal.expectedReceipt.usina),
+      ),
+    );
+  } else {
+    metrics.append(
+      definition(
+        `A Usina recebe (prêmio × CT ${formatPercentage(proposal.workedCommission)})`,
+        formatMoney(proposal.expectedReceipt.usina),
+      ),
+    );
+  }
+
+  body.append(
+    metrics,
+    element(
+      'p',
+      'text-muted',
+      proposal.status === 'AWAITING_ISSUANCE'
+        ? 'Expectativa: a base se fixa quando a proposta é emitida.'
+        : 'O repasse ao corretor é um processo separado e não entra neste valor.',
+    ),
+  );
+  section.append(header, body);
+  return section;
+}
+
+/** REQ-215, REQ-223: every CT and receipt entry, with who informed it and when. */
+function historyCard(proposal) {
+  const section = element('section', 'card');
+  section.id = 'history';
+  const header = element('div', 'card__header');
+  header.append(icon('history'), element('h2', 'text-title', 'Quem informou'));
+
+  const body = element('div', 'card__body stack');
+
+  const commission = element('div', 'definitions');
+  for (const entry of proposal.workedCommissionHistory) {
+    commission.append(
+      definition(
+        `CT · ${entry.informedBy} · ${formatInstant(entry.informedAt)}`,
+        `${formatPercentage(entry.workedCommission)} · ${
+          WORKED_COMMISSION_MODE[entry.workedCommissionMode] ?? entry.workedCommissionMode
+        }`,
+      ),
+    );
+  }
+
+  const receipt = element('div', 'definitions');
+  for (const entry of proposal.receiptHistory) {
+    receipt.append(
+      definition(
+        `Recebimento · ${entry.declaredBy} · ${formatInstant(entry.declaredAt)}`,
+        receiptText(entry.intermediaryId, entry.ctu),
+      ),
+    );
+  }
+
+  body.append(commission, receipt);
+  section.append(header, body);
+  return section;
+}
+
+/** REQ-253: the refusal is final; the record and its reason remain. */
 function rejectionCard(proposal) {
   const section = element('section', 'card');
   const body = element('div', 'card__body');
@@ -168,7 +293,7 @@ function rejectionCard(proposal) {
   return section;
 }
 
-/** FP-01 step 6, acceptance branch: where the flow lands (REQ-048, REQ-050). */
+/** The policy the issued proposal originated (REQ-251). */
 function policyCard(policy) {
   const section = element('section', 'card');
   const header = element('div', 'card__header');
@@ -181,7 +306,7 @@ function policyCard(policy) {
       emptyState(
         'help',
         'Apólice não localizada',
-        'A proposta consta como aceita, mas a apólice correspondente não foi encontrada.',
+        'A proposta consta como emitida, mas a apólice correspondente não foi encontrada.',
       ),
     );
     section.append(header, body);
@@ -216,7 +341,7 @@ function policyCard(policy) {
 
 /* ---------------------------------------------- outcome: the schedule -- */
 
-const installments = document.querySelector('#installments');
+const installments = document.querySelector('#policy-installments');
 
 function renumber() {
   const rows = [...installments.querySelectorAll('.installment-row')];
@@ -280,7 +405,8 @@ addInstallmentRow();
 
 /* ------------------------------------------------------------ actions -- */
 
-const transmissionForm = document.querySelector('#form-transmission');
+const commissionForm = document.querySelector('#form-worked-commission');
+const receiptForm = document.querySelector('#form-receipt');
 const policyForm = document.querySelector('#form-policy');
 const rejectionForm = document.querySelector('#form-rejection');
 
@@ -301,17 +427,38 @@ for (const option of document.querySelectorAll('.outcome-switch__option')) {
   });
 }
 
-transmissionForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const input = values(transmissionForm);
+bindReceiptFields(receiptForm);
+offerRegisteredIntermediaries(document.querySelector('#intermediary-options'));
 
-  submitting(transmissionForm, async () => {
-    const proposal = await api.transmitProposal(proposalId, {
-      proposalNumber: input.proposalNumber,
+// FA-203: the CT and its mode, signed (REQ-214, REQ-215).
+commissionForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const input = values(commissionForm);
+
+  submitting(commissionForm, async () => {
+    await api.reviseWorkedCommission(proposalId, {
       workedCommission: input.workedCommission,
+      workedCommissionMode: input.workedCommissionMode,
+      userId: input.userId,
     });
 
-    showSnackbar(`Proposta ${proposal.proposalNumber} transmitida.`, { tone: 'success' });
+    showSnackbar('Comissão trabalhada corrigida.', { tone: 'success' });
+    await render();
+  });
+});
+
+// FA-204, FA-209: the receipt declared again, signed (REQ-223, REQ-225).
+receiptForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const input = values(receiptForm);
+
+  submitting(receiptForm, async () => {
+    await api.reviseReceipt(proposalId, {
+      intermediary: intermediaryOf(receiptForm),
+      userId: input.userId,
+    });
+
+    showSnackbar('Recebimento corrigido.', { tone: 'success' });
     await render();
   });
 });
@@ -369,14 +516,27 @@ function notFound(message) {
   );
   section.append(body);
   page.replaceChildren(section);
-  show(null);
+  show([]);
 }
 
-/** Only one panel is ever open, and none of them for a finished proposal. */
-function show(panel) {
+/** The panels a proposal awaiting issuance offers; none for a finished one. */
+function show(open) {
   for (const [name, node] of Object.entries(panels)) {
-    node.classList.toggle('hidden', name !== panel);
+    node.classList.toggle('hidden', !open.includes(name));
   }
+}
+
+/** Starts each correction from what is in force; the signature is always typed. */
+function fillCorrections(proposal) {
+  commissionForm.querySelector('[name="workedCommission"]').value = proposal.workedCommission;
+  commissionForm.querySelector('[name="workedCommissionMode"]').value =
+    proposal.workedCommissionMode;
+
+  const kind = receiptForm.querySelector('[name="receiptKind"]');
+  kind.value = proposal.intermediaryId === null ? 'DIRECT' : 'INTERMEDIARY';
+  kind.dispatchEvent(new Event('change'));
+  receiptForm.querySelector('[name="intermediaryId"]').value = proposal.intermediaryId ?? '';
+  receiptForm.querySelector('[name="ctu"]').value = proposal.ctu ?? '';
 }
 
 function header() {
@@ -384,7 +544,7 @@ function header() {
   const text = element('div', 'page-head__text');
   text.append(
     element('h1', 'text-display', 'Proposta'),
-    element('p', 'text-muted', 'Registro, emissão pela seguradora e desfecho — aceite ou recusa.'),
+    element('p', 'text-muted', 'Registro, correções enquanto aguarda emissão, e desfecho.'),
   );
   const actions = element('div', 'page-head__actions');
   actions.append(link('Ver propostas', '/app/proposals/'));
@@ -406,13 +566,13 @@ async function render() {
     return;
   }
 
-  const sections = [header(), summaryCard(proposal)];
+  const sections = [header(), summaryCard(proposal), expectedCard(proposal), historyCard(proposal)];
 
   if (proposal.status === 'REJECTED') {
     sections.push(rejectionCard(proposal));
-    show(null);
-  } else if (proposal.status === 'ACCEPTED') {
-    // REQ-111: accepted only exists together with the policy (REQ-048).
+    show([]);
+  } else if (proposal.status === 'ISSUED') {
+    // REQ-251: issued is the state that confirms a policy exists.
     let policy = null;
     try {
       policy = await api.getPolicyByProposal(proposalId);
@@ -422,16 +582,12 @@ async function render() {
       }
     }
     sections.push(policyCard(policy));
-    show(null);
-  } else if (proposal.status === 'TRANSMITTED') {
-    show('outcome');
-    // A convenience, not a rule: the premium of the policy is typed and may
-    // differ from the net premium of the proposal.
-    policyForm.querySelector('[name="premium"]').value = proposal.netPremium;
-  } else if (proposal.status === 'DRAFT') {
-    show('transmission');
+    show([]);
   } else {
-    show(null);
+    fillCorrections(proposal);
+    show(['corrections', 'outcome']);
+    // A convenience, not a rule: the V1 policy form still asks for its premium.
+    policyForm.querySelector('[name="premium"]').value = proposal.netPremium;
   }
 
   page.replaceChildren(...sections);

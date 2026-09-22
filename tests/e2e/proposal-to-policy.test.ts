@@ -50,25 +50,34 @@ async function post(url: string, body: unknown): Promise<Response> {
   });
 }
 
-async function registerProposal(paymentMethodId = 'bank-slip'): Promise<string> {
-  const response = await post('/proposals', {
+/** A V2 proposal awaiting issuance, carrying the number from registration (REQ-206). */
+function proposalBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
     clientId: 'client-1',
     brokerId: 'broker-1',
     insurerId: 'insurer-1',
     productId: 'auto',
-    paymentMethodId,
+    paymentMethodId: 'bank-slip',
     customerAccepted: true,
+    proposalNumber: 'PRP-9001',
     netPremium: '1200.00',
-  });
-
-  return ((await response.json()) as { id: string }).id;
+    coverageStart: '2026-10-01',
+    coverageEnd: '2027-10-01',
+    workedCommission: '32.5',
+    workedCommissionMode: 'INTEGRAL',
+    intermediary: null,
+    userId: 'operator',
+    ...overrides,
+  };
 }
 
-async function transmit(proposalId: string, proposalNumber = 'PRP-9001'): Promise<Response> {
-  return post(`/proposals/${proposalId}/transmission`, {
-    proposalNumber,
-    workedCommission: '32.5',
-  });
+async function registerProposal(
+  paymentMethodId = 'bank-slip',
+  proposalNumber = 'PRP-9001',
+): Promise<string> {
+  const response = await post('/proposals', proposalBody({ paymentMethodId, proposalNumber }));
+
+  return ((await response.json()) as { id: string }).id;
 }
 
 function policyBody(proposalId: string, policyNumber: string, renewalDate = '2027-09-30'): unknown {
@@ -95,23 +104,9 @@ interface PolicyBody {
   installments: Array<{ number: number; amount: string; dueDate: string; status: string }>;
 }
 
-describe('FP-01 over HTTP: proposal, transmission, policy, installments', () => {
-  it('transmits a registered proposal (REQ-041)', async () => {
-    const proposalId = await registerProposal();
-
-    const response = await transmit(proposalId);
-
-    expect(response.status).toBe(200);
-    expect(await response.json()).toMatchObject({
-      status: 'TRANSMITTED',
-      proposalNumber: 'PRP-9001',
-      workedCommission: '32.5',
-    });
-  });
-
+describe('FP-01 over HTTP: proposal, policy, installments', () => {
   it('registers the policy of an accepted proposal with its schedule (REQ-048, REQ-020)', async () => {
-    const proposalId = await registerProposal();
-    await transmit(proposalId, 'PRP-1000');
+    const proposalId = await registerProposal('bank-slip', 'PRP-1000');
 
     const response = await post('/policies', policyBody(proposalId, 'APL-4711'));
 
@@ -140,8 +135,7 @@ describe('FP-01 over HTTP: proposal, transmission, policy, installments', () => 
   });
 
   it('keeps both numbers consultable when they differ (CA-008)', async () => {
-    const proposalId = await registerProposal();
-    await transmit(proposalId, 'PRP-2000');
+    const proposalId = await registerProposal('bank-slip', 'PRP-2000');
     const created = (await (
       await post('/policies', policyBody(proposalId, 'APL-0001'))
     ).json()) as PolicyBody;
@@ -157,8 +151,7 @@ describe('FP-01 over HTTP: proposal, transmission, policy, installments', () => 
   });
 
   it('refuses a proposal with a mandatory reason (REQ-045)', async () => {
-    const proposalId = await registerProposal();
-    await transmit(proposalId, 'PRP-3000');
+    const proposalId = await registerProposal('bank-slip', 'PRP-3000');
 
     const response = await post(`/proposals/${proposalId}/rejection`, {
       reason: 'perfil de risco',
@@ -171,36 +164,33 @@ describe('FP-01 over HTTP: proposal, transmission, policy, installments', () => 
     });
   });
 
-  it('rejects a refusal without a reason with 422 (CA-004, REJ-003)', async () => {
-    const proposalId = await registerProposal();
-    await transmit(proposalId, 'PRP-3100');
+  it('rejects a refusal without a reason with 422 (REJ-208)', async () => {
+    const proposalId = await registerProposal('bank-slip', 'PRP-3100');
 
     const response = await post(`/proposals/${proposalId}/rejection`, { reason: '   ' });
 
     expect(response.status).toBe(422);
     expect(await response.json()).toMatchObject({
-      rule: 'REQ-045',
+      rule: 'REQ-253',
       message: 'Recusa de proposta exige motivo.',
     });
   });
 
-  it('does not let a refused proposal originate a policy (CA-006)', async () => {
-    const proposalId = await registerProposal();
-    await transmit(proposalId, 'PRP-4000');
+  it('does not let a refused proposal originate a policy (REJ-210)', async () => {
+    const proposalId = await registerProposal('bank-slip', 'PRP-4000');
     await post(`/proposals/${proposalId}/rejection`, { reason: 'perfil de risco' });
 
     const response = await post('/policies', policyBody(proposalId, 'APL-4712'));
 
     expect(response.status).toBe(422);
     expect(await response.json()).toMatchObject({
-      rule: 'REQ-047',
+      rule: 'REQ-253',
       message: 'Proposta recusada não origina apólice.',
     });
   });
 
   it('does not let the same proposal originate a second policy (CA-007, REJ-005)', async () => {
-    const proposalId = await registerProposal();
-    await transmit(proposalId, 'PRP-5000');
+    const proposalId = await registerProposal('bank-slip', 'PRP-5000');
     await post('/policies', policyBody(proposalId, 'APL-5001'));
 
     const response = await post('/policies', policyBody(proposalId, 'APL-5002'));
@@ -209,18 +199,8 @@ describe('FP-01 over HTTP: proposal, transmission, policy, installments', () => 
     expect(await response.json()).toMatchObject({ rule: 'REQ-049' });
   });
 
-  it('does not let a proposal that was never transmitted originate a policy', async () => {
-    const proposalId = await registerProposal();
-
-    const response = await post('/policies', policyBody(proposalId, 'APL-6001'));
-
-    expect(response.status).toBe(422);
-    expect(await response.json()).toMatchObject({ rule: 'REQ-111' });
-  });
-
   it('rejects a policy without installments with 422 (REQ-021)', async () => {
-    const proposalId = await registerProposal();
-    await transmit(proposalId, 'PRP-7000');
+    const proposalId = await registerProposal('bank-slip', 'PRP-7000');
 
     const response = await post('/policies', {
       ...(policyBody(proposalId, 'APL-7001') as Record<string, unknown>),
@@ -232,8 +212,7 @@ describe('FP-01 over HTTP: proposal, transmission, policy, installments', () => 
   });
 
   it('rejects an installment amount sent as a number (REQ-120)', async () => {
-    const proposalId = await registerProposal();
-    await transmit(proposalId, 'PRP-7100');
+    const proposalId = await registerProposal('bank-slip', 'PRP-7100');
 
     const response = await post('/policies', {
       ...(policyBody(proposalId, 'APL-7101') as Record<string, unknown>),
@@ -244,12 +223,10 @@ describe('FP-01 over HTTP: proposal, transmission, policy, installments', () => 
   });
 
   it('does not let two policies share the conciliation key (REQ-082, CA-018)', async () => {
-    const first = await registerProposal();
-    await transmit(first, 'PRP-8000');
+    const first = await registerProposal('bank-slip', 'PRP-8000');
     await post('/policies', policyBody(first, 'APL-8001'));
 
-    const second = await registerProposal();
-    await transmit(second, 'PRP-8001');
+    const second = await registerProposal('bank-slip', 'PRP-8001');
     const response = await post('/policies', policyBody(second, 'APL-8001'));
 
     expect(response.status).toBe(422);
@@ -259,19 +236,8 @@ describe('FP-01 over HTTP: proposal, transmission, policy, installments', () => 
     });
   });
 
-  it('does not let two proposals share the number the report matches (REQ-082, CA-019)', async () => {
-    const first = await registerProposal();
-    await transmit(first, 'PRP-8200');
-
-    const second = await registerProposal();
-    const response = await transmit(second, 'PRP-8200');
-
-    expect(response.status).toBe(422);
-    expect(await response.json()).toMatchObject({ rule: 'REQ-082' });
-  });
-
   it('answers 404 for a proposal that does not exist', async () => {
-    const response = await transmit('does-not-exist');
+    const response = await post('/proposals/does-not-exist/rejection', { reason: 'motivo' });
 
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ error: 'not_found' });
@@ -303,8 +269,7 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
   }
 
   async function registerRenewingOn(number: string, renewalDate: string): Promise<string> {
-    const proposalId = await registerProposal();
-    await transmit(proposalId, `PRP-${number}`);
+    const proposalId = await registerProposal('bank-slip', `PRP-${number}`);
     const created = (await (
       await post('/policies', policyBody(proposalId, `APL-${number}`, renewalDate))
     ).json()) as PolicyBody;
@@ -361,12 +326,12 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
     expect(await listPolicies('?renewalUntil=2020-01-01')).toEqual([]);
   });
 
-  it('refuses a malformed day with 422, in Portuguese (REQ-020)', async () => {
+  it('refuses a malformed day with 422, in Portuguese (REQ-202)', async () => {
     const response = await fetch(`${baseUrl}/policies?renewalUntil=31%2F03%2F2027`);
 
     expect(response.status).toBe(422);
     expect(await response.json()).toMatchObject({
-      rule: 'REQ-020',
+      rule: 'REQ-202',
       message: "Data inválida: '31/03/2027'. Use o formato AAAA-MM-DD.",
     });
   });
@@ -410,17 +375,17 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
       expect((await post('/references', reference)).status).toBe(201);
     }
 
-    const proposal = await post('/proposals', {
-      clientId: 'client-notified',
-      brokerId: 'broker-notified',
-      insurerId: 'insurer-1',
-      productId: 'auto',
-      paymentMethodId: 'credit',
-      customerAccepted: true,
-      netPremium: '1200.00',
-    });
+    const proposal = await post(
+      '/proposals',
+      proposalBody({
+        clientId: 'client-notified',
+        brokerId: 'broker-notified',
+        productId: 'auto',
+        paymentMethodId: 'credit',
+        proposalNumber: 'PRP-NOTIFY-1',
+      }),
+    );
     const { id: proposalId } = (await proposal.json()) as { id: string };
-    await transmit(proposalId, 'PRP-NOTIFY-1');
 
     const policy = await post('/policies', policyBody(proposalId, 'APL-NOTIFY-1'));
     const { id: policyId } = (await policy.json()) as { id: string };
@@ -439,17 +404,17 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
   });
 
   it('notifies even when IN-01 has no name for the references (REQ-002)', async () => {
-    const proposal = await post('/proposals', {
-      clientId: 'client-unnamed',
-      brokerId: 'broker-unnamed',
-      insurerId: 'insurer-1',
-      productId: 'auto',
-      paymentMethodId: 'credit',
-      customerAccepted: true,
-      netPremium: '1200.00',
-    });
+    const proposal = await post(
+      '/proposals',
+      proposalBody({
+        clientId: 'client-unnamed',
+        brokerId: 'broker-unnamed',
+        productId: 'auto',
+        paymentMethodId: 'credit',
+        proposalNumber: 'PRP-NOTIFY-2',
+      }),
+    );
     const { id: proposalId } = (await proposal.json()) as { id: string };
-    await transmit(proposalId, 'PRP-NOTIFY-2');
     await post('/policies', policyBody(proposalId, 'APL-NOTIFY-2'));
 
     const [notified] = await listNotifications('?recipientId=broker-unnamed');
@@ -457,17 +422,17 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
   });
 
   it('produces nothing for a policy that was refused (REQ-070, CA-009)', async () => {
-    const proposal = await post('/proposals', {
-      clientId: 'client-1',
-      brokerId: 'broker-nothing',
-      insurerId: 'insurer-1',
-      productId: 'auto',
-      paymentMethodId: 'credit',
-      customerAccepted: true,
-      netPremium: '1200.00',
-    });
+    const proposal = await post(
+      '/proposals',
+      proposalBody({
+        clientId: 'client-1',
+        brokerId: 'broker-nothing',
+        productId: 'auto',
+        paymentMethodId: 'credit',
+        proposalNumber: 'PRP-NOTIFY-3',
+      }),
+    );
     const { id: proposalId } = (await proposal.json()) as { id: string };
-    await transmit(proposalId, 'PRP-NOTIFY-3');
 
     // No schedule: REQ-021 refuses the policy, so FP-01 step 7 never happens.
     const refused = await post('/policies', {

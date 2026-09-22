@@ -1,4 +1,4 @@
-import type { CalendarDate } from '../domain/calendar-date.ts';
+import type { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import type { Policy } from '../domain/policy.ts';
 
 /**

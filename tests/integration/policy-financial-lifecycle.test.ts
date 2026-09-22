@@ -38,14 +38,11 @@ function open(): Application {
   return composeApplication(loadConfig({ PERSISTENCE_DRIVER: 'sqlite', SQLITE_FILE: file }));
 }
 
-/** IN-02 and IN-05: 40% of the premium to the Usina, half of that to the broker. */
-async function commissionRegistries(effectiveFrom = '2026-01-01'): Promise<void> {
-  await application.useCases.registerCommissionAgreement.execute({
-    insurerId: 'insurer-1',
-    productId: 'auto',
-    effectiveFrom,
-    insurerRate: '40',
-  });
+/**
+ * IN-05: half of what the Usina receives to the broker. The Usina side is the
+ * CT of 40% the proposal carries (REQ-236).
+ */
+async function commissionRegistries(): Promise<void> {
   await application.useCases.registerBrokerCommissionRate.execute({
     brokerId: 'broker-1',
     rate: '50',
@@ -71,12 +68,15 @@ async function registerPolicy(paymentMethodId = 'credit'): Promise<string> {
     productId: 'auto',
     paymentMethodId,
     customerAccepted: true,
-    netPremium: '100.00',
-  });
-  await useCases.transmitProposal.execute({
-    proposalId: proposal.id,
     proposalNumber: 'PRP-1',
+    netPremium: '100.00',
+    coverageStart: '2026-10-01',
+    coverageEnd: '2027-10-01',
+    installments: [],
     workedCommission: '40',
+    workedCommissionMode: 'INTEGRAL',
+    intermediary: null,
+    author: 'operator',
   });
 
   const policy = await useCases.registerPolicy.execute({
@@ -259,21 +259,5 @@ describe('the financial life of a policy', () => {
     application = open();
 
     expect(await application.useCases.getCommission.execute(policyId)).toEqual(calculated);
-  });
-
-  it('refuses an agreement whose validity does not reach the policy (REQ-065)', async () => {
-    const policyId = await registerPolicy();
-    // Registered with a validity that starts after the policy did.
-    await commissionRegistries('2099-01-01');
-
-    await expect(
-      application.useCases.calculatePolicyCommission.execute({ policyId }),
-    ).rejects.toThrow(BusinessRuleViolation);
-
-    // Still recoverable: the validity is corrected and the policy is served.
-    await commissionRegistries('2026-01-01');
-    const commission = await application.useCases.calculatePolicyCommission.execute({ policyId });
-
-    expect(commission.agreedReceivable).toBe('40.00');
   });
 });

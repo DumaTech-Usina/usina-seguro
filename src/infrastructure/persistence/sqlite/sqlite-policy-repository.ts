@@ -3,9 +3,9 @@ import type {
   PolicyListFilter,
   PolicyRepository,
 } from '../../../core/policy/application/policy-repository.ts';
-import { CalendarDate } from '../../../core/policy/domain/calendar-date.ts';
 import { Installment, type InstallmentStatus } from '../../../core/policy/domain/installment.ts';
 import { Policy, type PolicyStatus } from '../../../core/policy/domain/policy.ts';
+import { CalendarDate } from '../../../core/proposal/domain/calendar-date.ts';
 import { Money } from '../../../core/proposal/domain/money.ts';
 import { withSavepoint } from './sqlite-transaction.ts';
 

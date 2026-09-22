@@ -10,22 +10,59 @@ CREATE TABLE IF NOT EXISTS proposal (
   product_id         TEXT    NOT NULL,
   payment_method_id  TEXT    NOT NULL,
   customer_accepted  INTEGER NOT NULL CHECK (customer_accepted IN (0, 1)),
+  -- Known at registration (REQ-206). Not UNIQUE: DEC-207 leaves the number
+  -- unrestricted for now.
+  proposal_number    TEXT    NOT NULL,
   -- Exact decimal as text (REQ-120). Never REAL: SQLite would store it as
   -- binary floating point. The equivalent PostgreSQL column is NUMERIC.
   net_premium        TEXT    NOT NULL,
+  -- Calendar dates: 'YYYY-MM-DD', no time and no time zone. The renewal is
+  -- the end of coverage (REQ-203), so it has no column of its own.
+  coverage_start     TEXT    NOT NULL,
+  coverage_end       TEXT    NOT NULL,
   -- ISO-8601 UTC as text: SQLite has no native date/time type.
   registered_at      TEXT    NOT NULL,
   status             TEXT    NOT NULL,
-  -- Known only from the transmission on (REQ-041): the insurer issues the
-  -- number and the worked commission is informed in that act. UNIQUE because
-  -- REQ-082/CA-019 reach the policy through it: NULLs stay distinct, so a
-  -- proposal still in DRAFT is unaffected.
-  proposal_number    TEXT    UNIQUE,
-  -- Percentage as exact decimal text, with the informed scale (REQ-121).
-  worked_commission  TEXT,
-  transmitted_at     TEXT,
-  -- Mandatory when the outcome is a refusal (REQ-045); the record stays.
+  -- Mandatory when the outcome is a refusal (REQ-253); the record stays.
   rejection_reason   TEXT
+);
+
+-- REQ-204: the installments informed at registration, in order. The due date
+-- is optional. Written once: nothing here changes after registration (REQ-261).
+CREATE TABLE IF NOT EXISTS proposal_installment (
+  proposal_id  TEXT    NOT NULL REFERENCES proposal (id),
+  number       INTEGER NOT NULL CHECK (number >= 1),
+  amount       TEXT    NOT NULL,
+  due_date     TEXT,
+  PRIMARY KEY (proposal_id, number)
+);
+
+-- REQ-214, REQ-215: every CT informed for the proposal, with its mode and who
+-- informed it when. Append-only: the one in force is the highest sequence,
+-- and the earlier ones are never erased (REQ-124).
+CREATE TABLE IF NOT EXISTS proposal_worked_commission (
+  proposal_id  TEXT    NOT NULL REFERENCES proposal (id),
+  sequence     INTEGER NOT NULL CHECK (sequence >= 1),
+  -- Percentage as exact decimal text, with the informed scale (REQ-121).
+  rate         TEXT    NOT NULL,
+  mode         TEXT    NOT NULL CHECK (mode IN ('INTEGRAL', 'PARCELLED')),
+  informed_by  TEXT    NOT NULL,
+  informed_at  TEXT    NOT NULL,
+  PRIMARY KEY (proposal_id, sequence)
+);
+
+-- REQ-220, REQ-223, REQ-225: every receipt declaration, append-only like the
+-- CT. A direct receipt has neither intermediary nor CTU; one through an
+-- intermediary has both (REQ-221).
+CREATE TABLE IF NOT EXISTS proposal_receipt_declaration (
+  proposal_id      TEXT    NOT NULL REFERENCES proposal (id),
+  sequence         INTEGER NOT NULL CHECK (sequence >= 1),
+  intermediary_id  TEXT,
+  ctu              TEXT,
+  declared_by      TEXT    NOT NULL,
+  declared_at      TEXT    NOT NULL,
+  PRIMARY KEY (proposal_id, sequence),
+  CHECK ((intermediary_id IS NULL) = (ctu IS NULL))
 );
 
 CREATE TABLE IF NOT EXISTS policy (
@@ -62,27 +99,6 @@ CREATE TABLE IF NOT EXISTS installment (
   confirmed_at   TEXT,
   confirmed_by   TEXT,
   UNIQUE (policy_id, number)
-);
-
--- Commercial agreement (REQ-065, IN-02/03/04). One row per version: a new
--- validity is a new row, never an update, so a calculation already made keeps
--- pointing at the numbers it used (CA-012, REJ-011, REQ-124).
-CREATE TABLE IF NOT EXISTS commission_agreement (
-  id                 TEXT PRIMARY KEY,
-  insurer_id         TEXT NOT NULL,
-  product_id         TEXT NOT NULL,
-  -- Calendar date (REQ-065): 'YYYY-MM-DD', no time and no time zone.
-  effective_from     TEXT NOT NULL,
-  -- Percentages as exact decimal text with the informed scale (REQ-121).
-  insurer_rate       TEXT NOT NULL,
-  chain_kind         TEXT NOT NULL CHECK (chain_kind IN ('DIRECT', 'INTERMEDIARY')),
-  -- Only for a chain with an intermediary (REQ-060, REQ-069).
-  intermediary_id    TEXT,
-  intermediary_rate  TEXT,
-  -- REQ-063 default, REQ-064 configurable.
-  broker_base        TEXT NOT NULL CHECK (broker_base IN ('USINA', 'INTERMEDIARY')),
-  registered_at      TEXT NOT NULL,
-  UNIQUE (insurer_id, product_id, effective_from)
 );
 
 -- Reference records the Administrator maintains (IN-01). One row per entity

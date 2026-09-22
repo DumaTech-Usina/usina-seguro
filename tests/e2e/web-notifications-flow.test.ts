@@ -196,12 +196,14 @@ async function issuePolicy(
     productId: 'auto',
     paymentMethodId: 'credit',
     customerAccepted: true,
+    proposalNumber: proposalNumber,
     netPremium: '1200.00',
-  });
-
-  await callApi('POST', `/proposals/${proposal.id}/transmission`, {
-    proposalNumber,
+    coverageStart: '2026-10-01',
+    coverageEnd: '2027-10-01',
     workedCommission: '32.5',
+    workedCommissionMode: 'INTEGRAL',
+    intermediary: null,
+    userId: 'operator',
   });
 
   const policy = await callApi('POST', '/policies', {

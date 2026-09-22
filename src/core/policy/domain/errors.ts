@@ -20,7 +20,6 @@ export const POLICY_MESSAGES = {
   INSTALLMENT_NOT_FOUND: 'policy.installment_not_found',
   ONLY_PENDING_CAN_BE_PAID: 'policy.only_pending_can_be_paid',
   PAYMENT_CONFIRMATION_USER_REQUIRED: 'policy.payment_confirmation_user_required',
-  INVALID_DATE_FORMAT: 'policy.invalid_date_format',
 } as const;
 
 export type PolicyMessageKey = (typeof POLICY_MESSAGES)[keyof typeof POLICY_MESSAGES];

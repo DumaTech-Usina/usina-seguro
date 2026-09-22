@@ -27,10 +27,18 @@ describe('application composition', () => {
       productId: 'product-1',
       paymentMethodId: 'credit-card',
       customerAccepted: true,
+      proposalNumber: 'PRP-1',
       netPremium: '100.00',
+      coverageStart: '2026-10-01',
+      coverageEnd: '2027-10-01',
+      installments: [],
+      workedCommission: '40',
+      workedCommissionMode: 'INTEGRAL',
+      intermediary: null,
+      author: 'operator',
     });
 
-    expect(output.status).toBe('DRAFT');
+    expect(output.status).toBe('AWAITING_ISSUANCE');
     await application.shutdown();
   });
 
@@ -46,7 +54,15 @@ describe('application composition', () => {
       productId: 'product-1',
       paymentMethodId: 'bank-slip',
       customerAccepted: true,
+      proposalNumber: 'PRP-1',
       netPremium: '3210.99',
+      coverageStart: '2026-10-01',
+      coverageEnd: '2027-10-01',
+      installments: [],
+      workedCommission: '40',
+      workedCommissionMode: 'INTEGRAL',
+      intermediary: null,
+      author: 'operator',
     });
     await first.shutdown();
 
@@ -59,7 +75,15 @@ describe('application composition', () => {
       productId: 'product-1',
       paymentMethodId: 'bank-slip',
       customerAccepted: true,
+      proposalNumber: 'PRP-1',
       netPremium: '10.01',
+      coverageStart: '2026-10-01',
+      coverageEnd: '2027-10-01',
+      installments: [],
+      workedCommission: '40',
+      workedCommissionMode: 'INTEGRAL',
+      intermediary: null,
+      author: 'operator',
     });
     await second.shutdown();
 

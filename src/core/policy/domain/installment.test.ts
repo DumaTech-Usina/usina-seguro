@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { BusinessRuleViolation } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
-import { CalendarDate } from './calendar-date.ts';
 import { Installment, type InstallmentData } from './installment.ts';
 
 function validData(overrides: Partial<InstallmentData> = {}): InstallmentData {

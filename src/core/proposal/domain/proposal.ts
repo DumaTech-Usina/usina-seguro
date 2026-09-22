@@ -1,50 +1,40 @@
+import { Authorship } from './authorship.ts';
+import type { CalendarDate } from './calendar-date.ts';
 import { BusinessRuleViolation, PROPOSAL_MESSAGES } from './errors.ts';
+import { type ExpectedReceipt, commissionBase, expectedReceipt } from './expected-receipt.ts';
 import type { Money } from './money.ts';
 import type { Percentage } from './percentage.ts';
+import type { Receipt, ReceiptDeclaration } from './receipt.ts';
+import type { WorkedCommission, WorkedCommissionMode } from './worked-commission.ts';
 
 /**
- * Documented proposal states (section 10.2 of the requirements).
+ * Proposal states (REQ-250).
  *
  * ```
- * DRAFT ──► TRANSMITTED ──► ACCEPTED   (a policy was registered, REQ-111)
- *                       └─► REJECTED   (reason required, final)
- * DRAFT / TRANSMITTED ──► CANCELLED    (final)
+ * AWAITING_ISSUANCE ──► ISSUED     (recognised; originates the policy)
+ *                   └─► REJECTED   (reason required; final; no policy)
  * ```
  *
- * `CANCELLED` has no transition implemented: the requirements list the state
- * but define no operation that reaches it (who cancels, when, with which
- * record). It stays in the union because it is part of the documented machine.
- *
- * The identifiers are English; the Portuguese names used by the business
- * (RASCUNHO, EMITIDA, ...) are a presentation concern and live in the i18n
- * dictionary.
- *
- * **On the name `TRANSMITTED`.** REQ-041 was revised on 2026-09-21: the act it
- * records is the **insurer issuing the proposal** and handing back its number
- * and the worked commission — not the Usina sending anything out. `ITP-002`
- * had supplied the wrong agent to a sentence that never named one, and the
- * glossary contradicted it by calling the number "gerado pela seguradora".
- *
- * The identifier kept its name deliberately. It is a stored value: every row
- * of `proposal.status` holds the string `TRANSMITTED`, and there is no
- * migration framework, so renaming it would break every database that exists
- * — for a word no user ever reads. What the operator sees is the Portuguese
- * label, which says *Emitida* (`shared/status.js`). The day a migration path
- * exists, this is the first thing to rename.
+ * The identifiers are English; the Portuguese names the business uses
+ * (aguardando emissao, emitida, recusada) are a presentation concern.
  */
-export type ProposalStatus = 'DRAFT' | 'TRANSMITTED' | 'ACCEPTED' | 'REJECTED' | 'CANCELLED';
+export type ProposalStatus = 'AWAITING_ISSUANCE' | 'ISSUED' | 'REJECTED';
 
 /**
- * Data required to register a proposal.
+ * REQ-204: one installment — its amount, and its due date when informed. The
+ * number is its position in the list, starting at 1.
+ */
+export interface ProposalInstallment {
+  readonly amount: Money;
+  readonly dueDate: CalendarDate | null;
+}
+
+/**
+ * What the proposal holds from its registration on and never changes
+ * (REQ-261, REJ-211): the commercial data (REQ-201) and the standardized data
+ * (REQ-202), all informed at registration (REQ-206).
  *
- * Client, broker, insurer, product and payment method are registries owned by
- * the Administrator (IN-01, IN-06) and are not modelled yet. The proposal only
- * keeps the reference; validating that those records exist will make sense once
- * the corresponding modules exist.
- *
- * `proposalNumber` and `workedCommission` are absent on purpose: both are
- * informed by the insurer when it issues the proposal (REQ-041), which happens
- * after registration (FP-01, steps 3 and 4).
+ * The product-specific data of REQ-205 is absent: its catalogue is `DEC-201`.
  */
 export interface ProposalRegistrationData {
   readonly id: string;
@@ -52,41 +42,38 @@ export interface ProposalRegistrationData {
   readonly brokerId: string;
   readonly insurerId: string;
   readonly productId: string;
-  /** Reference to the payment method registry (REQ-040). */
   readonly paymentMethodId: string;
-  /** REQ-040: the customer's acceptance precedes registering the proposal. */
+  /** REQ-040, REQ-201: the customer's acceptance precedes the proposal. */
   readonly customerAccepted: boolean;
+  /** REQ-202, REQ-206: issued by the insurer and already known at registration. */
+  readonly proposalNumber: string;
   readonly netPremium: Money;
+  readonly coverageStart: CalendarDate;
+  readonly coverageEnd: CalendarDate;
+  /** REQ-204: may be empty (REQ-202). */
+  readonly installments: readonly ProposalInstallment[];
   readonly registeredAt: Date;
 }
 
 /**
- * What the insurer's issuance of the proposal records (REQ-041).
- *
- * Both values come **from the insurer**: it issues the number (glossary 5.1)
- * and informs the worked commission in the same act, so neither exists before
- * this point. The Usina registers what came back; it does not produce it
- * (REQ-002).
- *
- * The insurer returns more than these two fields. Which ones, and which of
- * them the control has to keep, is `DEC-015` — an inventory nobody has done
- * yet. The two here are the ones confirmed rules consume.
+ * Everything needed to register: the immutable data plus the first CT and the
+ * first receipt declaration, both signed by whoever registers (REQ-215,
+ * REQ-223).
  */
-export interface ProposalTransmissionData {
-  readonly proposalNumber: string;
+export interface ProposalRegistration extends ProposalRegistrationData {
   readonly workedCommission: Percentage;
-  readonly transmittedAt: Date;
+  readonly workedCommissionMode: WorkedCommissionMode;
+  readonly receipt: Receipt;
+  readonly registeredBy: string;
 }
 
-/**
- * Everything the proposal accumulated after registration. Used to rebuild a
- * persisted record; `null` means "did not happen".
- */
+/** What the proposal accumulated after registration. */
 export interface ProposalState {
   readonly status: ProposalStatus;
-  readonly proposalNumber?: string | null;
-  readonly workedCommission?: Percentage | null;
-  readonly transmittedAt?: Date | null;
+  /** Oldest first; never empty. */
+  readonly workedCommissionHistory: readonly WorkedCommission[];
+  /** Oldest first; never empty. */
+  readonly receiptHistory: readonly ReceiptDeclaration[];
   readonly rejectionReason?: string | null;
 }
 
@@ -98,16 +85,16 @@ export class Proposal {
   readonly productId: string;
   readonly paymentMethodId: string;
   readonly customerAccepted: boolean;
+  readonly proposalNumber: string;
   readonly netPremium: Money;
+  readonly coverageStart: CalendarDate;
+  readonly coverageEnd: CalendarDate;
+  readonly installments: readonly ProposalInstallment[];
   readonly registeredAt: Date;
   readonly status: ProposalStatus;
-  /** REQ-022, REQ-050: issued by the insurer, known from the issuance on. */
-  readonly proposalNumber: string | null;
-  /** REQ-041: percentage the insurer informed when it issued the proposal. */
-  readonly workedCommission: Percentage | null;
-  /** REQ-041: the moment the insurer's issuance was recorded. */
-  readonly transmittedAt: Date | null;
-  /** REQ-045: mandatory when the outcome is a refusal. */
+  readonly workedCommissionHistory: readonly WorkedCommission[];
+  readonly receiptHistory: readonly ReceiptDeclaration[];
+  /** REQ-253: present exactly when the proposal was refused. */
   readonly rejectionReason: string | null;
 
   private constructor(data: ProposalRegistrationData, state: ProposalState) {
@@ -118,45 +105,69 @@ export class Proposal {
     this.productId = data.productId;
     this.paymentMethodId = data.paymentMethodId;
     this.customerAccepted = data.customerAccepted;
+    this.proposalNumber = data.proposalNumber;
     this.netPremium = data.netPremium;
+    this.coverageStart = data.coverageStart;
+    this.coverageEnd = data.coverageEnd;
+    this.installments = data.installments;
     this.registeredAt = data.registeredAt;
     this.status = state.status;
-    this.proposalNumber = state.proposalNumber ?? null;
-    this.workedCommission = state.workedCommission ?? null;
-    this.transmittedAt = state.transmittedAt ?? null;
+    this.workedCommissionHistory = state.workedCommissionHistory;
+    this.receiptHistory = state.receiptHistory;
     this.rejectionReason = state.rejectionReason ?? null;
   }
 
   /**
-   * REQ-040 / REJ-004: a proposal only exists with the customer's acceptance
-   * and a defined payment method. Without those there is no proposal — the
-   * registration is rejected.
+   * FP-01 steps 1 to 4: registers the proposal with every datum REQ-202
+   * requires, the CT with its mode, and the receipt declaration. It starts
+   * awaiting issuance (FP-01 step 6).
+   *
+   * Every datum is mandatory except the installments (REQ-202). The number is
+   * not checked for uniqueness: `DEC-207` leaves it unrestricted for now.
    */
-  static register(data: ProposalRegistrationData): Proposal {
-    if (!data.customerAccepted) {
+  static register(input: ProposalRegistration): Proposal {
+    if (!input.customerAccepted) {
       throw new BusinessRuleViolation('REQ-040', PROPOSAL_MESSAGES.CUSTOMER_ACCEPTANCE_REQUIRED);
     }
 
-    if (data.paymentMethodId.trim() === '') {
+    if (input.paymentMethodId.trim() === '') {
       throw new BusinessRuleViolation('REQ-040', PROPOSAL_MESSAGES.PAYMENT_METHOD_REQUIRED);
     }
 
     for (const [field, value] of [
-      ['clientId', data.clientId],
-      ['brokerId', data.brokerId],
-      ['insurerId', data.insurerId],
-      ['productId', data.productId],
+      ['clientId', input.clientId],
+      ['brokerId', input.brokerId],
+      ['insurerId', input.insurerId],
+      ['productId', input.productId],
     ] as const) {
       if (value.trim() === '') {
-        throw new BusinessRuleViolation('REQ-022', PROPOSAL_MESSAGES.FIELD_REQUIRED, { field });
+        throw new BusinessRuleViolation('REQ-201', PROPOSAL_MESSAGES.FIELD_REQUIRED, { field });
       }
     }
 
-    if (!data.netPremium.isPositive()) {
-      throw new BusinessRuleViolation('REQ-022', PROPOSAL_MESSAGES.NET_PREMIUM_MUST_BE_POSITIVE);
+    const proposalNumber = input.proposalNumber.trim();
+
+    if (proposalNumber === '') {
+      throw new BusinessRuleViolation('REQ-202', PROPOSAL_MESSAGES.PROPOSAL_NUMBER_REQUIRED);
     }
 
-    return new Proposal(data, { status: 'DRAFT' });
+    // REQ-217, CA-218: zero or negative is refused.
+    if (!input.netPremium.isPositive()) {
+      throw new BusinessRuleViolation('REQ-217', PROPOSAL_MESSAGES.NET_PREMIUM_MUST_BE_POSITIVE);
+    }
+
+    const signed = Authorship.of(input.registeredBy, input.registeredAt);
+
+    return new Proposal(
+      { ...input, proposalNumber },
+      {
+        status: 'AWAITING_ISSUANCE',
+        workedCommissionHistory: [
+          { rate: input.workedCommission, mode: input.workedCommissionMode, informed: signed },
+        ],
+        receiptHistory: [{ receipt: input.receipt, declared: signed }],
+      },
+    );
   }
 
   /**
@@ -168,99 +179,129 @@ export class Proposal {
     return new Proposal(data, state);
   }
 
-  /**
-   * REQ-041 / REQ-042 / FP-01 step 4: the insurer issued the proposal. What is
-   * recorded is the moment, the number it issued and the worked commission it
-   * informed in that act.
-   *
-   * Only a `DRAFT` can reach this state (section 10.2). Recording a second
-   * issuance would overwrite the first commission informed, which REQ-124
-   * forbids.
-   */
-  transmit(data: ProposalTransmissionData): Proposal {
-    if (this.status !== 'DRAFT') {
-      throw new BusinessRuleViolation('REQ-041', PROPOSAL_MESSAGES.ONLY_DRAFT_CAN_BE_TRANSMITTED, {
-        status: this.status,
-      });
-    }
+  /** REQ-203, CA-206: the renewal is the end of coverage, never informed apart. */
+  get renewalDate(): CalendarDate {
+    return this.coverageEnd;
+  }
 
-    if (data.proposalNumber.trim() === '') {
-      throw new BusinessRuleViolation('REQ-022', PROPOSAL_MESSAGES.PROPOSAL_NUMBER_REQUIRED);
-    }
+  /** The CT in force: the last one informed (REQ-214). */
+  get workedCommission(): Percentage {
+    return this.currentWorkedCommission().rate;
+  }
 
-    return new Proposal(this, {
-      status: 'TRANSMITTED',
-      proposalNumber: data.proposalNumber.trim(),
-      workedCommission: data.workedCommission,
-      transmittedAt: data.transmittedAt,
-    });
+  get workedCommissionMode(): WorkedCommissionMode {
+    return this.currentWorkedCommission().mode;
+  }
+
+  /** The receipt in force: the last one declared (REQ-225). */
+  get receipt(): Receipt {
+    return this.currentReceipt().receipt;
+  }
+
+  /** REQ-232, CA-203: what the Usina expects, visible before issuance. */
+  expectedReceipt(): ExpectedReceipt {
+    return expectedReceipt(
+      commissionBase(this.netPremium, this.workedCommissionMode),
+      this.workedCommission,
+      this.receipt,
+    );
   }
 
   /**
-   * REQ-044 / REQ-045 / REJ-003: records the insurer's refusal. The reason is
-   * mandatory and the record stays in the system (REQ-046, ITP-004).
-   *
-   * Only a transmitted proposal can be refused: a refusal is the insurer's
-   * answer to something that was sent (section 10.2). `REJECTED` is final
-   * (REQ-112, REJ-015), which the same guard enforces.
+   * REQ-214, FA-203, CA-217: corrects the CT and its mode before issuance. The
+   * correction is a new signed entry; the earlier ones stay (REQ-215, REQ-124).
+   */
+  reviseWorkedCommission(entry: WorkedCommission): Proposal {
+    this.ensureAwaitingIssuance();
+
+    return this.with({ workedCommissionHistory: [...this.workedCommissionHistory, entry] });
+  }
+
+  /**
+   * REQ-225, FA-204, FA-209: declares, replaces or removes the intermediary
+   * before issuance. A new signed declaration; the earlier ones stay (REQ-223,
+   * REQ-124).
+   */
+  reviseReceipt(declaration: ReceiptDeclaration): Proposal {
+    this.ensureAwaitingIssuance();
+
+    return this.with({ receiptHistory: [...this.receiptHistory, declaration] });
+  }
+
+  /**
+   * REQ-253, FA-208: the insurer did not issue the proposal. The reason is
+   * mandatory (REJ-208, EX-203), the refusal is final (REJ-212) and the record
+   * stays consultable.
    */
   reject(reason: string): Proposal {
-    if (this.status !== 'TRANSMITTED') {
-      throw new BusinessRuleViolation(
-        'REQ-112',
-        PROPOSAL_MESSAGES.ONLY_TRANSMITTED_CAN_BE_REJECTED,
-        { status: this.status },
-      );
+    this.ensureAwaitingIssuance();
+
+    const trimmed = reason.trim();
+
+    if (trimmed === '') {
+      throw new BusinessRuleViolation('REQ-253', PROPOSAL_MESSAGES.REJECTION_REASON_REQUIRED);
     }
 
-    if (reason.trim() === '') {
-      throw new BusinessRuleViolation('REQ-045', PROPOSAL_MESSAGES.REJECTION_REASON_REQUIRED);
-    }
-
-    return new Proposal(this, {
-      status: 'REJECTED',
-      proposalNumber: this.proposalNumber,
-      workedCommission: this.workedCommission,
-      transmittedAt: this.transmittedAt,
-      rejectionReason: reason.trim(),
-    });
+    return this.with({ status: 'REJECTED', rejectionReason: trimmed });
   }
 
   /**
-   * REQ-048 / REQ-111: the insurer effectuated the proposal. `ACCEPTED` is only
-   * reachable together with the registration of the policy, so this transition
-   * is driven by the policy module and never on its own.
+   * Moves the proposal to ISSUED on behalf of the V1 policy registration.
    *
-   * The guard is what enforces, in the domain, that a refused proposal produces
-   * no policy (REQ-047, CA-006) and that a proposal originates at most one
-   * policy (REQ-049, CA-007, REJ-005): once accepted it cannot be accepted
-   * again.
+   * The recognition of issuance (REQ-209, V2 section 7) is outside the current
+   * scope. This transition is the minimal bridge that keeps the V1 policy
+   * registration — and everything downstream of it — working on the V2
+   * proposal until that step is defined; it implements none of its rules.
+   * What it does enforce is what V2 already states about the states: a refused
+   * proposal originates no policy (REJ-210) and a proposal originates at most
+   * one (REQ-049).
    */
   accept(): Proposal {
+    if (this.status === 'ISSUED') {
+      throw new BusinessRuleViolation('REQ-049', PROPOSAL_MESSAGES.ALREADY_HAS_POLICY);
+    }
+
     if (this.status === 'REJECTED') {
       throw new BusinessRuleViolation(
-        'REQ-047',
+        'REQ-253',
         PROPOSAL_MESSAGES.REJECTED_CANNOT_ORIGINATE_POLICY,
       );
     }
 
-    if (this.status === 'ACCEPTED') {
-      throw new BusinessRuleViolation('REQ-049', PROPOSAL_MESSAGES.ALREADY_HAS_POLICY);
+    return this.with({ status: 'ISSUED' });
+  }
+
+  /**
+   * REQ-252: only a proposal awaiting issuance changes. Once issued it is
+   * frozen (REQ-244, REQ-260); once refused it is final (REQ-253).
+   */
+  private ensureAwaitingIssuance(): void {
+    if (this.status === 'ISSUED') {
+      throw new BusinessRuleViolation('REQ-260', PROPOSAL_MESSAGES.ISSUED_PROPOSAL_IS_FROZEN);
     }
 
-    if (this.status !== 'TRANSMITTED') {
-      throw new BusinessRuleViolation(
-        'REQ-111',
-        PROPOSAL_MESSAGES.ONLY_TRANSMITTED_CAN_BE_ACCEPTED,
-        { status: this.status },
-      );
+    if (this.status === 'REJECTED') {
+      throw new BusinessRuleViolation('REQ-253', PROPOSAL_MESSAGES.REJECTED_PROPOSAL_IS_FINAL);
     }
+  }
 
+  private currentWorkedCommission(): WorkedCommission {
+    return this.workedCommissionHistory[
+      this.workedCommissionHistory.length - 1
+    ] as WorkedCommission;
+  }
+
+  private currentReceipt(): ReceiptDeclaration {
+    return this.receiptHistory[this.receiptHistory.length - 1] as ReceiptDeclaration;
+  }
+
+  private with(changes: Partial<ProposalState>): Proposal {
     return new Proposal(this, {
-      status: 'ACCEPTED',
-      proposalNumber: this.proposalNumber,
-      workedCommission: this.workedCommission,
-      transmittedAt: this.transmittedAt,
+      status: this.status,
+      workedCommissionHistory: this.workedCommissionHistory,
+      receiptHistory: this.receiptHistory,
+      rejectionReason: this.rejectionReason,
+      ...changes,
     });
   }
 }

@@ -198,7 +198,7 @@ async function load(recipientId) {
       emptyState(
         'notifications_off',
         'Nenhuma emissão notificada ainda',
-        'A notificação é produzida quando a apólice é registrada a partir da proposta aceita.',
+        'A notificação é produzida quando a apólice é registrada a partir da proposta emitida.',
       ),
     );
     return;

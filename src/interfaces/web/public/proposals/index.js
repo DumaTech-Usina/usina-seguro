@@ -1,11 +1,9 @@
 /**
- * FP-01 step 5: the proposals an operator has to follow (REQ-043, OUT-01).
+ * The proposals an operator follows, by state of REQ-250.
  *
- * The page reads and filters; it decides nothing. The filter is the state
- * itself, so "em aberto" is not a rule this file invented — it is the
- * `TRANSMITTED` of section 10.2, which REQ-043 names as sent to the insurer
- * and without an outcome. Refused proposals stay reachable here because
- * REQ-045/REQ-046 keep them on the record (OUT-02).
+ * The page reads and filters; it decides nothing. The default is what awaits
+ * issuance, with what the Usina expects from each (REQ-232). Refused
+ * proposals stay reachable because REQ-253 keeps them on the record.
  */
 
 import { ApiError, api } from '/app/shared/api.js';
@@ -16,28 +14,18 @@ import { statusChip } from '/app/shared/status.js';
 const list = document.querySelector('#list');
 const filters = document.querySelector('#filters');
 
-/**
- * The tabs. `status: undefined` asks for every proposal.
- *
- * The first one is the default because it is the worklist REQ-043 exists for:
- * what was sent to the insurer and is still waiting for an answer.
- */
+/** The tabs, in the order of REQ-250. `status: undefined` asks for every proposal. */
 const TABS = [
-  // A ordem é a da progressão comercial, e os rótulos são os das etapas da
-  // seção 10.2 — não os de um ciclo de edição. `Emitidas` é a lista em aberto
-  // de OUT-01: emitidas pela seguradora e ainda sem desfecho (REQ-043).
-  { id: 'open', label: 'Emitidas', status: 'TRANSMITTED' },
-  { id: 'draft', label: 'Aguardando emissão', status: 'DRAFT' },
-  { id: 'accepted', label: 'Aceitas', status: 'ACCEPTED' },
+  { id: 'awaiting', label: 'Aguardando emissão', status: 'AWAITING_ISSUANCE' },
+  { id: 'issued', label: 'Emitidas', status: 'ISSUED' },
   { id: 'rejected', label: 'Recusadas', status: 'REJECTED' },
   { id: 'all', label: 'Todas', status: undefined },
 ];
 
-/** O que a ausência significa em cada etapa, que não é a mesma coisa. */
+/** O que a ausência significa em cada estado, que não é a mesma coisa. */
 const EMPTY_NOTE = {
-  open: 'Nada aguardando desfecho da seguradora.',
-  draft: 'Nenhum negócio aguardando a seguradora emitir a proposta.',
-  accepted: 'Nenhuma proposta aceita ainda — é daqui que nascem as apólices.',
+  awaiting: 'Nenhuma proposta aguardando a seguradora emitir.',
+  issued: 'Nenhuma proposta emitida ainda — é daqui que nascem as apólices.',
   rejected: 'Nenhuma recusa registrada.',
   all: 'Registre um novo negócio para começar.',
 };
@@ -74,7 +62,7 @@ function row(proposal) {
 
   const number = element('td');
   number.append(
-    element('span', 'proposal-number', proposal.proposalNumber ?? 'sem número'),
+    element('span', 'proposal-number', proposal.proposalNumber),
     element('div', 'text-muted', `Cliente ${proposal.clientId} · Corretor ${proposal.brokerId}`),
   );
   line.append(number);
@@ -83,22 +71,15 @@ function row(proposal) {
     element('td', undefined, proposal.insurerId),
     element('td', undefined, proposal.productId),
     element('td', 'is-numeric', formatMoney(proposal.netPremium)),
-    element(
-      'td',
-      'is-numeric',
-      // REQ-041: only exists from the transmission on.
-      proposal.workedCommission === null ? '—' : formatPercentage(proposal.workedCommission),
-    ),
-    element(
-      'td',
-      undefined,
-      formatDate((proposal.transmittedAt ?? proposal.registeredAt).slice(0, 10)),
-    ),
+    element('td', 'is-numeric', formatPercentage(proposal.workedCommission)),
+    // REQ-232: what the Usina expects, as the server calculated it.
+    element('td', 'is-numeric', formatMoney(proposal.expectedReceipt.usina)),
+    element('td', undefined, formatDate(proposal.registeredAt.slice(0, 10))),
   );
 
   const status = element('td');
   status.append(statusChip('proposal', proposal.status));
-  // REQ-045: the reason is what makes a refusal readable in a listing.
+  // REQ-253: the reason is what makes a refusal readable in a listing.
   if (proposal.rejectionReason !== null) {
     status.append(element('div', 'text-muted', proposal.rejectionReason));
   }
@@ -123,8 +104,9 @@ function table(proposals) {
     ['Seguradora', ''],
     ['Produto', ''],
     ['Prêmio líquido', 'is-numeric'],
-    ['% trabalhada', 'is-numeric'],
-    ['Data', ''],
+    ['CT', 'is-numeric'],
+    ['Usina espera', 'is-numeric'],
+    ['Registro', ''],
     ['Situação', ''],
     ['', 'is-action'],
   ]) {

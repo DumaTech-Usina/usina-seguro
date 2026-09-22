@@ -43,17 +43,14 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'proposal.payment_method_required': 'Proposta exige forma de pagamento definida.',
     'proposal.field_required': 'Proposta exige o campo {field}.',
     'proposal.net_premium_must_be_positive': 'Prêmio líquido da proposta deve ser positivo.',
-    'proposal.proposal_number_required':
-      'Registro da emissão exige o número da proposta emitido pela seguradora.',
-    'proposal.proposal_number_already_registered':
-      "Número de proposta '{proposalNumber}' já registrado em outra proposta.",
-    'proposal.only_draft_can_be_transmitted':
-      'Somente proposta em rascunho pode receber a emissão da seguradora. Estado atual: {status}.',
-    'proposal.only_transmitted_can_be_rejected':
-      'Somente proposta emitida pela seguradora pode ser recusada. Estado atual: {status}.',
+    'proposal.proposal_number_required': 'Proposta exige o número emitido pela seguradora.',
+    'proposal.author_required': 'Informe quem está registrando esta informação.',
+    'proposal.intermediary_requires_ctu':
+      'Com intermediária, a CTU (comissão trabalhada da Usina) é obrigatória.',
+    'proposal.issued_proposal_is_frozen': 'Proposta emitida não pode ser alterada.',
+    'proposal.rejected_proposal_is_final':
+      'Proposta recusada não pode ser alterada: a recusa é definitiva.',
     'proposal.rejection_reason_required': 'Recusa de proposta exige motivo.',
-    'proposal.only_transmitted_can_be_accepted':
-      'Apólice exige proposta emitida pela seguradora. Estado atual: {status}.',
     'proposal.rejected_cannot_originate_policy': 'Proposta recusada não origina apólice.',
     'proposal.already_has_policy': 'Proposta já possui apólice registrada.',
     'proposal.not_found': "Proposta não encontrada: '{id}'.",
@@ -74,7 +71,7 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'policy.installment_belongs_to_another_policy': 'Parcela {number} pertence a outra apólice.',
     'policy.not_found': "Apólice não encontrada: '{id}'.",
     'policy.not_found_for_proposal': "Proposta '{proposalId}' ainda não possui apólice registrada.",
-    'policy.invalid_date_format': "Data inválida: '{value}'. Use o formato AAAA-MM-DD.",
+    'calendar_date.invalid_format': "Data inválida: '{value}'. Use o formato AAAA-MM-DD.",
     'policy.installment_not_found': "Parcela {number} não encontrada na apólice '{policyNumber}'.",
     'policy.only_pending_can_be_paid':
       'Somente parcela pendente pode ser confirmada como paga. Parcela {number} está {status}.',
@@ -90,10 +87,6 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'commission.not_found': "Apólice '{policyId}' não possui comissão calculada.",
     'commission.already_calculated':
       'Apólice já possui comissão calculada. Use o ajuste por apólice para alterá-la.',
-    'commission.no_agreement_in_force':
-      "Não há acordo comercial vigente para a seguradora '{insurerId}' e o produto " +
-      "'{productId}' em {on}, data de registro da apólice. Registre o acordo com vigência " +
-      'a partir dessa data, ou anterior.',
     'commission.no_broker_rate':
       "Não há tabela de comissão registrada para o corretor '{brokerId}'.",
     'commission.override_justification_required':

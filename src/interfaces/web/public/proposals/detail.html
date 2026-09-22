@@ -31,20 +31,23 @@
           </div>
         </div>
 
-        <!-- ------------------------------------ FP-01 passo 4: emissão -- -->
-        <section class="card hidden" data-panel="transmission">
+        <!-- ------------------- FP-01 passo 7: correções antes da emissão -- -->
+        <section class="card hidden" data-panel="corrections">
           <div class="card__header">
-            <span class="material-symbols-outlined">send</span>
-            <h2 class="text-title">A proposta foi emitida pela seguradora</h2>
+            <span class="material-symbols-outlined">edit_note</span>
+            <h2 class="text-title">Correções antes da emissão</h2>
           </div>
-          <form id="form-transmission">
-            <div class="card__body stack">
-              <div class="form-grid">
-                <div class="field">
-                  <input class="field__input" name="proposalNumber" placeholder=" " required />
-                  <label class="field__label">Número da proposta</label>
-                  <span class="field__hint">Emitido pela seguradora.</span>
-                </div>
+          <div class="card__body stack">
+            <p class="text-muted">
+              Enquanto a proposta aguarda emissão, só a comissão trabalhada, seu modo e o
+              recebimento podem ser corrigidos. Cada correção fica registrada com quem a fez e
+              quando; as anteriores são mantidas.
+            </p>
+
+            <!-- REQ-214, REQ-215 -->
+            <form id="form-worked-commission" class="stack">
+              <span class="text-label">Comissão trabalhada (CT)</span>
+              <div class="form-grid form-grid--three">
                 <div class="field">
                   <input
                     class="field__input"
@@ -54,18 +57,75 @@
                     pattern="\d+(\.\d+)?"
                     required
                   />
-                  <label class="field__label">Comissão trabalhada (%)</label>
-                  <span class="field__hint">Informada pela seguradora na emissão.</span>
+                  <label class="field__label">CT (%)</label>
+                </div>
+                <div class="field">
+                  <select class="field__input" name="workedCommissionMode" required>
+                    <option value="INTEGRAL">Integral</option>
+                    <option value="PARCELLED">Parcelada</option>
+                  </select>
+                  <label class="field__label">Modo da CT</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="userId" placeholder=" " required />
+                  <label class="field__label">Seu identificador</label>
                 </div>
               </div>
-            </div>
-            <div class="card__footer">
-              <button class="btn btn--filled" type="submit">Registrar emissão</button>
-            </div>
-          </form>
+              <div class="row row--end">
+                <button class="btn btn--outlined" type="submit">Corrigir CT</button>
+              </div>
+            </form>
+
+            <!-- REQ-220, REQ-221, REQ-223, REQ-225 -->
+            <form id="form-receipt" class="stack">
+              <span class="text-label">Recebimento</span>
+              <div class="form-grid">
+                <div class="field">
+                  <select class="field__input" name="receiptKind" required>
+                    <option value="DIRECT">Direto da seguradora</option>
+                    <option value="INTERMEDIARY">Através de intermediária</option>
+                  </select>
+                  <label class="field__label">Como a Usina recebe</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="userId" placeholder=" " required />
+                  <label class="field__label">Seu identificador</label>
+                </div>
+              </div>
+              <div class="form-grid hidden" id="intermediary-fields">
+                <div class="field">
+                  <input
+                    class="field__input"
+                    name="intermediaryId"
+                    placeholder=" "
+                    list="intermediary-options"
+                  />
+                  <datalist id="intermediary-options"></datalist>
+                  <label class="field__label">Intermediária</label>
+                </div>
+                <div class="field">
+                  <input
+                    class="field__input"
+                    name="ctu"
+                    placeholder=" "
+                    inputmode="decimal"
+                    pattern="\d+(\.\d+)?"
+                  />
+                  <label class="field__label">CTU — comissão trabalhada da Usina (%)</label>
+                  <span class="field__hint">
+                    Percentual que a Usina recebe sobre o valor que a intermediária recebe. A
+                    intermediária recebe prêmio líquido × CT; a Usina recebe esse valor × CTU.
+                  </span>
+                </div>
+              </div>
+              <div class="row row--end">
+                <button class="btn btn--outlined" type="submit">Corrigir recebimento</button>
+              </div>
+            </form>
+          </div>
         </section>
 
-        <!-- ------------------------------------ FP-01 passo 6: desfecho -- -->
+        <!-- ------------------------------------ FP-01 passo 8: desfecho -- -->
         <section class="card hidden" data-panel="outcome">
           <div class="card__header">
             <span class="material-symbols-outlined">fork_right</span>
@@ -81,7 +141,7 @@
                 aria-selected="true"
               >
                 <span class="material-symbols-outlined">task_alt</span>
-                Aceite — registrar apólice
+                Emitida — registrar apólice
               </button>
               <button
                 class="outcome-switch__option"
@@ -95,7 +155,8 @@
               </button>
             </div>
 
-            <!-- Aceite (REQ-048, REQ-050, REQ-020) -->
+            <!-- Registro da apólice da V1, mantido até o reconhecimento da emissão
+                 (REQ-209) ser definido. -->
             <form id="form-policy">
               <div class="stack">
                 <div class="form-grid">
@@ -142,7 +203,7 @@
                       Adicionar parcela
                     </button>
                   </div>
-                  <div class="installments" id="installments"></div>
+                  <div class="installments" id="policy-installments"></div>
                   <p class="text-muted" id="installments-total" style="margin-top: var(--space-3)"></p>
                 </div>
               </div>
@@ -154,7 +215,7 @@
               </div>
             </form>
 
-            <!-- Recusa (REQ-045) -->
+            <!-- Recusa (REQ-253) -->
             <form id="form-rejection" class="hidden">
               <div class="stack">
                 <div class="banner banner--warning">

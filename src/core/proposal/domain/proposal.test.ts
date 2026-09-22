@@ -1,12 +1,22 @@
 import { describe, expect, it } from 'vitest';
+import { Authorship } from './authorship.ts';
+import { CalendarDate } from './calendar-date.ts';
 import { BusinessRuleViolation } from './errors.ts';
 import { Money } from './money.ts';
 import { Percentage } from './percentage.ts';
-import { Proposal, type ProposalRegistrationData } from './proposal.ts';
+import { Proposal, type ProposalRegistration } from './proposal.ts';
+import type { Receipt } from './receipt.ts';
 
-const TRANSMITTED_AT = new Date('2026-09-18T09:00:00.000Z');
+const REGISTERED_AT = new Date('2026-09-22T12:00:00.000Z');
+const REVISED_AT = new Date('2026-09-23T09:30:00.000Z');
 
-function validData(overrides: Partial<ProposalRegistrationData> = {}): ProposalRegistrationData {
+const THROUGH_INTERMEDIARY: Receipt = {
+  kind: 'INTERMEDIARY',
+  intermediaryId: 'intermediary-1',
+  ctu: Percentage.fromString('50'),
+};
+
+function registration(overrides: Partial<ProposalRegistration> = {}): ProposalRegistration {
   return {
     id: 'proposal-1',
     clientId: 'client-1',
@@ -15,206 +25,303 @@ function validData(overrides: Partial<ProposalRegistrationData> = {}): ProposalR
     productId: 'product-1',
     paymentMethodId: 'bank-slip',
     customerAccepted: true,
-    netPremium: Money.fromString('1000.00'),
-    registeredAt: new Date('2026-09-17T12:00:00.000Z'),
+    proposalNumber: 'PRP-9001',
+    netPremium: Money.fromString('100.00'),
+    coverageStart: CalendarDate.fromString('2026-10-01'),
+    coverageEnd: CalendarDate.fromString('2027-10-01'),
+    installments: [
+      { amount: Money.fromString('50.00'), dueDate: CalendarDate.fromString('2026-10-10') },
+      { amount: Money.fromString('50.00'), dueDate: null },
+    ],
+    workedCommission: Percentage.fromString('20'),
+    workedCommissionMode: 'INTEGRAL',
+    receipt: { kind: 'DIRECT' },
+    registeredBy: 'ana.souza',
+    registeredAt: REGISTERED_AT,
     ...overrides,
   };
 }
 
-function transmitted(): Proposal {
-  return Proposal.register(validData()).transmit({
-    proposalNumber: 'PRP-9001',
-    workedCommission: Percentage.fromString('40'),
-    transmittedAt: TRANSMITTED_AT,
-  });
+function registered(overrides: Partial<ProposalRegistration> = {}): Proposal {
+  return Proposal.register(registration(overrides));
+}
+
+function ruleOf(work: () => unknown): string {
+  try {
+    work();
+  } catch (error) {
+    expect(error).toBeInstanceOf(BusinessRuleViolation);
+    return (error as BusinessRuleViolation).rule;
+  }
+  throw new Error('should have thrown');
 }
 
 describe('Proposal.register', () => {
-  it('registers the proposal as DRAFT when the required data is present (REQ-040)', () => {
-    const proposal = Proposal.register(validData());
-
-    expect(proposal.status).toBe('DRAFT');
-    expect(proposal.netPremium.toString()).toBe('1000.00');
+  it('registers the proposal as AWAITING_ISSUANCE (REQ-250, FP-01 step 6)', () => {
+    expect(registered().status).toBe('AWAITING_ISSUANCE');
   });
 
-  it('leaves the insurer-issued data empty until transmission (REQ-041)', () => {
-    const proposal = Proposal.register(validData());
+  it('keeps every standardized datum informed at registration (REQ-202, REQ-206)', () => {
+    const proposal = registered();
 
-    expect(proposal.proposalNumber).toBeNull();
-    expect(proposal.workedCommission).toBeNull();
-    expect(proposal.transmittedAt).toBeNull();
+    expect(proposal.proposalNumber).toBe('PRP-9001');
+    expect(proposal.netPremium.toString()).toBe('100.00');
+    expect(proposal.coverageStart.toString()).toBe('2026-10-01');
+    expect(proposal.coverageEnd.toString()).toBe('2027-10-01');
+    expect(proposal.workedCommission.toString()).toBe('20');
+    expect(proposal.workedCommissionMode).toBe('INTEGRAL');
   });
 
-  it('rejects registration without the customer acceptance (CA-001, REJ-004)', () => {
-    expect(() => Proposal.register(validData({ customerAccepted: false }))).toThrow(
-      BusinessRuleViolation,
-    );
+  it('keeps the proposal number without the blanks around it', () => {
+    expect(registered({ proposalNumber: '  PRP-9001 ' }).proposalNumber).toBe('PRP-9001');
   });
 
-  it('rejects registration without a payment method (CA-001, REJ-004)', () => {
-    expect(() => Proposal.register(validData({ paymentMethodId: '  ' }))).toThrow(
-      BusinessRuleViolation,
-    );
+  it('has the renewal date equal to the end of coverage, never informed apart (REQ-203, CA-206)', () => {
+    expect(registered().renewalDate.toString()).toBe('2027-10-01');
   });
 
-  it('identifies the violated rule so the interface can report it', () => {
-    try {
-      Proposal.register(validData({ customerAccepted: false }));
-      expect.unreachable('should have thrown');
-    } catch (error) {
-      expect(error).toBeInstanceOf(BusinessRuleViolation);
-      expect((error as BusinessRuleViolation).rule).toBe('REQ-040');
-      expect((error as BusinessRuleViolation).messageKey).toBe(
-        'proposal.customer_acceptance_required',
-      );
-    }
+  it('keeps the installments in order, with the due date optional (REQ-204, CA-208, FA-205)', () => {
+    const [first, second] = registered().installments;
+
+    expect(first?.amount.toString()).toBe('50.00');
+    expect(first?.dueDate?.toString()).toBe('2026-10-10');
+    expect(second?.dueDate).toBeNull();
   });
 
-  it('carries the offending field as a parameter, not baked into the text', () => {
-    try {
-      Proposal.register(validData({ clientId: '' }));
-      expect.unreachable('should have thrown');
-    } catch (error) {
-      expect((error as BusinessRuleViolation).params).toEqual({ field: 'clientId' });
-    }
+  it('accepts a proposal with no installments (REQ-202, CA-216)', () => {
+    expect(registered({ installments: [] }).installments).toEqual([]);
+  });
+
+  it('records who informed the CT and when (REQ-215, CA-204)', () => {
+    const [entry] = registered().workedCommissionHistory;
+
+    expect(entry?.informed.author).toBe('ana.souza');
+    expect(entry?.informed.at).toEqual(REGISTERED_AT);
+  });
+
+  it('records who declared the receipt and when (REQ-223)', () => {
+    const [declaration] = registered({ receipt: THROUGH_INTERMEDIARY }).receiptHistory;
+
+    expect(declaration?.receipt).toEqual(THROUGH_INTERMEDIARY);
+    expect(declaration?.declared.author).toBe('ana.souza');
+    expect(declaration?.declared.at).toEqual(REGISTERED_AT);
+  });
+
+  it('rejects registration without the customer acceptance (REQ-040, REQ-201)', () => {
+    expect(ruleOf(() => registered({ customerAccepted: false }))).toBe('REQ-040');
+  });
+
+  it('rejects registration without a payment method (REQ-040, REQ-201)', () => {
+    expect(ruleOf(() => registered({ paymentMethodId: '  ' }))).toBe('REQ-040');
+  });
+
+  it.each(['clientId', 'brokerId', 'insurerId', 'productId'] as const)(
+    'rejects registration without %s (REQ-201)',
+    (field) => {
+      try {
+        registered({ [field]: ' ' });
+        expect.unreachable('should have thrown');
+      } catch (error) {
+        expect((error as BusinessRuleViolation).rule).toBe('REQ-201');
+        expect((error as BusinessRuleViolation).params).toEqual({ field });
+      }
+    },
+  );
+
+  it('rejects registration without the proposal number (REQ-202, REQ-206, CA-216)', () => {
+    expect(ruleOf(() => registered({ proposalNumber: '   ' }))).toBe('REQ-202');
+  });
+
+  it.each(['0.00', '-50.00'])('rejects a net premium of %s (REQ-217, CA-218)', (premium) => {
+    expect(ruleOf(() => registered({ netPremium: Money.fromString(premium) }))).toBe('REQ-217');
+  });
+
+  it('rejects registration without a signature (REQ-216, REJ-206)', () => {
+    expect(ruleOf(() => registered({ registeredBy: ' ' }))).toBe('REQ-216');
   });
 
   it('restores a persisted record without re-applying the creation rules (REQ-124)', () => {
-    const proposal = Proposal.restore(validData({ customerAccepted: false }), {
-      status: 'TRANSMITTED',
-    });
-
-    expect(proposal.status).toBe('TRANSMITTED');
-  });
-
-  it('restores everything the proposal accumulated after registration', () => {
-    const proposal = Proposal.restore(validData(), {
+    const informed = Authorship.of('ana.souza', REGISTERED_AT);
+    const proposal = Proposal.restore(registration({ customerAccepted: false }), {
       status: 'REJECTED',
-      proposalNumber: 'PRP-9001',
-      workedCommission: Percentage.fromString('40'),
-      transmittedAt: TRANSMITTED_AT,
+      workedCommissionHistory: [{ rate: Percentage.fromString('20'), mode: 'INTEGRAL', informed }],
+      receiptHistory: [{ receipt: { kind: 'DIRECT' }, declared: informed }],
       rejectionReason: 'perfil de risco',
     });
 
-    expect(proposal.proposalNumber).toBe('PRP-9001');
-    expect(proposal.workedCommission?.toString()).toBe('40');
-    expect(proposal.transmittedAt).toEqual(TRANSMITTED_AT);
+    expect(proposal.status).toBe('REJECTED');
     expect(proposal.rejectionReason).toBe('perfil de risco');
   });
 });
 
-describe('Proposal.transmit', () => {
-  it('records the moment, the insurer number and the worked commission (REQ-041)', () => {
-    const proposal = transmitted();
+describe('Proposal.expectedReceipt', () => {
+  it('shows what the Usina expects before issuance (REQ-232, CA-201, CA-203)', () => {
+    const expected = registered().expectedReceipt();
 
-    expect(proposal.status).toBe('TRANSMITTED');
-    expect(proposal.proposalNumber).toBe('PRP-9001');
-    expect(proposal.workedCommission?.toString()).toBe('40');
-    expect(proposal.transmittedAt).toEqual(TRANSMITTED_AT);
+    expect(expected.intermediary).toBeNull();
+    expect(expected.usina.toString()).toBe('20.00');
+  });
+
+  it('chains CT and CTU when there is an intermediary (REQ-231, CA-202)', () => {
+    const expected = registered({ receipt: THROUGH_INTERMEDIARY }).expectedReceipt();
+
+    expect(expected.intermediary?.toString()).toBe('20.00');
+    expect(expected.usina.toString()).toBe('10.00');
+  });
+
+  it('uses the net premium as the base for a parcelled CT too (REQ-235, CA-215)', () => {
+    const expected = registered({
+      workedCommissionMode: 'PARCELLED',
+      receipt: THROUGH_INTERMEDIARY,
+    }).expectedReceipt();
+
+    expect(expected.intermediary?.toString()).toBe('20.00');
+    expect(expected.usina.toString()).toBe('10.00');
+  });
+});
+
+describe('Proposal.reviseWorkedCommission', () => {
+  it('corrects the CT and its mode while awaiting issuance (REQ-214, FA-203, CA-217)', () => {
+    const revised = registered().reviseWorkedCommission({
+      rate: Percentage.fromString('25'),
+      mode: 'PARCELLED',
+      informed: Authorship.of('bruno.lima', REVISED_AT),
+    });
+
+    expect(revised.workedCommission.toString()).toBe('25');
+    expect(revised.workedCommissionMode).toBe('PARCELLED');
+    expect(revised.expectedReceipt().usina.toString()).toBe('25.00');
+  });
+
+  it('keeps every earlier entry with its author: nothing is erased (REQ-215, REQ-124, CA-204)', () => {
+    const history = registered().reviseWorkedCommission({
+      rate: Percentage.fromString('25'),
+      mode: 'INTEGRAL',
+      informed: Authorship.of('bruno.lima', REVISED_AT),
+    }).workedCommissionHistory;
+
+    expect(history.map((entry) => entry.rate.toString())).toEqual(['20', '25']);
+    expect(history.map((entry) => entry.informed.author)).toEqual(['ana.souza', 'bruno.lima']);
+    expect(history[1]?.informed.at).toEqual(REVISED_AT);
   });
 
   it('leaves the original instance untouched', () => {
-    const draft = Proposal.register(validData());
+    const original = registered();
 
-    draft.transmit({
-      proposalNumber: 'PRP-9001',
-      workedCommission: Percentage.fromString('40'),
-      transmittedAt: TRANSMITTED_AT,
+    original.reviseWorkedCommission({
+      rate: Percentage.fromString('25'),
+      mode: 'INTEGRAL',
+      informed: Authorship.of('bruno.lima', REVISED_AT),
     });
 
-    expect(draft.status).toBe('DRAFT');
+    expect(original.workedCommission.toString()).toBe('20');
+  });
+});
+
+describe('Proposal.reviseReceipt', () => {
+  it('declares an intermediary before issuance (REQ-225, FA-204)', () => {
+    const revised = registered().reviseReceipt({
+      receipt: THROUGH_INTERMEDIARY,
+      declared: Authorship.of('bruno.lima', REVISED_AT),
+    });
+
+    expect(revised.receipt).toEqual(THROUGH_INTERMEDIARY);
+    expect(revised.expectedReceipt().usina.toString()).toBe('10.00');
   });
 
-  it('rejects a proposal transmitted without the insurer number (REQ-022)', () => {
-    expect(() =>
-      Proposal.register(validData()).transmit({
-        proposalNumber: '   ',
-        workedCommission: Percentage.fromString('40'),
-        transmittedAt: TRANSMITTED_AT,
-      }),
-    ).toThrow(BusinessRuleViolation);
+  it('removing the intermediary brings the expected value back to premium x CT (FA-209, CA-214)', () => {
+    const revised = registered({ receipt: THROUGH_INTERMEDIARY }).reviseReceipt({
+      receipt: { kind: 'DIRECT' },
+      declared: Authorship.of('bruno.lima', REVISED_AT),
+    });
+
+    expect(revised.expectedReceipt().intermediary).toBeNull();
+    expect(revised.expectedReceipt().usina.toString()).toBe('20.00');
   });
 
-  it('rejects transmitting twice: the first commission informed cannot be overwritten', () => {
-    expect(() =>
-      transmitted().transmit({
-        proposalNumber: 'PRP-9002',
-        workedCommission: Percentage.fromString('50'),
-        transmittedAt: TRANSMITTED_AT,
-      }),
-    ).toThrow(BusinessRuleViolation);
+  it('keeps every earlier declaration with its author (REQ-223, REQ-124)', () => {
+    const history = registered().reviseReceipt({
+      receipt: THROUGH_INTERMEDIARY,
+      declared: Authorship.of('bruno.lima', REVISED_AT),
+    }).receiptHistory;
+
+    expect(history.map((declaration) => declaration.receipt.kind)).toEqual([
+      'DIRECT',
+      'INTERMEDIARY',
+    ]);
+    expect(history.map((declaration) => declaration.declared.author)).toEqual([
+      'ana.souza',
+      'bruno.lima',
+    ]);
   });
 });
 
 describe('Proposal.reject', () => {
-  it('records the refusal and keeps the reason (REQ-045)', () => {
-    const proposal = transmitted().reject('perfil de risco recusado');
+  it('records the refusal with its reason and keeps the record (REQ-253, FA-208, CA-212)', () => {
+    const rejected = registered().reject('  perfil de risco recusado ');
 
-    expect(proposal.status).toBe('REJECTED');
-    expect(proposal.rejectionReason).toBe('perfil de risco recusado');
+    expect(rejected.status).toBe('REJECTED');
+    expect(rejected.rejectionReason).toBe('perfil de risco recusado');
+    expect(rejected.proposalNumber).toBe('PRP-9001');
   });
 
-  it('keeps the transmission data so the record stays consultable (REQ-046, OUT-02)', () => {
-    const proposal = transmitted().reject('perfil de risco recusado');
-
-    expect(proposal.proposalNumber).toBe('PRP-9001');
-    expect(proposal.transmittedAt).toEqual(TRANSMITTED_AT);
+  it('rejects a refusal without a reason (REJ-208, EX-203)', () => {
+    expect(ruleOf(() => registered().reject('   '))).toBe('REQ-253');
   });
 
-  it('rejects a refusal without a reason (CA-004, REJ-003)', () => {
-    try {
-      transmitted().reject('   ');
-      expect.unreachable('should have thrown');
-    } catch (error) {
-      expect((error as BusinessRuleViolation).rule).toBe('REQ-045');
-    }
-  });
+  it('is final: nothing about a refused proposal changes (REQ-253, REJ-212)', () => {
+    const rejected = registered().reject('motivo');
+    const informed = Authorship.of('bruno.lima', REVISED_AT);
 
-  it('does not allow refusing a proposal that was never transmitted', () => {
-    expect(() => Proposal.register(validData()).reject('motivo')).toThrow(BusinessRuleViolation);
-  });
-
-  it('does not reopen a refused proposal (REQ-112, REJ-015)', () => {
-    const rejected = transmitted().reject('motivo');
-
-    expect(() => rejected.reject('outro motivo')).toThrow(BusinessRuleViolation);
+    expect(ruleOf(() => rejected.reject('outro motivo'))).toBe('REQ-253');
+    expect(
+      ruleOf(() =>
+        rejected.reviseWorkedCommission({
+          rate: Percentage.fromString('25'),
+          mode: 'INTEGRAL',
+          informed,
+        }),
+      ),
+    ).toBe('REQ-253');
+    expect(
+      ruleOf(() => rejected.reviseReceipt({ receipt: { kind: 'DIRECT' }, declared: informed })),
+    ).toBe('REQ-253');
   });
 });
 
 describe('Proposal.accept', () => {
-  it('moves a transmitted proposal to ACCEPTED (REQ-048, REQ-111)', () => {
-    expect(transmitted().accept().status).toBe('ACCEPTED');
+  // Bridge to the V1 policy registration, which stays out of the current scope
+  // (see the note on `accept`). What is tested here is only what V2 already
+  // states about the states: ISSUED is reached once, and never from REJECTED.
+
+  it('moves a proposal awaiting issuance to ISSUED (REQ-250, REQ-251)', () => {
+    expect(registered().accept().status).toBe('ISSUED');
   });
 
-  it('does not allow a refused proposal to originate a policy (CA-006, REQ-047)', () => {
-    const rejected = transmitted().reject('motivo');
-
-    try {
-      rejected.accept();
-      expect.unreachable('should have thrown');
-    } catch (error) {
-      expect((error as BusinessRuleViolation).rule).toBe('REQ-047');
-    }
+  it('does not let a refused proposal originate a policy (REJ-210)', () => {
+    expect(ruleOf(() => registered().reject('motivo').accept())).toBe('REQ-253');
   });
 
-  it('does not allow a second policy for the same proposal (CA-007, REJ-005)', () => {
-    const accepted = transmitted().accept();
-
-    try {
-      accepted.accept();
-      expect.unreachable('should have thrown');
-    } catch (error) {
-      expect((error as BusinessRuleViolation).rule).toBe('REQ-049');
-    }
+  it('does not let a proposal originate a second policy (REQ-049)', () => {
+    expect(ruleOf(() => registered().accept().accept())).toBe('REQ-049');
   });
 
-  it('does not allow accepting a proposal that was never transmitted (REQ-111)', () => {
-    try {
-      Proposal.register(validData()).accept();
-      expect.unreachable('should have thrown');
-    } catch (error) {
-      expect((error as BusinessRuleViolation).rule).toBe('REQ-111');
-      expect((error as BusinessRuleViolation).params).toEqual({ status: 'DRAFT' });
-    }
+  it('freezes the proposal once issued (REQ-244, REQ-260, REJ-201, EX-201)', () => {
+    const issued = registered().accept();
+    const informed = Authorship.of('bruno.lima', REVISED_AT);
+
+    expect(
+      ruleOf(() =>
+        issued.reviseWorkedCommission({
+          rate: Percentage.fromString('25'),
+          mode: 'INTEGRAL',
+          informed,
+        }),
+      ),
+    ).toBe('REQ-260');
+    expect(
+      ruleOf(() => issued.reviseReceipt({ receipt: { kind: 'DIRECT' }, declared: informed })),
+    ).toBe('REQ-260');
+    expect(ruleOf(() => issued.reject('motivo'))).toBe('REQ-260');
   });
 });
