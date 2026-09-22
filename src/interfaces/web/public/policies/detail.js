@@ -15,7 +15,7 @@
 import { ApiError, api } from '/app/shared/api.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
-import { describeStatus, statusChip } from '/app/shared/status.js';
+import { describeStatus, stageStrip, statusChip } from '/app/shared/status.js';
 
 const policyId = new URLSearchParams(window.location.search).get('id');
 const page = document.querySelector('#page');
@@ -124,12 +124,25 @@ function policyCard(policy) {
   const section = element('section', 'card');
   const body = element('div', 'card__body stack');
 
+  // A apólice é a terceira etapa, e a tira diz de onde ela veio.
+  section.append(
+    stageStrip('policy', 'Apólice registrada: evolução da proposta aceita (REQ-048).'),
+  );
+
   const head = element('div', 'policy-head');
   const numbers = element('div', 'policy-head__numbers');
+
+  // REQ-050: os dois números seguem consultáveis, e o da proposta agora leva
+  // ao registro que originou esta apólice — o vínculo existia no texto e não
+  // no caminho.
+  const origin = element('a', 'text-muted policy-head__origin');
+  origin.href = `/app/proposals/detail.html?id=${encodeURIComponent(policy.proposalId)}`;
+  origin.textContent = `Proposta ${policy.proposalNumber ?? '—'}`;
+
   numbers.append(
     element('span', 'text-label', 'Número da apólice'),
     element('span', 'policy-head__number', policy.policyNumber),
-    element('span', 'text-muted', `Proposta ${policy.proposalNumber ?? '—'}`),
+    origin,
   );
 
   const chip = statusChip('policy', policy.status);

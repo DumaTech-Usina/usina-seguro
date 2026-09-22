@@ -13,7 +13,10 @@
 const NEUTRAL = { label: '—', tone: 'neutral' };
 
 const PROPOSAL = {
-  DRAFT: { label: 'Rascunho', tone: 'neutral' },
+  // Etapa comercial, não estado de edição: o registro está completo e o que
+  // falta é a seguradora emitir a proposta (REQ-041). "Rascunho" dizia o
+  // contrário — que faltava alguém terminar de preencher.
+  DRAFT: { label: 'Aguardando emissão', tone: 'warning' },
   // REQ-041: o ato registrado é a emissão da proposta pela seguradora. O
   // identificador do estado continua `TRANSMITTED` — ver a nota no agregado.
   TRANSMITTED: { label: 'Emitida', tone: 'info' },
@@ -82,6 +85,96 @@ const MAPS = {
   settlement: SETTLEMENT,
   releaseRule: RELEASE_RULE,
 };
+
+/**
+ * A progressão comercial de um negócio: Cotação → Proposta → Apólice.
+ *
+ * São três etapas do negócio, e não três estados de um registro. O sistema
+ * guarda **duas** delas:
+ *
+ * - **Cotação** acontece no Ager, fora daqui, e o registro interno é opcional
+ *   (`REQ-030`, `FA-01`) — não está implementado, então a etapa aparece como
+ *   não registrada em vez de sumir da tira. Dizer que ela existe seria mentir;
+ *   escondê-la faria a progressão parecer começar na proposta;
+ * - **Proposta** é o registro que existe desde o aceite do cliente, com as
+ *   subetapas da seção 10.2: aguardando emissão → emitida → aceita/recusada;
+ * - **Apólice** é a evolução da proposta aceita (`REQ-048`).
+ *
+ * Isto é apresentação: nenhuma decisão de domínio é tomada aqui.
+ */
+const STAGES = [
+  { id: 'quote', label: 'Cotação' },
+  { id: 'proposal', label: 'Proposta' },
+  { id: 'policy', label: 'Apólice' },
+];
+
+/** Em que etapa comercial um estado da proposta coloca o negócio. */
+export function stageOfProposal(status) {
+  return status === 'ACCEPTED' ? 'policy' : 'proposal';
+}
+
+/**
+ * A tira das três etapas, com a atual marcada e as anteriores concluídas.
+ *
+ * `current` é o id da etapa; `note` é a frase que descreve onde o negócio
+ * está, exibida abaixo da tira.
+ */
+export function stageStrip(current, note) {
+  const reached = STAGES.findIndex((stage) => stage.id === current);
+
+  const strip = document.createElement('div');
+  strip.className = 'stepper stage-strip';
+  strip.setAttribute('aria-label', 'Progressão comercial');
+
+  STAGES.forEach((stage, index) => {
+    if (index > 0) {
+      const connector = document.createElement('div');
+      connector.className = 'step__connector';
+      strip.append(connector);
+    }
+
+    const step = document.createElement('div');
+    step.className = 'step';
+    step.dataset.stage = stage.id;
+
+    // A cotação nunca é "concluída": ou foi feita fora do sistema, ou não
+    // houve. Marcá-la como cumprida afirmaria um registro que não existe.
+    if (index === reached) {
+      step.dataset.state = 'current';
+    } else if (index < reached && stage.id !== 'quote') {
+      step.dataset.state = 'done';
+    }
+
+    const bullet = document.createElement('span');
+    bullet.className = 'step__bullet';
+    bullet.textContent = String(index + 1);
+
+    const label = document.createElement('span');
+    label.textContent = stage.label;
+    step.append(bullet, label);
+
+    if (stage.id === 'quote') {
+      const aside = document.createElement('span');
+      aside.className = 'text-muted stage-strip__aside';
+      aside.textContent = 'fora do sistema';
+      step.append(aside);
+    }
+
+    strip.append(step);
+  });
+
+  if (note === undefined) {
+    return strip;
+  }
+
+  const wrapper = document.createElement('div');
+  wrapper.className = 'stage-strip__wrapper';
+  const caption = document.createElement('p');
+  caption.className = 'text-muted stage-strip__note';
+  caption.textContent = note;
+  wrapper.append(strip, caption);
+  return wrapper;
+}
 
 /** The label and tone of a state, or the raw value if it is unknown to us. */
 export function describeStatus(aggregate, status) {

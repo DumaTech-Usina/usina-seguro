@@ -943,3 +943,24 @@ select.field__input {
     grid-template-columns: 1fr;
   }
 }
+
+/* -------------------------------------------------- progressão comercial -- */
+
+/*
+ * A tira Cotação → Proposta → Apólice, montada por `shared/status.js` sobre o
+ * mesmo `.stepper` do assistente de proposta. Aqui ela é informativa, não
+ * navegável: diz em que etapa do negócio o registro está.
+ */
+.stage-strip__wrapper {
+  border-bottom: 1px solid var(--outline-variant, var(--outline));
+}
+
+.stage-strip__note {
+  padding: 0 var(--space-6) var(--space-4);
+  margin: 0;
+  font-size: 13px;
+}
+
+.stage-strip__aside {
+  font-size: 11px;
+}

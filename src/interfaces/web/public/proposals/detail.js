@@ -20,7 +20,7 @@ import {
   sumMoney,
 } from '/app/shared/money.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
-import { statusChip } from '/app/shared/status.js';
+import { stageOfProposal, stageStrip, statusChip } from '/app/shared/status.js';
 
 const proposalId = new URLSearchParams(window.location.search).get('id');
 const page = document.querySelector('#page');
@@ -95,9 +95,22 @@ async function submitting(form, work) {
 
 /* ------------------------------------------------------------ summary -- */
 
+/** Onde o negócio está, em uma frase, por etapa da seção 10.2. */
+const STAGE_NOTE = {
+  DRAFT: 'Aguardando proposta ser emitida pela seguradora.',
+  TRANSMITTED: 'Proposta emitida pela seguradora, aguardando o desfecho.',
+  ACCEPTED: 'Proposta aceita: o negócio evoluiu para apólice.',
+  REJECTED: 'Proposta recusada. O ciclo comercial está encerrado.',
+  CANCELLED: 'Proposta cancelada.',
+};
+
 function summaryCard(proposal) {
   const section = element('section', 'card');
   const body = element('div', 'card__body stack');
+
+  // A progressão comercial antes dos dados: a primeira coisa que o operador
+  // precisa saber é em que etapa o negócio está, não qual é o prêmio.
+  section.append(stageStrip(stageOfProposal(proposal.status), STAGE_NOTE[proposal.status]));
 
   const head = element('div', 'proposal-head');
   const numbers = element('div', 'proposal-head__numbers');
@@ -107,7 +120,7 @@ function summaryCard(proposal) {
       'span',
       'proposal-head__number',
       // REQ-041: the insurer issues it in the act of transmitting.
-      proposal.proposalNumber ?? 'ainda não transmitida',
+      proposal.proposalNumber ?? 'aguardando emissão',
     ),
   );
 
@@ -129,7 +142,7 @@ function summaryCard(proposal) {
     ),
     definition('Registro', formatInstant(proposal.registeredAt)),
     definition(
-      'Transmissão',
+      'Emissão pela seguradora',
       proposal.transmittedAt === null ? '—' : formatInstant(proposal.transmittedAt),
     ),
   );

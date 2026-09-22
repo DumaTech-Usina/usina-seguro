@@ -360,3 +360,112 @@ describe('FP-01 through the web interface', () => {
     expect(proposal.rejectionReason).toBe('perfil de risco');
   });
 });
+
+/**
+ * The commercial progression the operator reads: Cotação → Proposta → Apólice.
+ *
+ * Three stages of a business, not three states of one record. What this group
+ * protects is that each screen says which stage the record is in, and that
+ * the three are reachable from one another — the policy used to name its
+ * proposal in plain text, with no way to get to it.
+ */
+describe('the commercial progression on screen', () => {
+  /** The stage marked `current` on the strip, and the sentence under it. */
+  function stage(): { current: string; note: string } {
+    const current = document.querySelector('.stage-strip .step[data-state="current"]');
+    return {
+      current: current?.dataset.stage ?? '',
+      note: text('.stage-strip__note'),
+    };
+  }
+
+  async function openProposal(id: string): Promise<void> {
+    vi.resetModules();
+    openPage('proposals/detail.html', `?id=${id}`);
+    await import('/app/proposals/detail.js');
+    await vi.waitFor(() => {
+      expect(document.querySelector('.stage-strip')).not.toBeNull();
+    });
+  }
+
+  it('shows a business waiting for the insurer to issue the proposal', async () => {
+    const proposal = await callApi('POST', '/proposals', {
+      clientId: 'client-stage',
+      brokerId: 'broker-1',
+      insurerId: 'insurer-1',
+      productId: 'auto',
+      paymentMethodId: 'credit',
+      customerAccepted: true,
+      netPremium: '1200.00',
+    });
+
+    await openProposal(proposal.id);
+
+    expect(stage().current).toBe('proposal');
+    // The phrase the operator has to read at this point.
+    expect(stage().note).toBe('Aguardando proposta ser emitida pela seguradora.');
+    // Not "a draft somebody forgot to finish".
+    expect(text('#page')).toContain('Aguardando emissão');
+    expect(text('#page')).not.toContain('Rascunho');
+    // Cotação is shown as a stage of the business, and as one this system
+    // does not hold (REQ-030, FA-01).
+    const quote = document.querySelector('.stage-strip .step[data-stage="quote"]');
+    expect(quote?.textContent).toContain('Cotação');
+    expect(quote?.textContent).toContain('fora do sistema');
+    expect(quote?.dataset.state).toBeUndefined();
+  });
+
+  it('moves the sentence on when the insurer issues it', async () => {
+    const proposalId = await transmittedProposal('PRP-STAGE-2');
+
+    await openProposal(proposalId);
+
+    expect(stage().current).toBe('proposal');
+    expect(stage().note).toBe('Proposta emitida pela seguradora, aguardando o desfecho.');
+  });
+
+  it('carries the accepted proposal into the policy stage, both ways', async () => {
+    const proposalId = await transmittedProposal('PRP-STAGE-3');
+    const policy = await callApi('POST', '/policies', {
+      proposalId,
+      policyNumber: 'APL-STAGE-3',
+      premium: '1200.00',
+      coverageStart: '2026-10-01',
+      coverageEnd: '2027-09-30',
+      renewalDate: '2027-09-30',
+      installments: [{ number: 1, amount: '1200.00', dueDate: '2026-10-10' }],
+    });
+
+    // On the proposal: accepted, and the business has moved on.
+    await openProposal(proposalId);
+    expect(stage().current).toBe('policy');
+    expect(stage().note).toBe('Proposta aceita: o negócio evoluiu para apólice.');
+
+    // On the policy: the third stage, and the way back to where it came from.
+    vi.resetModules();
+    openPage('policies/detail.html', `?id=${policy.id}`);
+    await import('/app/policies/detail.js');
+    await vi.waitFor(() => {
+      expect(document.querySelector('.stage-strip')).not.toBeNull();
+    });
+
+    expect(stage().current).toBe('policy');
+    const origin: Untyped = document.querySelector('.policy-head__origin');
+    expect(origin.textContent).toContain('PRP-STAGE-3');
+    expect(origin.getAttribute('href')).toBe(`/app/proposals/detail.html?id=${proposalId}`);
+  });
+
+  it('names the filters after the stages, not after an editing cycle', async () => {
+    vi.resetModules();
+    openPage('proposals/index.html');
+    await import('/app/proposals/index.js');
+    await vi.waitFor(() => {
+      expect(document.querySelectorAll('.filters__option').length).toBeGreaterThan(0);
+    });
+
+    const labels = [...document.querySelectorAll('.filters__option')].map(
+      (tab: Untyped) => tab.textContent,
+    );
+    expect(labels).toEqual(['Emitidas', 'Aguardando emissão', 'Aceitas', 'Recusadas', 'Todas']);
+  });
+});

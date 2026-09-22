@@ -23,12 +23,24 @@ const filters = document.querySelector('#filters');
  * what was sent to the insurer and is still waiting for an answer.
  */
 const TABS = [
-  { id: 'open', label: 'Em aberto', status: 'TRANSMITTED' },
-  { id: 'draft', label: 'Rascunhos', status: 'DRAFT' },
+  // A ordem é a da progressão comercial, e os rótulos são os das etapas da
+  // seção 10.2 — não os de um ciclo de edição. `Emitidas` é a lista em aberto
+  // de OUT-01: emitidas pela seguradora e ainda sem desfecho (REQ-043).
+  { id: 'open', label: 'Emitidas', status: 'TRANSMITTED' },
+  { id: 'draft', label: 'Aguardando emissão', status: 'DRAFT' },
   { id: 'accepted', label: 'Aceitas', status: 'ACCEPTED' },
   { id: 'rejected', label: 'Recusadas', status: 'REJECTED' },
   { id: 'all', label: 'Todas', status: undefined },
 ];
+
+/** O que a ausência significa em cada etapa, que não é a mesma coisa. */
+const EMPTY_NOTE = {
+  open: 'Nada aguardando desfecho da seguradora.',
+  draft: 'Nenhum negócio aguardando a seguradora emitir a proposta.',
+  accepted: 'Nenhuma proposta aceita ainda — é daqui que nascem as apólices.',
+  rejected: 'Nenhuma recusa registrada.',
+  all: 'Registre um novo negócio para começar.',
+};
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -185,10 +197,8 @@ async function load() {
     list.replaceChildren(
       emptyState(
         'inbox',
-        'Nenhuma proposta neste estado',
-        current.status === 'TRANSMITTED'
-          ? 'Nada aguardando desfecho da seguradora.'
-          : 'Troque o filtro ou registre uma nova proposta.',
+        'Nenhuma proposta nesta etapa',
+        EMPTY_NOTE[current.id] ?? 'Troque o filtro ou registre um novo negócio.',
       ),
     );
     return;

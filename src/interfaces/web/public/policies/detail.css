@@ -98,3 +98,8 @@
   justify-content: center;
   gap: var(--space-3);
 }
+
+/* REQ-050: o número da proposta leva ao registro que originou a apólice. */
+.policy-head__origin {
+  color: var(--primary);
+}
