@@ -103,9 +103,9 @@ beforeAll(async () => {
 
   // The three states FP-02 can leave a policy in: reported short, reported as
   // agreed, and never reported at all.
-  await reconciled(await registeredPolicy('PRP-PANEL-DIV', 'APL-PANEL-DIV'), '31.00');
-  await reconciled(await registeredPolicy('PRP-PANEL-OK', 'APL-PANEL-OK'), '40.00');
-  await registeredPolicy('PRP-PANEL-FORE', 'APL-PANEL-FORE');
+  await reconciled(await registeredPolicy('PRP-PANEL-DIV', 'PRP-PANEL-DIV'), '31.00');
+  await reconciled(await registeredPolicy('PRP-PANEL-OK', 'PRP-PANEL-OK'), '40.00');
+  await registeredPolicy('PRP-PANEL-FORE', 'PRP-PANEL-FORE');
 });
 
 afterAll(async () => {
@@ -266,6 +266,7 @@ async function registeredPolicy(proposalNumber: string, policyNumber: string): P
     netPremium: '100.00',
     coverageStart: '2026-10-01',
     coverageEnd: '2027-10-01',
+    installments: [{ amount: '100.00', dueDate: '2026-10-10' }],
     workedCommission: '40',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
@@ -274,12 +275,7 @@ async function registeredPolicy(proposalNumber: string, policyNumber: string): P
 
   const policy = await callApi('POST', '/policies', {
     proposalId: proposal.id,
-    policyNumber,
-    premium: '100.00',
-    coverageStart: '2026-10-01',
-    coverageEnd: '2027-09-30',
-    renewalDate: '2027-09-30',
-    installments: [{ number: 1, amount: '100.00', dueDate: '2026-10-10' }],
+    userId: 'operator',
   });
 
   return { policyId: policy.id, proposalNumber, policyNumber };
@@ -311,7 +307,7 @@ describe('the agreed versus real panel (OUT-05)', () => {
     expect(rows()).toHaveLength(3);
 
     // The one the report paid short: both values, and the flag of CA-017.
-    const divergent = rowOf('APL-PANEL-DIV');
+    const divergent = rowOf('PRP-PANEL-DIV');
     expect(divergent.textContent).toContain('R$ 40,00');
     expect(divergent.textContent).toContain('R$ 31,00');
     expect(divergent.textContent).toContain('Acordado ≠ real');
@@ -322,12 +318,12 @@ describe('the agreed versus real panel (OUT-05)', () => {
     expect(divergent.textContent).toContain('PRP-PANEL-DIV');
     expect(divergent.textContent).toContain('client-1');
 
-    const agreed = rowOf('APL-PANEL-OK');
+    const agreed = rowOf('PRP-PANEL-OK');
     expect(agreed.textContent).toContain('Conciliada');
     expect(agreed.textContent).not.toContain('Acordado ≠ real');
 
     // REQ-075: no report ever matched this one, which is not the same as zero.
-    const forecast = rowOf('APL-PANEL-FORE');
+    const forecast = rowOf('PRP-PANEL-FORE');
     expect(forecast.textContent).toContain('Não apurado');
     expect(forecast.textContent).toContain('Prevista');
 
@@ -346,7 +342,7 @@ describe('the agreed versus real panel (OUT-05)', () => {
     // FP-02 step 5: the worklist is asked of the backend by state.
     expect(requests).toContain('GET /commissions?status=DIVERGENT');
     expect(rows()).toHaveLength(1);
-    expect(rowOf('APL-PANEL-DIV')).toBeDefined();
+    expect(rowOf('PRP-PANEL-DIV')).toBeDefined();
 
     // REQ-077: the divergence is signalled, and the other policies are still
     // there — nothing was blocked or hidden.
@@ -358,7 +354,7 @@ describe('the agreed versus real panel (OUT-05)', () => {
     await openPanel();
     await filterBy('Divergentes');
 
-    const link = rowOf('APL-PANEL-DIV').querySelector('a.btn');
+    const link = rowOf('PRP-PANEL-DIV').querySelector('a.btn');
     const [divergent] = await callApi('GET', '/commissions?status=DIVERGENT');
 
     // Where the line lands next: the policy is where REQ-085 closes it.
@@ -371,7 +367,7 @@ describe('the agreed versus real panel (OUT-05)', () => {
 
     // The operator follows the line to the policy and closes the divergence
     // there, which is where REQ-085 records who did it and why.
-    await followToPolicy(rowOf('APL-PANEL-DIV'));
+    await followToPolicy(rowOf('PRP-PANEL-DIV'));
     clickIn('Comissão', 'Resolver divergência');
     answerDialog('#dialog-resolution', {
       justification: 'seguradora confirmou 31,00',
@@ -389,7 +385,7 @@ describe('the agreed versus real panel (OUT-05)', () => {
     expect(text('#list')).toContain('Nenhuma divergência a tratar');
 
     await filterBy('Resolvidas');
-    const resolved = rowOf('APL-PANEL-DIV');
+    const resolved = rowOf('PRP-PANEL-DIV');
     expect(resolved.textContent).toContain('Resolvida');
     // REQ-124, REJ-014: the values that disagreed are still side by side.
     expect(resolved.textContent).toContain('R$ 40,00');
@@ -407,7 +403,7 @@ describe('the agreed versus real panel (OUT-05)', () => {
 
     await openPanel();
 
-    const adjusted = rowOf('APL-PANEL-FORE');
+    const adjusted = rowOf('PRP-PANEL-FORE');
     expect(adjusted.textContent).toContain('R$ 45,00');
     // The calculated value is not replaced by the adjustment, it is beside it.
     expect(adjusted.textContent).toContain('calculado R$ 40,00');

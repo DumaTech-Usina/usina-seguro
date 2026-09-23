@@ -195,7 +195,7 @@ export function registerSettlementRoutes(app: FastifyInstance, useCases: UseCase
  * RFC 6266: the plain `filename` carries an ASCII fallback for old clients,
  * and `filename*` carries the real name percent-encoded as UTF-8.
  */
-function contentDisposition(fileName: string): string {
+export function contentDisposition(fileName: string): string {
   const ascii = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
 
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;

@@ -52,6 +52,12 @@ export const api = {
   // FP-01 — the proposal, its corrections while it awaits issuance, and the
   // refusal. Every correction is signed: `input.userId` (REQ-216).
   registerProposal: (input) => request('/proposals', { method: 'POST', body: input }),
+  /**
+   * REQ-218: reads the PDF of a proposal and answers what it found, for the
+   * form to fill. Registers nothing. `content` is the file base64-encoded.
+   */
+  readProposalPdf: (content) =>
+    request('/proposals/pdf-reading', { method: 'POST', body: { content } }),
   reviseWorkedCommission: (id, input) =>
     request(`/proposals/${encodeURIComponent(id)}/worked-commission`, {
       method: 'POST',
@@ -75,8 +81,8 @@ export const api = {
   /** The policy this proposal originated, at most one (REQ-049, REQ-050). */
   getPolicyByProposal: (id) => request(`/proposals/${encodeURIComponent(id)}/policy`),
 
-  // The V1 policy registration — kept as it was until the recognition of
-  // issuance (REQ-209) is defined — and the policy worked on afterwards.
+  // The recognition of issuance (REQ-209): creates the policy from the
+  // proposal (REQ-240, REQ-241). Then the policy worked on afterwards.
   registerPolicy: (input) => request('/policies', { method: 'POST', body: input }),
   getPolicy: (id) => request(`/policies/${encodeURIComponent(id)}`),
   /**
@@ -156,6 +162,9 @@ export const api = {
    * A URL and not a request: the document is opened by the browser through an
    * `href`, and this is still the only place that knows the address.
    */
+  /** REQ-219: the PDF a proposal was imported from; a file, not JSON. */
+  proposalSourceDocumentUrl: (proposalId) =>
+    `/proposals/${encodeURIComponent(proposalId)}/source-document`,
   settlementPaymentProofUrl: (policyId) =>
     `/policies/${encodeURIComponent(policyId)}/settlement/payment/proof`,
 

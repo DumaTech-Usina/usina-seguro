@@ -31,6 +31,28 @@
           </div>
         </div>
 
+        <!-- ----------------------------------- leitura do PDF (REQ-218) -- -->
+        <section class="card" data-panel="pdf">
+          <div class="card__header">
+            <span class="material-symbols-outlined">upload_file</span>
+            <h2 class="text-title">Preencher a partir do PDF</h2>
+          </div>
+          <form id="form-pdf">
+            <div class="card__body stack">
+              <p class="text-muted">
+                Envie o PDF da proposta da seguradora para preencher os campos abaixo. Nada é
+                registrado na leitura: revise, complete o que faltar e registre a proposta.
+                Hoje o layout conhecido é o da proposta Allianz.
+              </p>
+              <input type="file" name="pdf" accept="application/pdf" required />
+              <div class="hidden" id="pdf-result"></div>
+            </div>
+            <div class="card__footer">
+              <button class="btn btn--outlined" type="submit">Ler PDF</button>
+            </div>
+          </form>
+        </section>
+
         <form id="form-proposal" class="stack" data-panel="form">
           <!-- ------------------------------------ dados comerciais -- -->
           <section class="card">

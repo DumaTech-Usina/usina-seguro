@@ -29,7 +29,7 @@ function open(): Application {
   return composeApplication(loadConfig({ PERSISTENCE_DRIVER: 'sqlite', SQLITE_FILE: file }));
 }
 
-async function registerProposal(): Promise<string> {
+async function registerProposal(proposalNumber = 'PRP-9001'): Promise<string> {
   const proposal = await application.useCases.registerProposal.execute({
     clientId: 'client-1',
     brokerId: 'broker-1',
@@ -37,11 +37,14 @@ async function registerProposal(): Promise<string> {
     productId: 'auto',
     paymentMethodId: 'bank-slip',
     customerAccepted: true,
-    proposalNumber: 'PRP-9001',
+    proposalNumber,
     netPremium: '1200.00',
     coverageStart: '2026-10-01',
     coverageEnd: '2027-10-01',
-    installments: [],
+    installments: [
+      { amount: '600.00', dueDate: '2026-10-10' },
+      { amount: '600.00', dueDate: null },
+    ],
     workedCommission: '32.5',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
@@ -50,35 +53,40 @@ async function registerProposal(): Promise<string> {
   return proposal.id;
 }
 
-async function registerPolicy(proposalId: string, policyNumber = 'APL-4711') {
-  return application.useCases.registerPolicy.execute({
-    proposalId,
-    policyNumber,
-    premium: '1200.00',
-    coverageStart: '2026-10-01',
-    coverageEnd: '2027-09-30',
-    renewalDate: '2027-09-30',
-    installments: [
-      { number: 1, amount: '600.00', dueDate: '2026-10-10' },
-      { number: 2, amount: '600.00', dueDate: '2026-11-10' },
-    ],
-  });
+/** REQ-209: the recognition of issuance, which creates the policy (REQ-240). */
+async function registerPolicy(proposalId: string, userId = 'carla.dias') {
+  return application.useCases.registerPolicy.execute({ proposalId, userId });
 }
 
 describe('proposal to policy flow on SQLite', () => {
-  it('walks FP-01: register, transmit, register the policy with its schedule', async () => {
+  it('walks FP-01: register the proposal, recognise the issuance, get the policy it inherits', async () => {
     const proposalId = await registerProposal();
 
     const policy = await registerPolicy(proposalId);
 
     expect(policy).toMatchObject({
-      policyNumber: 'APL-4711',
+      policyNumber: 'PRP-9001',
       proposalNumber: 'PRP-9001',
       status: 'ACTIVE',
       premium: '1200.00',
+      renewalDate: '2027-10-01',
     });
     expect(policy.installments).toHaveLength(2);
     expect(policy.installments[0]).toMatchObject({ number: 1, status: 'PENDING' });
+    expect(policy.installments[1]).toMatchObject({ number: 2, dueDate: null });
+  });
+
+  it('keeps who recognised the issuance and when across a restart (REQ-209, CA-207)', async () => {
+    const proposalId = await registerProposal();
+    const policy = await registerPolicy(proposalId, 'carla.dias');
+    await application.shutdown();
+
+    application = open();
+    const proposal = await application.useCases.getProposal.execute(proposalId);
+
+    expect(proposal.status).toBe('ISSUED');
+    expect(proposal.issuanceRecognizedBy).toBe('carla.dias');
+    expect(proposal.issuanceRecognizedAt).toBe(policy.registeredAt);
   });
 
   it('survives a restart: the policy and its schedule are read back from disk', async () => {
@@ -92,13 +100,21 @@ describe('proposal to policy flow on SQLite', () => {
     expect(read).toEqual(created);
   });
 
-  it('refuses a second policy for the same proposal, also after a restart (CA-007)', async () => {
+  it('refuses a second policy for the same proposal, also after a restart (REQ-049)', async () => {
     const proposalId = await registerProposal();
     await registerPolicy(proposalId);
     await application.shutdown();
 
     application = open();
-    await expect(registerPolicy(proposalId, 'APL-4712')).rejects.toThrow(BusinessRuleViolation);
+    await expect(registerPolicy(proposalId)).rejects.toThrow(BusinessRuleViolation);
+  });
+
+  it('creates two policies with the same number on disk (DEC-207)', async () => {
+    const first = await registerPolicy(await registerProposal('PRP-SAME'));
+    const second = await registerPolicy(await registerProposal('PRP-SAME'));
+
+    expect(second.policyNumber).toBe(first.policyNumber);
+    expect(second.id).not.toBe(first.id);
   });
 
   it('refuses a policy for a refused proposal and keeps the record (CA-005, CA-006)', async () => {
@@ -132,7 +148,7 @@ describe('proposal to policy flow on SQLite', () => {
     expect(notified).toMatchObject({
       event: 'POLICY_ISSUED',
       policyId: policy.id,
-      policyNumber: 'APL-4711',
+      policyNumber: 'PRP-9001',
       client: { id: 'client-1', name: 'Maria Souza' },
       // REQ-041: the percentage informed at transmission, with its scale.
       workedCommission: '32.5',
@@ -143,13 +159,13 @@ describe('proposal to policy flow on SQLite', () => {
   it('narrows the notifications to one broker, on the driver (OUT-10)', async () => {
     // Three emissions, two brokers. The filter is SQL, not a slice done after
     // reading: the in-memory driver answers the same shape in the unit suite.
-    const emissions: readonly [string, string, string][] = [
-      ['broker-1', 'PRP-N-1', 'APL-N-1'],
-      ['broker-2', 'PRP-N-2', 'APL-N-2'],
-      ['broker-1', 'PRP-N-3', 'APL-N-3'],
+    const emissions: readonly [string, string][] = [
+      ['broker-1', 'PRP-N-1'],
+      ['broker-2', 'PRP-N-2'],
+      ['broker-1', 'PRP-N-3'],
     ];
 
-    for (const [brokerId, proposalNumber, policyNumber] of emissions) {
+    for (const [brokerId, proposalNumber] of emissions) {
       const proposal = await application.useCases.registerProposal.execute({
         clientId: 'client-1',
         brokerId,
@@ -167,15 +183,15 @@ describe('proposal to policy flow on SQLite', () => {
         intermediary: null,
         author: 'operator',
       });
-      await registerPolicy(proposal.id, policyNumber);
+      await registerPolicy(proposal.id);
     }
 
     const mine = await application.useCases.listNotifications.execute({
       recipientId: 'broker-1',
     });
     expect(mine.map((notification) => notification.policyNumber).sort()).toEqual([
-      'APL-N-1',
-      'APL-N-3',
+      'PRP-N-1',
+      'PRP-N-3',
     ]);
 
     // REQ-105: most recent first, as the contract of the repository promises.
@@ -198,27 +214,16 @@ describe('proposal to policy flow on SQLite', () => {
     expect(after[0]?.policyId).toBe(policy.id);
   });
 
-  it('writes nothing when the policy data is invalid: the proposal stays open', async () => {
+  it('writes nothing when the recognition is unsigned: the proposal stays open (REJ-205)', async () => {
     const proposalId = await registerProposal();
 
-    await expect(
-      application.useCases.registerPolicy.execute({
-        proposalId,
-        policyNumber: 'APL-4711',
-        premium: '1200.00',
-        coverageStart: '2026-10-01',
-        coverageEnd: '2027-09-30',
-        renewalDate: '2027-09-30',
-        installments: [{ number: 2, amount: '600.00', dueDate: '2026-10-10' }],
-      }),
-    ).rejects.toThrow(BusinessRuleViolation);
+    await expect(registerPolicy(proposalId, '  ')).rejects.toThrow(BusinessRuleViolation);
 
-    // The proposal is still transmittable to a policy: nothing was accepted.
+    // The proposal can still be recognised: nothing was written.
     const policy = await registerPolicy(proposalId);
     expect(policy.status).toBe('ACTIVE');
 
-    // REQ-100 fires on the emission that happened, and only on it: the
-    // refused attempt rolled back with the rest of the unit of work.
+    // REQ-100 fires on the emission that happened, and only on it.
     const notified = await application.useCases.listNotifications.execute({});
     expect(notified).toHaveLength(1);
   });

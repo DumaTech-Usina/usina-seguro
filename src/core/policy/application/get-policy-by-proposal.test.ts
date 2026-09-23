@@ -63,12 +63,7 @@ describe('GetPolicyByProposal', () => {
 
     const registered = await registerPolicy.execute({
       proposalId: 'proposal-1',
-      policyNumber: 'APL-4711',
-      premium: '1200.00',
-      coverageStart: '2026-10-01',
-      coverageEnd: '2027-09-30',
-      renewalDate: '2027-09-30',
-      installments: [{ number: 1, amount: '1200.00', dueDate: '2026-10-10' }],
+      userId: 'operator',
     });
 
     await expect(useCase.execute('proposal-1')).resolves.toEqual(registered);

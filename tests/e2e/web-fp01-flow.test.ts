@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -10,9 +10,9 @@ import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 
 /**
- * FP-01 of V2, from the registration of the proposal up to — not including —
- * the recognition of issuance, driven the way an operator drives it: through
- * the pages.
+ * FP-01 of V2, from the registration of the proposal up to its outcome — the
+ * refusal or the recognition of issuance, which creates the policy — driven
+ * the way an operator drives it: through the pages.
  *
  * Nothing here is a mock. The server is the real one, listening on an ephemeral
  * port over SQLite on disk; the modules under test are the same files the
@@ -295,6 +295,40 @@ describe('FP-01 through the web interface', () => {
     expect(snackbars()[0]).toContain('REQ-040');
   });
 
+  it('shows the refusal the server rendered for a coverage that ends before it starts (REJ-214)', async () => {
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+
+    fillRegistration();
+    field('#form-proposal', 'coverageStart').value = '2027-10-01';
+    field('#form-proposal', 'coverageEnd').value = '2026-10-01';
+    submit('#form-proposal');
+
+    await vi.waitFor(() => {
+      expect(snackbars().length).toBeGreaterThan(0);
+    });
+    expect(snackbars()[0]).toContain(
+      'Fim da vigência (2026-10-01) deve ser posterior ao início (2027-10-01).',
+    );
+    expect(snackbars()[0]).toContain('REQ-202');
+  });
+
+  it('shows the refusal the server rendered for an installment worth nothing (REJ-215)', async () => {
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+
+    fillRegistration();
+    click('#add-installment');
+    field('#installments', 'amount').value = '0.00';
+    submit('#form-proposal');
+
+    await vi.waitFor(() => {
+      expect(snackbars().length).toBeGreaterThan(0);
+    });
+    expect(snackbars()[0]).toContain('Valor da parcela 1 deve ser positivo.');
+    expect(snackbars()[0]).toContain('REQ-204');
+  });
+
   it('lists the proposals awaiting issuance with the expected value, and filters by state', async () => {
     await awaitingProposal({ proposalNumber: 'PRP-OPEN-1' });
     const refusedId = await awaitingProposal({ proposalNumber: 'PRP-REFUSED-1' });
@@ -456,24 +490,26 @@ describe('FP-01 through the web interface', () => {
     expect(stored.rejectionReason).toBe('perfil de risco');
   });
 
-  it('still registers the V1 policy from a proposal awaiting issuance (bridge)', async () => {
-    const proposalId = await awaitingProposal({ proposalNumber: 'PRP-ACCEPT-1' });
+  it('recognises the issuance, signed, and the policy inherits the proposal (FP-01 steps 8-9, REQ-209, REQ-241)', async () => {
+    const proposalId = await awaitingProposal({
+      proposalNumber: 'PRP-ACCEPT-1',
+      installments: [{ amount: '100.00', dueDate: null }],
+    });
     await openProposal(proposalId);
 
-    field('#form-policy', 'policyNumber').value = 'APL-WEB-1';
-    field('#form-policy', 'premium').value = '100.00';
-    field('#form-policy', 'coverageStart').value = '2026-10-01';
-    field('#form-policy', 'coverageEnd').value = '2027-09-30';
-    field('#form-policy', 'renewalDate').value = '2027-09-30';
-    const amounts: Untyped[] = [
-      ...document.querySelectorAll('#policy-installments [name="amount"]'),
-    ];
-    const dates: Untyped[] = [
-      ...document.querySelectorAll('#policy-installments [name="dueDate"]'),
-    ];
-    amounts[0].value = '100.00';
-    dates[0].value = '2026-10-10';
-    submit('#form-policy');
+    // The policy number is the proposal number (REQ-241): shown, not typed.
+    const policyNumber = field('#form-issuance', 'policyNumber');
+    expect(policyNumber.value).toBe('PRP-ACCEPT-1');
+    expect(policyNumber.readOnly).toBe(true);
+    expect(text('#form-issuance')).not.toContain('Pode coincidir');
+    expect(text('#form-issuance')).toContain('É o número da proposta.');
+    // REQ-242: nothing of the policy is typed again.
+    for (const name of ['premium', 'coverageStart', 'coverageEnd', 'renewalDate', 'amount']) {
+      expect(document.querySelector(`#form-issuance [name="${name}"]`)).toBeNull();
+    }
+
+    field('#form-issuance', 'userId').value = 'carla.dias';
+    submit('#form-issuance');
 
     await vi.waitFor(() => {
       expect(text('#page')).toContain('Apólice registrada');
@@ -481,9 +517,261 @@ describe('FP-01 through the web interface', () => {
     expect(requests).toContain('POST /policies');
     expect(hidden('[data-panel="outcome"]')).toBe(true);
     expect(hidden('[data-panel="corrections"]')).toBe(true);
+    // CA-207: who identified the issuance, on the proposal.
+    expect(text('#history')).toContain('Emissão reconhecida · carla.dias');
 
     const proposal = await callApi('GET', `/proposals/${proposalId}`);
     expect(proposal.status).toBe('ISSUED');
+    expect(proposal.issuanceRecognizedBy).toBe('carla.dias');
+    const policy = await callApi('GET', `/proposals/${proposalId}/policy`);
+    expect(policy).toMatchObject({
+      policyNumber: 'PRP-ACCEPT-1',
+      premium: '100.00',
+      coverageEnd: '2027-10-01',
+      renewalDate: '2027-10-01',
+    });
+    expect(policy.installments).toEqual([
+      expect.objectContaining({ number: 1, amount: '100.00', dueDate: null }),
+    ]);
+  });
+
+  it('refuses an unsigned recognition with the sentence the server rendered (REJ-205)', async () => {
+    const proposalId = await awaitingProposal({ proposalNumber: 'PRP-ACCEPT-2' });
+    await openProposal(proposalId);
+
+    field('#form-issuance', 'userId').value = '   ';
+    submit('#form-issuance');
+
+    await vi.waitFor(() => {
+      expect(snackbars().length).toBeGreaterThan(0);
+    });
+    expect(snackbars()[0]).toContain('Informe quem está registrando esta informação.');
+    expect((await callApi('GET', `/proposals/${proposalId}`)).status).toBe('AWAITING_ISSUANCE');
+  });
+});
+
+/** REQ-218: the reference PDF holds personal data and is never versioned. */
+const REFERENCE_PDF = path.resolve(import.meta.dirname, '../../proposta-exemplo.pdf');
+
+/** Puts a file in the PDF input the way the browser does, and sends the form. */
+function sendPdf(bytes: Uint8Array): void {
+  const input = field('#form-pdf', 'pdf');
+  const file = new window.File([bytes], 'proposta.pdf', { type: 'application/pdf' });
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  submit('#form-pdf');
+}
+
+/** Answers the reading endpoint the way the reader would, to test the page alone. */
+async function withReading<T>(reading: unknown, work: () => Promise<T>): Promise<T> {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: Untyped, init: Untyped) =>
+    String(input).endsWith('/proposals/pdf-reading')
+      ? new Response(JSON.stringify(reading), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })
+      : realFetch(input, init)) as typeof globalThis.fetch;
+  try {
+    return await work();
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+describe('keeping the imported PDF with the proposal (REQ-219)', () => {
+  const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0x0a]);
+
+  it('registers the proposal with the file it was read from, and opens it from the proposal (CA-223)', async () => {
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+
+    await withReading(
+      { status: 'PARTIAL', fields: { proposalNumber: 'PRP-SRC-WEB' }, missing: ['netPremium'] },
+      async () => {
+        sendPdf(PDF_BYTES);
+        await vi.waitFor(() => {
+          expect(text('#pdf-result')).toContain('PDF lido parcialmente.');
+        });
+      },
+    );
+
+    fillRegistration();
+    field('#form-proposal', 'proposalNumber').value = 'PRP-SRC-WEB';
+    submit('#form-proposal');
+
+    await vi.waitFor(() => {
+      expect(text('#done-body')).toContain('PRP-SRC-WEB');
+    });
+    const listed = await callApi('GET', '/proposals');
+    const stored = listed.find((proposal: Untyped) => proposal.proposalNumber === 'PRP-SRC-WEB');
+    expect(stored.sourceDocument).toEqual({ fileName: 'proposta.pdf' });
+    const download = await fetch(`${baseUrl}/proposals/${stored.id}/source-document`);
+    expect(new Uint8Array(await download.arrayBuffer())).toEqual(PDF_BYTES);
+
+    await openProposal(stored.id);
+    const link: Untyped = document.querySelector('#source-document');
+    expect(link.textContent).toContain('proposta.pdf');
+    expect(link.getAttribute('href')).toBe(`/proposals/${stored.id}/source-document`);
+  });
+
+  it('keeps the file even when the reading failed (CA-223)', async () => {
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+
+    await withReading({ status: 'FAILED', reason: 'UNREADABLE' }, async () => {
+      sendPdf(PDF_BYTES);
+      await vi.waitFor(() => {
+        expect(text('#pdf-result')).toContain('Não foi possível ler o PDF.');
+      });
+    });
+
+    fillRegistration();
+    field('#form-proposal', 'proposalNumber').value = 'PRP-SRC-FAILED';
+    submit('#form-proposal');
+
+    await vi.waitFor(() => {
+      expect(text('#done-body')).toContain('PRP-SRC-FAILED');
+    });
+    const listed = await callApi('GET', '/proposals');
+    const stored = listed.find((proposal: Untyped) => proposal.proposalNumber === 'PRP-SRC-FAILED');
+    expect(stored.sourceDocument).toEqual({ fileName: 'proposta.pdf' });
+    const download = await fetch(`${baseUrl}/proposals/${stored.id}/source-document`);
+    expect(new Uint8Array(await download.arrayBuffer())).toEqual(PDF_BYTES);
+  });
+
+  it('keeps only the last PDF sent before registering (CA-224)', async () => {
+    const LAST = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x32]);
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+
+    await withReading(
+      { status: 'SUCCESS', fields: { proposalNumber: 'PRP-SRC-LAST' }, missing: [] },
+      async () => {
+        sendPdf(PDF_BYTES);
+        await vi.waitFor(() => {
+          expect(text('#pdf-result')).toContain('PDF lido.');
+        });
+      },
+    );
+    // The second one fails to read, and is still the one kept.
+    await withReading({ status: 'FAILED', reason: 'UNREADABLE' }, async () => {
+      sendPdf(LAST);
+      await vi.waitFor(() => {
+        expect(text('#pdf-result')).toContain('Não foi possível ler o PDF.');
+      });
+    });
+
+    fillRegistration();
+    field('#form-proposal', 'proposalNumber').value = 'PRP-SRC-LAST';
+    submit('#form-proposal');
+
+    await vi.waitFor(() => {
+      expect(text('#done-body')).toContain('PRP-SRC-LAST');
+    });
+    const listed = await callApi('GET', '/proposals');
+    const stored = listed.find((proposal: Untyped) => proposal.proposalNumber === 'PRP-SRC-LAST');
+    const download = await fetch(`${baseUrl}/proposals/${stored.id}/source-document`);
+    expect(new Uint8Array(await download.arrayBuffer())).toEqual(LAST);
+  });
+});
+
+describe('filling the proposal from its PDF (REQ-218)', () => {
+  it.skipIf(!existsSync(REFERENCE_PDF))(
+    'fills what it read, overwriting what was typed, and registers nothing (CA-220)',
+    async () => {
+      openPage('proposals/new.html');
+      await import('/app/proposals/new.js');
+      // Typed before the reading: the PDF wins on the fields it brings.
+      field('#form-proposal', 'proposalNumber').value = 'DIGITADO-ERRADO';
+
+      sendPdf(new Uint8Array(readFileSync(REFERENCE_PDF)));
+
+      await vi.waitFor(() => {
+        expect(text('#pdf-result')).toContain('PDF lido.');
+      });
+      expect(requests).toContain('POST /proposals/pdf-reading');
+      expect(requests).not.toContain('POST /proposals');
+
+      expect(field('#form-proposal', 'proposalNumber').value).toBe('140839725');
+      expect(field('#form-proposal', 'clientId').value).toBe('JOSE WENDSON GOMES DE QUEIROZ COSTA');
+      expect(field('#form-proposal', 'insurerId').value).toBe('ALLIANZ');
+      expect(field('#form-proposal', 'productId').value).toBe('Auto');
+      expect(field('#form-proposal', 'netPremium').value).toBe('643.85');
+      expect(field('#form-proposal', 'coverageStart').value).toBe('2026-09-17');
+      expect(field('#form-proposal', 'coverageEnd').value).toBe('2027-09-17');
+      expect(text('#renewal')).toBe('17/09/2027');
+      const amounts: Untyped[] = [...document.querySelectorAll('#installments [name="amount"]')];
+      expect(amounts).toHaveLength(10);
+      expect(amounts[9].value).toBe('69.10');
+      // What never comes from the document is said, for the user to inform.
+      expect(text('#pdf-result')).toContain('comissão trabalhada');
+
+      // The user reviews, completes what the PDF does not carry, and registers.
+      field('#form-proposal', 'customerAccepted').checked = true;
+      field('#form-proposal', 'workedCommission').value = '20';
+      field('#form-proposal', 'userId').value = 'ana.souza';
+      submit('#form-proposal');
+
+      await vi.waitFor(() => {
+        expect(text('#done-body')).toContain('140839725');
+      });
+      const [stored] = await callApi('GET', '/proposals?status=AWAITING_ISSUANCE');
+      expect(stored).toMatchObject({
+        proposalNumber: '140839725',
+        netPremium: '643.85',
+        expectedReceipt: { usina: '128.77' },
+      });
+      expect(stored.installments).toHaveLength(10);
+    },
+  );
+
+  it('lists what was not found and leaves those fields as they were (CA-221)', async () => {
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+    field('#form-proposal', 'netPremium').value = '100.00';
+
+    // A partial answer, as the reader gives it for a document missing a field.
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: Untyped, init: Untyped) =>
+      String(input).endsWith('/proposals/pdf-reading')
+        ? new Response(
+            JSON.stringify({
+              status: 'PARTIAL',
+              fields: { proposalNumber: '555', insurerId: 'ALLIANZ' },
+              missing: ['netPremium', 'installments'],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+        : realFetch(input, init)) as typeof globalThis.fetch;
+
+    try {
+      sendPdf(new Uint8Array([1, 2, 3]));
+      await vi.waitFor(() => {
+        expect(text('#pdf-result')).toContain('PDF lido parcialmente.');
+      });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+
+    expect(text('#pdf-found')).toContain('Número da proposta');
+    expect(text('#pdf-missing')).toContain('Prêmio líquido');
+    expect(text('#pdf-missing')).toContain('Parcelas');
+    expect(field('#form-proposal', 'proposalNumber').value).toBe('555');
+    // Not found is not erased: what the user had stays for them to review.
+    expect(field('#form-proposal', 'netPremium').value).toBe('100.00');
+  });
+
+  it('says the reading failed and fills nothing (CA-222)', async () => {
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+
+    sendPdf(new TextEncoder().encode('isto não é um pdf'));
+
+    await vi.waitFor(() => {
+      expect(text('#pdf-result')).toContain('Não foi possível ler o PDF.');
+    });
+    expect(field('#form-proposal', 'proposalNumber').value).toBe('');
+    expect(requests).not.toContain('POST /proposals');
   });
 });
 
@@ -522,15 +810,7 @@ describe('the commercial progression on screen', () => {
 
   it('carries the issued proposal into the policy stage, both ways', async () => {
     const proposalId = await awaitingProposal({ proposalNumber: 'PRP-STAGE-3' });
-    const policy = await callApi('POST', '/policies', {
-      proposalId,
-      policyNumber: 'APL-STAGE-3',
-      premium: '100.00',
-      coverageStart: '2026-10-01',
-      coverageEnd: '2027-09-30',
-      renewalDate: '2027-09-30',
-      installments: [{ number: 1, amount: '100.00', dueDate: '2026-10-10' }],
-    });
+    const policy = await callApi('POST', '/policies', { proposalId, userId: 'operator' });
 
     await openProposal(proposalId);
     expect(stage().current).toBe('policy');

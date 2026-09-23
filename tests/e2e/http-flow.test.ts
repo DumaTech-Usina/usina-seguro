@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -281,5 +281,87 @@ describe('proposal API (V2)', () => {
     );
 
     expect(response.status).toBe(404);
+  });
+});
+
+/** REQ-218: the reference PDF holds personal data and is never versioned. */
+const REFERENCE_PDF = path.resolve(import.meta.dirname, '../../proposta-exemplo.pdf');
+
+function pdfBody(bytes: Uint8Array): { content: string } {
+  return { content: Buffer.from(bytes).toString('base64') };
+}
+
+describe('reading the PDF of a proposal (REQ-218)', () => {
+  it.skipIf(!existsSync(REFERENCE_PDF))(
+    'answers the fields it read and registers nothing (CA-220)',
+    async () => {
+      const response = await post(
+        pdfBody(new Uint8Array(readFileSync(REFERENCE_PDF))),
+        '/proposals/pdf-reading',
+      );
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        status: 'SUCCESS',
+        missing: [],
+        fields: { proposalNumber: '140839725', netPremium: '643.85', insurerId: 'ALLIANZ' },
+      });
+
+      // Reading is an aid to filling the form: no proposal came out of it.
+      const listed = (await (await fetch(`${baseUrl}/proposals`)).json()) as {
+        proposalNumber: string;
+      }[];
+      expect(listed.some((proposal) => proposal.proposalNumber === '140839725')).toBe(false);
+    },
+  );
+
+  it('answers FAILED, not an error, for a file that is not a PDF (CA-222)', async () => {
+    const response = await post(
+      pdfBody(new TextEncoder().encode('isto não é um pdf')),
+      '/proposals/pdf-reading',
+    );
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ status: 'FAILED', reason: 'UNREADABLE' });
+  });
+
+  it('refuses a body without the file with 400', async () => {
+    expect((await post({}, '/proposals/pdf-reading')).status).toBe(400);
+  });
+});
+
+describe('the PDF a proposal was imported from (REQ-219)', () => {
+  const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0xff, 0x00]);
+
+  it('keeps the uploaded file with the proposal and hands it back as it was (CA-223)', async () => {
+    const response = await post({
+      ...validProposal,
+      proposalNumber: 'PRP-SRC-1',
+      sourceDocument: {
+        fileName: 'proposta 140839725.pdf',
+        contentType: 'application/pdf',
+        ...pdfBody(PDF_BYTES),
+      },
+    });
+    expect(response.status).toBe(201);
+    const created = (await response.json()) as { id: string; sourceDocument: unknown };
+    expect(created.sourceDocument).toEqual({ fileName: 'proposta 140839725.pdf' });
+
+    const download = await fetch(`${baseUrl}/proposals/${created.id}/source-document`);
+
+    expect(download.status).toBe(200);
+    expect(download.headers.get('content-type')).toBe('application/pdf');
+    expect(download.headers.get('content-disposition')).toContain('attachment');
+    expect(download.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(new Uint8Array(await download.arrayBuffer())).toEqual(PDF_BYTES);
+  });
+
+  it('answers 404 for a proposal typed by hand', async () => {
+    const created = (await (
+      await post({ ...validProposal, proposalNumber: 'PRP-SRC-2' })
+    ).json()) as { id: string; sourceDocument: unknown };
+
+    expect(created.sourceDocument).toBeNull();
+    expect((await fetch(`${baseUrl}/proposals/${created.id}/source-document`)).status).toBe(404);
   });
 });

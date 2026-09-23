@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { BusinessRuleViolation } from '../domain/errors.ts';
 import { RegisterProposal, type RegisterProposalInput } from './register-proposal.ts';
@@ -7,13 +8,18 @@ const NOW = new Date('2026-09-22T12:00:00.000Z');
 
 function scenario() {
   const proposals = new InMemoryProposalRepository();
+  const documents = new InMemoryDocumentStorage();
+  let sequence = 0;
   const useCase = new RegisterProposal({
     proposals,
-    newId: () => 'fixed-id',
+    documents,
+    newId: () => (sequence++ === 0 ? 'fixed-id' : `id-${sequence}`),
     now: () => NOW,
   });
-  return { proposals, useCase };
+  return { proposals, documents, useCase };
 }
+
+const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]);
 
 function input(overrides: Partial<RegisterProposalInput> = {}): RegisterProposalInput {
   return {
@@ -80,6 +86,9 @@ describe('RegisterProposal', () => {
       ],
       registeredAt: NOW.toISOString(),
       rejectionReason: null,
+      issuanceRecognizedBy: null,
+      issuanceRecognizedAt: null,
+      sourceDocument: null,
     });
 
     expect((await proposals.findById('fixed-id'))?.status).toBe('AWAITING_ISSUANCE');
@@ -126,12 +135,56 @@ describe('RegisterProposal', () => {
     let next = 0;
     const useCase = new RegisterProposal({
       proposals,
+      documents: new InMemoryDocumentStorage(),
       newId: () => `id-${++next}`,
       now: () => NOW,
     });
 
     await useCase.execute(input());
     await expect(useCase.execute(input())).resolves.toMatchObject({ proposalNumber: 'PRP-9001' });
+  });
+
+  it('keeps the imported PDF, associated with the proposal (REQ-219, CA-223)', async () => {
+    const { proposals, documents, useCase } = scenario();
+
+    const view = await useCase.execute(
+      input({
+        sourceDocument: {
+          fileName: 'proposta.pdf',
+          contentType: 'application/pdf',
+          content: PDF_BYTES,
+        },
+      }),
+    );
+
+    expect(view.sourceDocument).toEqual({ fileName: 'proposta.pdf' });
+    const stored = await proposals.findById('fixed-id');
+    const documentId = stored?.sourceDocument?.documentId ?? '';
+    expect(await documents.findById(documentId)).toEqual({
+      id: documentId,
+      fileName: 'proposta.pdf',
+      contentType: 'application/pdf',
+      content: PDF_BYTES,
+    });
+  });
+
+  it('stores no document for a proposal the domain refuses', async () => {
+    const { documents, useCase } = scenario();
+
+    await expect(
+      useCase.execute(
+        input({
+          customerAccepted: false,
+          sourceDocument: {
+            fileName: 'proposta.pdf',
+            contentType: 'application/pdf',
+            content: PDF_BYTES,
+          },
+        }),
+      ),
+    ).rejects.toThrow(BusinessRuleViolation);
+
+    expect(await documents.findById('id-2')).toBeNull();
   });
 
   it.each([

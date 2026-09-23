@@ -68,9 +68,9 @@ beforeAll(async () => {
 
   // Three businesses registered out of the order they renew in, so a listing
   // that never sorted anything would show them in the order they were written.
-  await registeredPolicy('PRP-MID', 'APL-MID', '2027-06-30');
-  await registeredPolicy('PRP-LAST', 'APL-LAST', '2027-09-30');
-  await registeredPolicy('PRP-FIRST', 'APL-FIRST', '2027-01-14');
+  await registeredPolicy('PRP-MID', 'PRP-MID', '2027-06-30');
+  await registeredPolicy('PRP-LAST', 'PRP-LAST', '2027-09-30');
+  await registeredPolicy('PRP-FIRST', 'PRP-FIRST', '2027-01-14');
 });
 
 afterAll(async () => {
@@ -191,7 +191,8 @@ async function registeredPolicy(
     proposalNumber: proposalNumber,
     netPremium: '1200.00',
     coverageStart: '2026-10-01',
-    coverageEnd: '2027-10-01',
+    coverageEnd: renewalDate,
+    installments: [{ amount: '1200.00', dueDate: '2026-10-10' }],
     workedCommission: '40',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
@@ -200,12 +201,7 @@ async function registeredPolicy(
 
   const policy = await callApi('POST', '/policies', {
     proposalId: proposal.id,
-    policyNumber,
-    premium: '1200.00',
-    coverageStart: '2026-10-01',
-    coverageEnd: renewalDate,
-    renewalDate,
-    installments: [{ number: 1, amount: '1200.00', dueDate: '2026-10-10' }],
+    userId: 'operator',
   });
 
   return policy.id as string;
@@ -219,9 +215,9 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
 
     expect(requests).toContain('GET /policies');
     // The order is the renewal order, not the order they were registered in.
-    expect(numbersOnScreen()).toEqual(['APL-FIRST', 'APL-MID', 'APL-LAST']);
+    expect(numbersOnScreen()).toEqual(['PRP-FIRST', 'PRP-MID', 'PRP-LAST']);
 
-    const first = rowOf('APL-FIRST');
+    const first = rowOf('PRP-FIRST');
     // REQ-020: coverage, premium and state, which is what OUT-03 asks for.
     expect(first.textContent).toContain('01/10/2026');
     expect(first.textContent).toContain('14/01/2027');
@@ -229,7 +225,7 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
     expect(first.textContent).toContain('Vigente');
     // REQ-050, REQ-022: what identifies the business to a human.
     expect(first.textContent).toContain('PRP-FIRST');
-    expect(first.textContent).toContain('client-APL-FIRST');
+    expect(first.textContent).toContain('client-PRP-FIRST');
     expect(first.textContent).toContain('insurer-1');
 
     expect(text('#summary')).toContain('3 apólices');
@@ -243,7 +239,7 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
     // CA-032: the window is asked of the backend, not sliced out of the page,
     // and the day informed is inside it.
     expect(requests).toContain('GET /policies?renewalUntil=2027-06-30');
-    expect(numbersOnScreen()).toEqual(['APL-FIRST', 'APL-MID']);
+    expect(numbersOnScreen()).toEqual(['PRP-FIRST', 'PRP-MID']);
     expect(text('#summary')).toContain('2 apólices');
     expect(text('#summary')).toContain('Renovam até 30/06/2027');
 
@@ -271,11 +267,11 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
     await openListing();
     await renewUntil('2027-06-30');
 
-    await followToPolicy(rowOf('APL-MID'));
+    await followToPolicy(rowOf('PRP-MID'));
 
     // The line landed on the policy it named, with the screen that operates it:
     // schedule, agreed versus real commission and the broker transfer.
-    expect(text('#page')).toContain('APL-MID');
+    expect(text('#page')).toContain('PRP-MID');
     expect(text('#page')).toContain('PRP-MID');
     expect(text('#page')).toContain('Parcelas');
     expect(requests.some((request) => /^GET \/policies\/[^?]+$/.test(request))).toBe(true);

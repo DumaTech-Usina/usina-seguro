@@ -75,12 +75,12 @@ beforeAll(async () => {
   await registeredPolicy({
     clientId: 'client-1',
     proposalNumber: 'PRP-A',
-    policyNumber: 'APL-A',
+    policyNumber: 'PRP-A',
   });
   await registeredPolicy({
     clientId: 'cliente-sem-cadastro',
     proposalNumber: 'PRP-B',
-    policyNumber: 'APL-B',
+    policyNumber: 'PRP-B',
   });
 });
 
@@ -205,21 +205,14 @@ async function registeredPolicy(options: {
     netPremium: '1200.00',
     coverageStart: '2026-10-01',
     coverageEnd: '2027-10-01',
+    installments: [{ amount: '1200.00', dueDate: '2026-10-10' }],
     workedCommission: '40',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
     userId: 'operator',
   });
 
-  await callApi('POST', '/policies', {
-    proposalId: proposal.id,
-    policyNumber: options.policyNumber,
-    premium: '1200.00',
-    coverageStart: '2026-10-01',
-    coverageEnd: '2027-09-30',
-    renewalDate: '2027-09-30',
-    installments: [{ number: 1, amount: '1200.00', dueDate: '2026-10-10' }],
-  });
+  await callApi('POST', '/policies', { proposalId: proposal.id, userId: 'operator' });
 }
 
 /* -------------------------------------------------------------- tests -- */
@@ -230,7 +223,7 @@ describe('the reference registry (IN-01)', () => {
 
     // This is the state REQ-096 was blocked by: a listing that can only name a
     // business by the code somebody typed on the proposal.
-    const line = rowContaining('#list', 'APL-A');
+    const line = rowContaining('#list', 'PRP-A');
     expect(line.textContent).toContain('client-1');
     expect(line.textContent).toContain('insurer-1');
     expect(line.textContent).toContain('auto');
@@ -284,7 +277,7 @@ describe('the reference registry (IN-01)', () => {
   it('names the businesses on the policy listing (REQ-096, OUT-03)', async () => {
     await openPolicies();
 
-    const line = rowContaining('#list', 'APL-A');
+    const line = rowContaining('#list', 'PRP-A');
 
     expect(line.textContent).toContain('Ana Lima');
     expect(line.textContent).toContain('Seguradora Norte');
@@ -295,7 +288,7 @@ describe('the reference registry (IN-01)', () => {
   it('keeps showing the identifier of a reference nobody registered (REQ-002)', async () => {
     await openPolicies();
 
-    const unnamed = rowContaining('#list', 'APL-B');
+    const unnamed = rowContaining('#list', 'PRP-B');
 
     // The business is listed exactly like the other one; what it lacks is a
     // name, and the screen says the identifier rather than leaving a gap.
@@ -355,6 +348,6 @@ describe('the reference registry (IN-01)', () => {
 
     // And the correction reaches the operation, which reads the registry fresh.
     await openPolicies();
-    expect(rowContaining('#list', 'APL-A').textContent).toContain('Ana Lima Souza');
+    expect(rowContaining('#list', 'PRP-A').textContent).toContain('Ana Lima Souza');
   });
 });

@@ -196,6 +196,10 @@ async function sellPolicy(options: {
       netPremium: '100.00',
       coverageStart: '2026-10-01',
       coverageEnd: '2027-10-01',
+      installments: [
+        { amount: '50.00', dueDate: '2026-10-10' },
+        { amount: '50.00', dueDate: '2026-11-10' },
+      ],
       workedCommission: '40',
       workedCommissionMode: 'INTEGRAL',
       intermediary: null,
@@ -203,20 +207,7 @@ async function sellPolicy(options: {
     }),
   );
 
-  return json<PolicyBody>(
-    await post('/policies', {
-      proposalId: proposal.id,
-      policyNumber: options.policyNumber,
-      premium: '100.00',
-      coverageStart: '2026-10-01',
-      coverageEnd: '2027-09-30',
-      renewalDate: '2027-09-30',
-      installments: [
-        { number: 1, amount: '50.00', dueDate: '2026-10-10' },
-        { number: 2, amount: '50.00', dueDate: '2026-11-10' },
-      ],
-    }),
-  );
+  return json<PolicyBody>(await post('/policies', { proposalId: proposal.id, userId: 'operator' }));
 }
 
 describe('financial journey with immediate release (credit)', () => {
@@ -226,7 +217,7 @@ describe('financial journey with immediate release (credit)', () => {
     policy = await sellPolicy({
       paymentMethodId: 'credit',
       proposalNumber: 'PRP-100',
-      policyNumber: 'APL-100',
+      policyNumber: 'PRP-100',
     });
 
     const commission = await json<CommissionBody>(
@@ -243,7 +234,7 @@ describe('financial journey with immediate release (credit)', () => {
   it('conciliates the commission report by the policy number (FP-02, CA-018)', async () => {
     const response = await post('/commission-reconciliations', {
       competence: '2026-10',
-      lines: [{ policyNumber: 'APL-100', proposalNumber: 'PRP-100', producerCommission: '40.00' }],
+      lines: [{ policyNumber: 'PRP-100', proposalNumber: 'PRP-100', producerCommission: '40.00' }],
     });
 
     expect(response.status).toBe(201);
@@ -338,12 +329,12 @@ describe('financial journey held by a bank slip', () => {
     policy = await sellPolicy({
       paymentMethodId: 'bank-slip',
       proposalNumber: 'PRP-200',
-      policyNumber: 'APL-200',
+      policyNumber: 'PRP-200',
     });
 
     await post('/commission-reconciliations', {
       competence: '2026-10',
-      lines: [{ policyNumber: 'APL-200', proposalNumber: 'PRP-200', producerCommission: '40.00' }],
+      lines: [{ policyNumber: 'PRP-200', proposalNumber: 'PRP-200', producerCommission: '40.00' }],
     });
 
     const settlement = await json<SettlementBody>(await post(`/policies/${policy.id}/settlement`));
@@ -390,13 +381,13 @@ describe('divergences and pendencies', () => {
     const policy = await sellPolicy({
       paymentMethodId: 'credit',
       proposalNumber: 'PRP-300',
-      policyNumber: 'APL-300',
+      policyNumber: 'PRP-300',
     });
 
     // The insurer paid less than the agreement says (EX-02).
     await post('/commission-reconciliations', {
       competence: '2026-10',
-      lines: [{ policyNumber: 'APL-300', proposalNumber: 'PRP-300', producerCommission: '31.00' }],
+      lines: [{ policyNumber: 'PRP-300', proposalNumber: 'PRP-300', producerCommission: '31.00' }],
     });
 
     const divergent = await json<CommissionBody>(
@@ -440,7 +431,7 @@ describe('divergences and pendencies', () => {
       await post('/commission-reconciliations', {
         competence: '2026-10',
         lines: [
-          { policyNumber: 'APL-100', proposalNumber: 'PRP-100', producerCommission: '40.00' },
+          { policyNumber: 'PRP-100', proposalNumber: 'PRP-100', producerCommission: '40.00' },
         ],
       }),
     );
@@ -464,7 +455,7 @@ describe('divergences and pendencies', () => {
     const policy = await sellPolicy({
       paymentMethodId: 'credit',
       proposalNumber: 'PRP-400',
-      policyNumber: 'APL-400',
+      policyNumber: 'PRP-400',
     });
 
     const response = await post(`/policies/${policy.id}/commission/override`, {
@@ -483,28 +474,28 @@ describe('divergences and pendencies', () => {
   it('lists the panel of every policy and narrows it by state (OUT-05)', async () => {
     await sellPolicy({
       paymentMethodId: 'credit',
-      proposalNumber: 'PRP-400',
-      policyNumber: 'APL-400',
+      proposalNumber: 'PRP-410',
+      policyNumber: 'PRP-410',
     });
     await post('/commission-reconciliations', {
       competence: '2026-10',
-      lines: [{ policyNumber: 'APL-400', proposalNumber: 'PRP-400', producerCommission: '33.00' }],
+      lines: [{ policyNumber: 'PRP-410', proposalNumber: 'PRP-410', producerCommission: '33.00' }],
     });
 
     const panel = await json<readonly CommissionPanelLine[]>(await fetch(`${baseUrl}/commissions`));
-    const line = panel.find((entry) => entry.policyNumber === 'APL-400');
+    const line = panel.find((entry) => entry.policyNumber === 'PRP-410');
 
     // CA-016: the pair and the flag, with what identifies the business.
     expect(line?.effectiveReceivable).toBe('40.00');
     expect(line?.realReceivable).toBe('33.00');
     expect(line?.divergent).toBe(true);
-    expect(line?.proposalNumber).toBe('PRP-400');
+    expect(line?.proposalNumber).toBe('PRP-410');
     expect(line?.insurerId).toBe('insurer-1');
 
     const divergent = await json<readonly CommissionPanelLine[]>(
       await fetch(`${baseUrl}/commissions?status=DIVERGENT`),
     );
-    expect(divergent.map((entry) => entry.policyNumber)).toContain('APL-400');
+    expect(divergent.map((entry) => entry.policyNumber)).toContain('PRP-410');
     expect(divergent.every((entry) => entry.status === 'DIVERGENT')).toBe(true);
   });
 
@@ -520,11 +511,11 @@ describe('divergences and pendencies', () => {
     const policy = await sellPolicy({
       paymentMethodId: 'credit',
       proposalNumber: 'PRP-500',
-      policyNumber: 'APL-500',
+      policyNumber: 'PRP-500',
     });
     await post('/commission-reconciliations', {
       competence: '2026-10',
-      lines: [{ policyNumber: 'APL-500', proposalNumber: 'PRP-500', producerCommission: '40.00' }],
+      lines: [{ policyNumber: 'PRP-500', proposalNumber: 'PRP-500', producerCommission: '40.00' }],
     });
     await post(`/policies/${policy.id}/settlement`);
 
@@ -669,7 +660,7 @@ describe('the reference registry (IN-01)', () => {
 
   it('names the businesses on the panel of OUT-05 (REQ-096)', async () => {
     const panel = await json<CommissionPanelLine[]>(await fetch(`${baseUrl}/commissions`));
-    const line = panel.find((entry) => entry.policyNumber === 'APL-100');
+    const line = panel.find((entry) => entry.policyNumber === 'PRP-100');
 
     expect(line?.clientName).toBe('Ana Lima');
     expect(line?.insurerName).toBe('Seguradora Norte');
@@ -694,7 +685,7 @@ describe('the reference registry (IN-01)', () => {
     const policy = await sellPolicy({
       paymentMethodId: 'credit',
       proposalNumber: 'PRP-IN01',
-      policyNumber: 'APL-IN01',
+      policyNumber: 'PRP-IN01',
       clientId: 'cliente-sem-cadastro',
     });
 
@@ -747,6 +738,7 @@ describe('calculating the commission of a policy that has none', () => {
         netPremium: '200.00',
         coverageStart: '2026-10-01',
         coverageEnd: '2027-10-01',
+        installments: [{ amount: '200.00', dueDate: '2026-10-10' }],
         workedCommission: '30',
         workedCommissionMode: 'INTEGRAL',
         intermediary: null,
@@ -754,15 +746,7 @@ describe('calculating the commission of a policy that has none', () => {
       }),
     );
     const policy = await json<{ id: string }>(
-      await post('/policies', {
-        proposalId: proposal.id,
-        policyNumber: 'APL-LATE',
-        premium: '200.00',
-        coverageStart: '2026-10-01',
-        coverageEnd: '2027-09-30',
-        renewalDate: '2027-09-30',
-        installments: [{ number: 1, amount: '200.00', dueDate: '2026-10-10' }],
-      }),
+      await post('/policies', { proposalId: proposal.id, userId: 'operator' }),
     );
     return policy.id;
   }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
+import { Authorship } from '../domain/authorship.ts';
 import { CalendarDate } from '../domain/calendar-date.ts';
 import { RecordNotFound } from '../domain/errors.ts';
 import { Money } from '../domain/money.ts';
@@ -54,6 +55,31 @@ describe('GetProposal', () => {
 
     expect(view.status).toBe('REJECTED');
     expect(view.rejectionReason).toBe('perfil de risco');
+  });
+
+  it('shows who recognised the issuance and when (REQ-209, CA-207)', async () => {
+    const { proposals, useCase } = scenario();
+    await proposals.save(
+      awaiting().recognizeIssuance(
+        Authorship.of('carla.dias', new Date('2026-09-25T14:05:00.000Z')),
+      ),
+    );
+
+    const view = await useCase.execute('proposal-1');
+
+    expect(view.status).toBe('ISSUED');
+    expect(view.issuanceRecognizedBy).toBe('carla.dias');
+    expect(view.issuanceRecognizedAt).toBe('2026-09-25T14:05:00.000Z');
+  });
+
+  it('shows no recognition while awaiting issuance', async () => {
+    const { proposals, useCase } = scenario();
+    await proposals.save(awaiting());
+
+    const view = await useCase.execute('proposal-1');
+
+    expect(view.issuanceRecognizedBy).toBeNull();
+    expect(view.issuanceRecognizedAt).toBeNull();
   });
 
   it('reports an unknown proposal as not found', async () => {

@@ -58,26 +58,22 @@ async function transmittedProposal(proposals: InMemoryProposalRepository): Promi
 }
 
 describe('GetPolicy', () => {
-  it('returns both numbers and the schedule (CA-008, OUT-03)', async () => {
+  it('returns both numbers and the schedule (REQ-050, REQ-241, OUT-03)', async () => {
     const { proposals, registerPolicy, getPolicy } = scenario();
     await transmittedProposal(proposals);
 
     const registered = await registerPolicy.execute({
       proposalId: 'proposal-1',
-      policyNumber: 'APL-4711',
-      premium: '1200.00',
-      coverageStart: '2026-10-01',
-      coverageEnd: '2027-09-30',
-      renewalDate: '2027-09-30',
-      installments: [{ number: 1, amount: '1200.00', dueDate: '2026-10-10' }],
+      userId: 'operator',
     });
 
     const read = await getPolicy.execute(registered.id);
 
     expect(read).toEqual(registered);
-    expect(read.policyNumber).toBe('APL-4711');
+    expect(read.policyNumber).toBe('PRP-9001');
     expect(read.proposalNumber).toBe('PRP-9001');
-    expect(read.installments).toHaveLength(1);
+    // REQ-241: the schedule is the proposal's, which has none here.
+    expect(read.installments).toEqual([]);
   });
 
   it('reports an unknown policy as not found', async () => {

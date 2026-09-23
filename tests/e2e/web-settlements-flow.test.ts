@@ -116,12 +116,12 @@ beforeAll(async () => {
 
   // The four situations OUT-07 names, for one broker, plus a business of
   // another broker so the filter has something to leave out.
-  await registeredPolicy('PRP-EXT-PREV', 'APL-EXT-PREV', 'broker-1');
-  const held = await reconciledPolicy('PRP-EXT-RET', 'APL-EXT-RET', 'broker-1', 'bank-slip');
+  await registeredPolicy('PRP-EXT-PREV', 'PRP-EXT-PREV', 'broker-1');
+  const held = await reconciledPolicy('PRP-EXT-RET', 'PRP-EXT-RET', 'broker-1', 'bank-slip');
   await callApi('POST', `/policies/${held.policyId}/settlement`);
-  const released = await reconciledPolicy('PRP-EXT-LIB', 'APL-EXT-LIB', 'broker-1');
+  const released = await reconciledPolicy('PRP-EXT-LIB', 'PRP-EXT-LIB', 'broker-1');
   await callApi('POST', `/policies/${released.policyId}/settlement`);
-  const other = await reconciledPolicy('PRP-EXT-OUTRO', 'APL-EXT-OUTRO', 'broker-2');
+  const other = await reconciledPolicy('PRP-EXT-OUTRO', 'PRP-EXT-OUTRO', 'broker-2');
   await callApi('POST', `/policies/${other.policyId}/settlement`);
 });
 
@@ -315,6 +315,7 @@ async function registeredPolicy(
     netPremium: '100.00',
     coverageStart: '2026-10-01',
     coverageEnd: '2027-10-01',
+    installments: [{ amount: '100.00', dueDate: '2026-10-10' }],
     workedCommission: '40',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
@@ -323,12 +324,7 @@ async function registeredPolicy(
 
   const policy = await callApi('POST', '/policies', {
     proposalId: proposal.id,
-    policyNumber,
-    premium: '100.00',
-    coverageStart: '2026-10-01',
-    coverageEnd: '2027-09-30',
-    renewalDate: '2027-09-30',
-    installments: [{ number: 1, amount: '100.00', dueDate: '2026-10-10' }],
+    userId: 'operator',
   });
 
   return { policyId: policy.id, proposalNumber, policyNumber };
@@ -361,18 +357,18 @@ describe('the broker statement (OUT-07)', () => {
     expect(rows()).toHaveLength(4);
 
     // The *prevista* of OUT-07: the commission exists, the transfer does not.
-    const forecast = rowOf('APL-EXT-PREV');
+    const forecast = rowOf('PRP-EXT-PREV');
     expect(forecast.textContent).toContain('Repasse não aberto');
     expect(forecast.textContent).toContain('R$ 20,00');
 
     // EX-07: held until the client's first installment is confirmed.
-    expect(rowOf('APL-EXT-RET').textContent).toContain('Aguardando confirmação');
-    expect(rowOf('APL-EXT-RET').textContent).toContain('Exige confirmação');
-    expect(rowOf('APL-EXT-LIB').textContent).toContain('Liberado');
+    expect(rowOf('PRP-EXT-RET').textContent).toContain('Aguardando confirmação');
+    expect(rowOf('PRP-EXT-RET').textContent).toContain('Exige confirmação');
+    expect(rowOf('PRP-EXT-LIB').textContent).toContain('Liberado');
 
     // IN-05: the other broker's table pays a quarter of the 40,00, not half.
-    expect(rowOf('APL-EXT-OUTRO').textContent).toContain('R$ 10,00');
-    expect(rowOf('APL-EXT-OUTRO').textContent).toContain('broker-2');
+    expect(rowOf('PRP-EXT-OUTRO').textContent).toContain('R$ 10,00');
+    expect(rowOf('PRP-EXT-OUTRO').textContent).toContain('broker-2');
 
     // The four totals of OUT-07, summed by the backend on exact cents.
     expect(total('Previsto')).toBe('R$ 70,00');
@@ -404,7 +400,7 @@ describe('the broker statement (OUT-07)', () => {
 
     // FP-03 step 5 happens on the policy, which is where REQ-095 records the
     // amount, the proof and the user.
-    await followToPolicy(rowOf('APL-EXT-LIB'));
+    await followToPolicy(rowOf('PRP-EXT-LIB'));
     clickIn('Repasse ao corretor', 'Registrar pagamento');
     attachProof('#dialog-payment', 'comprovante-EXT-LIB.pdf');
     answerDialog('#dialog-payment', { amount: '19.50', userId: 'fin-1' });
@@ -416,7 +412,7 @@ describe('the broker statement (OUT-07)', () => {
     await openStatement();
     await chooseBroker('broker-1');
 
-    const paid = rowOf('APL-EXT-LIB');
+    const paid = rowOf('PRP-EXT-LIB');
     expect(paid.textContent).toContain('Pago');
     // REQ-095: what was sent, with its proof, not what was expected.
     expect(paid.textContent).toContain('R$ 19,50');
@@ -440,7 +436,7 @@ describe('the broker statement (OUT-07)', () => {
 
     // The statement does not offer a release it could not do: it says the
     // transfer is waiting and takes the operator where the act belongs.
-    const held = rowOf('APL-EXT-RET');
+    const held = rowOf('PRP-EXT-RET');
     expect(held.textContent).toContain('Aguardando confirmação');
 
     await followToPolicy(held);

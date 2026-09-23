@@ -6,6 +6,7 @@ import { declareReceipt } from '../domain/receipt.ts';
 import type { WorkedCommissionMode } from '../domain/worked-commission.ts';
 import type { ProposalRepository } from './proposal-repository.ts';
 import { type ProposalView, toProposalView } from './proposal-view.ts';
+import type { SourceDocumentStorage } from './source-document-storage.ts';
 
 /** REQ-221: an intermediary and its CTU, as the user declared them. */
 export interface IntermediaryDeclarationInput {
@@ -43,6 +44,14 @@ export interface RegisterProposalInput {
   readonly intermediary: IntermediaryDeclarationInput | null;
   /** REQ-216: who signs the CT and the receipt declaration. */
   readonly author: string;
+  /** REQ-219: the PDF the data was imported from, kept as uploaded. */
+  readonly sourceDocument?: SourceDocumentInput | null;
+}
+
+export interface SourceDocumentInput {
+  readonly fileName: string;
+  readonly contentType: string;
+  readonly content: Uint8Array;
 }
 
 /**
@@ -51,6 +60,7 @@ export interface RegisterProposalInput {
  */
 export interface RegisterProposalDependencies {
   readonly proposals: ProposalRepository;
+  readonly documents: SourceDocumentStorage;
   readonly newId: () => string;
   readonly now: () => Date;
 }
@@ -70,8 +80,12 @@ export class RegisterProposal {
   }
 
   async execute(input: RegisterProposalInput): Promise<ProposalView> {
+    const id = this.deps.newId();
+    const source = input.sourceDocument ?? null;
+    const documentId = source === null ? null : this.deps.newId();
+
     const proposal = Proposal.register({
-      id: this.deps.newId(),
+      id,
       clientId: input.clientId,
       brokerId: input.brokerId,
       insurerId: input.insurerId,
@@ -89,9 +103,17 @@ export class RegisterProposal {
       workedCommission: Percentage.fromString(input.workedCommission),
       workedCommissionMode: input.workedCommissionMode,
       receipt: declareReceipt(toIntermediary(input.intermediary)),
+      sourceDocument:
+        source === null || documentId === null ? null : { documentId, fileName: source.fileName },
       registeredBy: input.author,
       registeredAt: this.deps.now(),
     });
+
+    // Only once the domain accepted the proposal: a refused registration
+    // leaves no document behind.
+    if (source !== null && documentId !== null) {
+      await this.deps.documents.save({ id: documentId, ...source });
+    }
 
     await this.deps.proposals.save(proposal);
 

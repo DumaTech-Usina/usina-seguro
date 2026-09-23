@@ -136,6 +136,33 @@ describe('Proposal.register', () => {
     expect(ruleOf(() => registered({ netPremium: Money.fromString(premium) }))).toBe('REQ-217');
   });
 
+  it.each([
+    ['ends before it starts', '2027-10-01', '2026-10-01'],
+    ['ends the day it starts', '2026-10-01', '2026-10-01'],
+  ])('rejects a coverage that %s (REQ-202, REJ-214)', (_case, start, end) => {
+    expect(
+      ruleOf(() =>
+        registered({
+          coverageStart: CalendarDate.fromString(start),
+          coverageEnd: CalendarDate.fromString(end),
+        }),
+      ),
+    ).toBe('REQ-202');
+  });
+
+  it.each(['0.00', '-10.00'])('rejects an installment of %s (REQ-204, REJ-215)', (amount) => {
+    expect(
+      ruleOf(() =>
+        registered({
+          installments: [
+            { amount: Money.fromString('100.00'), dueDate: null },
+            { amount: Money.fromString(amount), dueDate: null },
+          ],
+        }),
+      ),
+    ).toBe('REQ-204');
+  });
+
   it('rejects registration without a signature (REQ-216, REJ-206)', () => {
     expect(ruleOf(() => registered({ registeredBy: ' ' }))).toBe('REQ-216');
   });
@@ -289,25 +316,43 @@ describe('Proposal.reject', () => {
   });
 });
 
-describe('Proposal.accept', () => {
-  // Bridge to the V1 policy registration, which stays out of the current scope
-  // (see the note on `accept`). What is tested here is only what V2 already
-  // states about the states: ISSUED is reached once, and never from REJECTED.
+describe('Proposal.recognizeIssuance', () => {
+  const RECOGNIZED_AT = new Date('2026-09-25T14:05:00.000Z');
 
-  it('moves a proposal awaiting issuance to ISSUED (REQ-250, REQ-251)', () => {
-    expect(registered().accept().status).toBe('ISSUED');
+  function recognized(): Authorship {
+    return Authorship.of('carla.dias', RECOGNIZED_AT);
+  }
+
+  it('moves a proposal awaiting issuance to ISSUED (REQ-250, REQ-251, FP-01 step 8)', () => {
+    expect(registered().recognizeIssuance(recognized()).status).toBe('ISSUED');
+  });
+
+  it('records who identified the issuance and when (REQ-209, CA-207)', () => {
+    const issued = registered().recognizeIssuance(recognized());
+
+    expect(issued.issuanceRecognition?.author).toBe('carla.dias');
+    expect(issued.issuanceRecognition?.at).toEqual(RECOGNIZED_AT);
+  });
+
+  it('has no recognition while awaiting issuance or once refused', () => {
+    expect(registered().issuanceRecognition).toBeNull();
+    expect(registered().reject('motivo').issuanceRecognition).toBeNull();
   });
 
   it('does not let a refused proposal originate a policy (REJ-210)', () => {
-    expect(ruleOf(() => registered().reject('motivo').accept())).toBe('REQ-253');
+    expect(ruleOf(() => registered().reject('motivo').recognizeIssuance(recognized()))).toBe(
+      'REQ-253',
+    );
   });
 
   it('does not let a proposal originate a second policy (REQ-049)', () => {
-    expect(ruleOf(() => registered().accept().accept())).toBe('REQ-049');
+    expect(
+      ruleOf(() => registered().recognizeIssuance(recognized()).recognizeIssuance(recognized())),
+    ).toBe('REQ-049');
   });
 
   it('freezes the proposal once issued (REQ-244, REQ-260, REJ-201, EX-201)', () => {
-    const issued = registered().accept();
+    const issued = registered().recognizeIssuance(recognized());
     const informed = Authorship.of('bruno.lima', REVISED_AT);
 
     expect(

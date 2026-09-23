@@ -4,45 +4,20 @@ import type { ListPoliciesInput } from '../../../core/policy/application/list-po
 import type { RegisterPolicyInput } from '../../../core/policy/application/register-policy.ts';
 
 /**
- * Request shape validation only. Whether the proposal may originate a policy,
- * whether the coverage period makes sense and whether the schedule is numbered
- * correctly are domain rules (REQ-020, REQ-047, REQ-049) and are not restated
- * here.
+ * The recognition of issuance (REQ-209): the proposal and who identified it.
+ * Nothing else is accepted — the policy inherits every datum of the proposal
+ * and nothing is typed again (REQ-242, REJ-204). Whether the proposal may
+ * originate a policy and whether the signature is present are domain rules
+ * (REQ-049, REQ-216, REQ-253) and are not restated here.
  */
 const registerPolicySchema: FastifySchema = {
   body: {
     type: 'object',
-    required: [
-      'proposalId',
-      'policyNumber',
-      'premium',
-      'coverageStart',
-      'coverageEnd',
-      'renewalDate',
-      'installments',
-    ],
+    required: ['proposalId', 'userId'],
     additionalProperties: false,
     properties: {
       proposalId: { type: 'string' },
-      policyNumber: { type: 'string' },
-      // String, never number: money does not travel as binary floating point (REQ-120).
-      premium: { type: 'string' },
-      coverageStart: { type: 'string' },
-      coverageEnd: { type: 'string' },
-      renewalDate: { type: 'string' },
-      installments: {
-        type: 'array',
-        items: {
-          type: 'object',
-          required: ['number', 'amount', 'dueDate'],
-          additionalProperties: false,
-          properties: {
-            number: { type: 'integer' },
-            amount: { type: 'string' },
-            dueDate: { type: 'string' },
-          },
-        },
-      },
+      userId: { type: 'string' },
     },
   },
 };

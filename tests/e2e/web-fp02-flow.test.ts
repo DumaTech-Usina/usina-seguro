@@ -168,6 +168,7 @@ async function registeredPolicy(
     netPremium: '100.00',
     coverageStart: '2026-10-01',
     coverageEnd: '2027-10-01',
+    installments: [{ amount: '100.00', dueDate: '2026-10-10' }],
     workedCommission: '40',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
@@ -176,12 +177,7 @@ async function registeredPolicy(
 
   const policy = await callApi('POST', '/policies', {
     proposalId: proposal.id,
-    policyNumber,
-    premium: '100.00',
-    coverageStart: '2026-10-01',
-    coverageEnd: '2027-09-30',
-    renewalDate: '2027-09-30',
-    installments: [{ number: 1, amount: '100.00', dueDate: '2026-10-10' }],
+    userId: 'operator',
   });
 
   return { policyId: policy.id };
@@ -191,10 +187,10 @@ async function registeredPolicy(
 
 describe('FP-02 through the web interface', () => {
   it('conciliates a line by the policy number and records the real value (steps 2 and 3a)', async () => {
-    const { policyId } = await registeredPolicy('PRP-CONC-1', 'APL-CONC-1');
+    const { policyId } = await registeredPolicy('PRP-CONC-1', 'PRP-CONC-1');
 
     await openReport('2026-10', {
-      policyNumber: 'APL-CONC-1',
+      policyNumber: 'PRP-CONC-1',
       proposalNumber: 'PRP-CONC-1',
       producerCommission: '40.00',
     });
@@ -205,7 +201,7 @@ describe('FP-02 through the web interface', () => {
     });
 
     expect(requests).toContain('POST /commission-reconciliations');
-    expect(resultRows()[0].textContent).toContain('APL-CONC-1');
+    expect(resultRows()[0].textContent).toContain('PRP-CONC-1');
     expect(resultRows()[0].textContent).toContain('Conciliada');
     expect(text('#result')).toContain('Competência 2026-10');
 
@@ -218,7 +214,7 @@ describe('FP-02 through the web interface', () => {
   });
 
   it('matches a line that brings only the proposal number (REQ-082, CA-019)', async () => {
-    const { policyId } = await registeredPolicy('PRP-CONC-2', 'APL-CONC-2');
+    const { policyId } = await registeredPolicy('PRP-CONC-2', 'PRP-CONC-2');
 
     await openReport('2026-10', { proposalNumber: 'PRP-CONC-2', producerCommission: '40.00' });
     submit('#form-report');
@@ -228,16 +224,16 @@ describe('FP-02 through the web interface', () => {
     });
 
     // The answer names the policy the line reached through the link of REQ-050.
-    expect(resultRows()[0].textContent).toContain('APL-CONC-2');
+    expect(resultRows()[0].textContent).toContain('PRP-CONC-2');
     expect(resultRows()[0].textContent).toContain('Conciliada');
     expect((await callApi('GET', `/policies/${policyId}/commission`)).status).toBe('RECONCILED');
   });
 
   it('flags a divergence and hands over the policy where it is resolved (step 4)', async () => {
-    const { policyId } = await registeredPolicy('PRP-DIV-1', 'APL-DIV-1');
+    const { policyId } = await registeredPolicy('PRP-DIV-1', 'PRP-DIV-1');
 
     await openReport('2026-10', {
-      policyNumber: 'APL-DIV-1',
+      policyNumber: 'PRP-DIV-1',
       proposalNumber: 'PRP-DIV-1',
       // REQ-076: the report pays less than the agreement foresaw.
       producerCommission: '35.00',
@@ -267,7 +263,7 @@ describe('FP-02 through the web interface', () => {
 
   it('turns a line with no policy into a pendency and lists it (step 3b, OUT-06)', async () => {
     await openReport('2026-11', {
-      policyNumber: 'APL-NAO-EXISTE',
+      policyNumber: 'PRP-NAO-EXISTE',
       proposalNumber: 'PRP-NAO-EXISTE',
       producerCommission: '12.34',
     });
@@ -307,10 +303,10 @@ describe('FP-02 through the web interface', () => {
   });
 
   it('does not conciliate the same competence twice (REQ-086, CA-021)', async () => {
-    const { policyId } = await registeredPolicy('PRP-DUP-1', 'APL-DUP-1');
+    const { policyId } = await registeredPolicy('PRP-DUP-1', 'PRP-DUP-1');
 
     await openReport('2026-10', {
-      policyNumber: 'APL-DUP-1',
+      policyNumber: 'PRP-DUP-1',
       proposalNumber: 'PRP-DUP-1',
       producerCommission: '40.00',
     });
@@ -333,10 +329,10 @@ describe('FP-02 through the web interface', () => {
   });
 
   it('shows the refusal the server rendered when a rule is broken (REQ-086, REQ-120)', async () => {
-    await registeredPolicy('PRP-ERR-1', 'APL-ERR-1');
+    await registeredPolicy('PRP-ERR-1', 'PRP-ERR-1');
 
     await openReport('   ', {
-      policyNumber: 'APL-ERR-1',
+      policyNumber: 'PRP-ERR-1',
       proposalNumber: 'PRP-ERR-1',
       producerCommission: '40.00',
     });

@@ -5,6 +5,7 @@ import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { Installment } from '../../policy/domain/installment.ts';
 import { Policy } from '../../policy/domain/policy.ts';
+import { Authorship } from '../../proposal/domain/authorship.ts';
 import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
@@ -72,7 +73,9 @@ async function registeredPolicy(
     registeredAt: new Date('2026-09-19T12:00:00.000Z'),
   });
 
-  await proposals.save(proposal.accept());
+  await proposals.save(
+    proposal.recognizeIssuance(Authorship.of('operator', new Date('2026-09-20T10:00:00.000Z'))),
+  );
   await policies.save(
     Policy.register({
       id: 'policy-1',

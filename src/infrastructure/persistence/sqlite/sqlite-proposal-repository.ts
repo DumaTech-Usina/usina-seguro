@@ -30,6 +30,10 @@ interface ProposalRow {
   registered_at: string;
   status: string;
   rejection_reason: string | null;
+  issuance_recognized_by: string | null;
+  issuance_recognized_at: string | null;
+  source_document_id: string | null;
+  source_document_file_name: string | null;
 }
 
 interface InstallmentRow {
@@ -71,11 +75,15 @@ export class SqliteProposalRepository implements ProposalRepository {
           `INSERT INTO proposal (
              id, client_id, broker_id, insurer_id, product_id, payment_method_id,
              customer_accepted, proposal_number, net_premium, coverage_start,
-             coverage_end, registered_at, status, rejection_reason
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             coverage_end, registered_at, status, rejection_reason,
+             issuance_recognized_by, issuance_recognized_at,
+             source_document_id, source_document_file_name
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
-             status           = excluded.status,
-             rejection_reason = excluded.rejection_reason`,
+             status                 = excluded.status,
+             rejection_reason       = excluded.rejection_reason,
+             issuance_recognized_by = excluded.issuance_recognized_by,
+             issuance_recognized_at = excluded.issuance_recognized_at`,
         )
         .run(
           proposal.id,
@@ -93,6 +101,10 @@ export class SqliteProposalRepository implements ProposalRepository {
           proposal.registeredAt.toISOString(),
           proposal.status,
           proposal.rejectionReason,
+          proposal.issuanceRecognition?.author ?? null,
+          proposal.issuanceRecognition?.at.toISOString() ?? null,
+          proposal.sourceDocument?.documentId ?? null,
+          proposal.sourceDocument?.fileName ?? null,
         );
 
       const installment = this.db.prepare(
@@ -208,6 +220,10 @@ export class SqliteProposalRepository implements ProposalRepository {
           dueDate:
             installment.due_date === null ? null : CalendarDate.fromString(installment.due_date),
         })),
+        sourceDocument:
+          row.source_document_id === null || row.source_document_file_name === null
+            ? null
+            : { documentId: row.source_document_id, fileName: row.source_document_file_name },
         registeredAt: new Date(row.registered_at),
       },
       {
@@ -215,6 +231,10 @@ export class SqliteProposalRepository implements ProposalRepository {
         workedCommissionHistory: commissions.map(toWorkedCommission),
         receiptHistory: receipts.map(toReceiptDeclaration),
         rejectionReason: row.rejection_reason,
+        issuanceRecognition:
+          row.issuance_recognized_by === null || row.issuance_recognized_at === null
+            ? null
+            : Authorship.restore(row.issuance_recognized_by, new Date(row.issuance_recognized_at)),
       },
     );
   }

@@ -9,6 +9,7 @@ import { Money } from '../../src/core/proposal/domain/money.ts';
 import { Percentage } from '../../src/core/proposal/domain/percentage.ts';
 import { Proposal } from '../../src/core/proposal/domain/proposal.ts';
 import { openSqliteConnection } from '../../src/infrastructure/persistence/sqlite/sqlite-connection.ts';
+import { SqliteDocumentStorage } from '../../src/infrastructure/persistence/sqlite/sqlite-document-storage.ts';
 import { SqliteProposalRepository } from '../../src/infrastructure/persistence/sqlite/sqlite-proposal-repository.ts';
 
 let directory: string;
@@ -61,6 +62,13 @@ function proposal(
     registeredBy: 'ana.souza',
     registeredAt: new Date(registeredAt),
   });
+}
+
+function history(from: Proposal) {
+  return {
+    workedCommissionHistory: from.workedCommissionHistory,
+    receiptHistory: from.receiptHistory,
+  };
 }
 
 describe('SqliteProposalRepository', () => {
@@ -149,6 +157,51 @@ describe('SqliteProposalRepository', () => {
 
     expect(read?.status).toBe('REJECTED');
     expect(read?.rejectionReason).toBe('perfil de risco');
+  });
+
+  it('stores who recognised the issuance and when (REQ-209, CA-207)', async () => {
+    const registered = proposal('proposal-1');
+    await repository.save(registered);
+    await repository.save(
+      registered.recognizeIssuance(
+        Authorship.of('carla.dias', new Date('2026-09-25T14:05:00.000Z')),
+      ),
+    );
+
+    const read = await repository.findById('proposal-1');
+
+    expect(read?.status).toBe('ISSUED');
+    expect(read?.issuanceRecognition?.author).toBe('carla.dias');
+    expect(read?.issuanceRecognition?.at.toISOString()).toBe('2026-09-25T14:05:00.000Z');
+    expect((await repository.findById('proposal-1'))?.rejectionReason).toBeNull();
+  });
+
+  it('keeps which document the proposal was imported from (REQ-219)', async () => {
+    await new SqliteDocumentStorage(db).save({
+      id: 'doc-1',
+      fileName: 'p.pdf',
+      contentType: 'application/pdf',
+      content: new Uint8Array([1]),
+    });
+    await repository.save(
+      Proposal.restore(
+        { ...proposal('proposal-1'), sourceDocument: { documentId: 'doc-1', fileName: 'p.pdf' } },
+        { status: 'AWAITING_ISSUANCE', ...history(proposal('proposal-1')) },
+      ),
+    );
+    await repository.save(proposal('proposal-2'));
+
+    expect((await repository.findById('proposal-1'))?.sourceDocument).toEqual({
+      documentId: 'doc-1',
+      fileName: 'p.pdf',
+    });
+    expect((await repository.findById('proposal-2'))?.sourceDocument).toBeNull();
+  });
+
+  it('has no recognition for a proposal still awaiting issuance', async () => {
+    await repository.save(proposal('proposal-1'));
+
+    expect((await repository.findById('proposal-1'))?.issuanceRecognition).toBeNull();
   });
 
   it('answers null for an unknown id', async () => {

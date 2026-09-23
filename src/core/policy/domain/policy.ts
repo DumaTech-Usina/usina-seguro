@@ -92,13 +92,8 @@ export class Policy {
       });
     }
 
-    // REQ-021 makes the installment the point from which commissioning is
-    // generated and REQ-070 says a policy always commissions, so a policy
-    // without any installment could never produce what REQ-021 requires.
-    if (data.installments.length === 0) {
-      throw new BusinessRuleViolation('REQ-021', POLICY_MESSAGES.INSTALLMENTS_REQUIRED);
-    }
-
+    // The schedule may be empty: the policy inherits the proposal's
+    // installments (REQ-241), and a proposal without them is valid (CA-216).
     data.installments.forEach((installment, index) => {
       // REQ-091 releases the broker transfer against the *first* installment,
       // so the numbering has to identify it without ambiguity.

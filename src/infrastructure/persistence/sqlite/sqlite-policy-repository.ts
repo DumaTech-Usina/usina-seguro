@@ -26,7 +26,7 @@ interface InstallmentRow {
   policy_id: string;
   number: number;
   amount: string;
-  due_date: string;
+  due_date: string | null;
   status: string;
   confirmed_at: string | null;
   confirmed_by: string | null;
@@ -82,7 +82,7 @@ export class SqlitePolicyRepository implements PolicyRepository {
           item.policyId,
           item.number,
           item.amount.toString(),
-          item.dueDate.toString(),
+          item.dueDate?.toString() ?? null,
           item.status,
           // REQ-123: who confirmed the receipt, and when (IN-13).
           item.confirmation?.at.toISOString() ?? null,
@@ -96,9 +96,15 @@ export class SqlitePolicyRepository implements PolicyRepository {
     return this.load('SELECT * FROM policy WHERE id = ?', id);
   }
 
-  /** REQ-082, CA-018: the conciliation key is the policy number. */
+  /**
+   * REQ-082, CA-018: the conciliation key is the policy number. It may repeat
+   * (DEC-207): the policy registered first answers.
+   */
   async findByPolicyNumber(policyNumber: string): Promise<Policy | null> {
-    return this.load('SELECT * FROM policy WHERE policy_number = ?', policyNumber);
+    return this.load(
+      'SELECT * FROM policy WHERE policy_number = ? ORDER BY registered_at, id LIMIT 1',
+      policyNumber,
+    );
   }
 
   /** REQ-082, CA-019: reached through the link of REQ-050. */
@@ -158,7 +164,7 @@ export class SqlitePolicyRepository implements PolicyRepository {
               policyId: item.policy_id,
               number: item.number,
               amount: Money.fromString(item.amount),
-              dueDate: CalendarDate.fromString(item.due_date),
+              dueDate: item.due_date === null ? null : CalendarDate.fromString(item.due_date),
             },
             item.status as InstallmentStatus,
             item.confirmed_at === null

@@ -43,6 +43,9 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'proposal.payment_method_required': 'Proposta exige forma de pagamento definida.',
     'proposal.field_required': 'Proposta exige o campo {field}.',
     'proposal.net_premium_must_be_positive': 'Prêmio líquido da proposta deve ser positivo.',
+    'proposal.coverage_end_must_follow_start':
+      'Fim da vigência ({end}) deve ser posterior ao início ({start}).',
+    'proposal.installment_amount_must_be_positive': 'Valor da parcela {number} deve ser positivo.',
     'proposal.proposal_number_required': 'Proposta exige o número emitido pela seguradora.',
     'proposal.author_required': 'Informe quem está registrando esta informação.',
     'proposal.intermediary_requires_ctu':
@@ -54,17 +57,15 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'proposal.rejected_cannot_originate_policy': 'Proposta recusada não origina apólice.',
     'proposal.already_has_policy': 'Proposta já possui apólice registrada.',
     'proposal.not_found': "Proposta não encontrada: '{id}'.",
+    'proposal.source_document_not_found': 'A proposta {id} não tem documento de origem guardado.',
     'money.invalid_format':
       "Valor monetário inválido: '{value}'. Use string decimal com até {scale} casas, ex.: '1234.56'.",
     'percentage.invalid_format': "Percentual inválido: '{value}'. Use string decimal, ex.: '32.5'.",
     'percentage.out_of_range': "Percentual fora da faixa de 0 a 100: '{value}'.",
     'policy.policy_number_required': 'Apólice exige número de apólice.',
-    'policy.policy_number_already_registered':
-      "Número de apólice '{policyNumber}' já registrado em outra apólice.",
     'policy.premium_must_be_positive': 'Prêmio da apólice deve ser positivo.',
     'policy.coverage_end_must_follow_start':
       'Fim da vigência ({end}) deve ser posterior ao início ({start}).',
-    'policy.installments_required': 'Apólice exige ao menos uma parcela.',
     'policy.installments_must_be_sequential':
       'Parcelas devem ser numeradas em sequência a partir de 1. Recebido: {number}.',
     'policy.installment_amount_must_be_positive': 'Valor da parcela {number} deve ser positivo.',

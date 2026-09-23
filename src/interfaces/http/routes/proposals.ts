@@ -7,6 +7,7 @@ import type {
 } from '../../../core/proposal/application/register-proposal.ts';
 import type { WorkedCommissionMode } from '../../../core/proposal/domain/worked-commission.ts';
 import { SIGNATURE_PROPERTIES, SIGNATURE_REQUIRED, authorOf } from '../author.ts';
+import { contentDisposition } from './settlements.ts';
 
 /**
  * Request shape validation (Fastify JSON Schema).
@@ -86,6 +87,17 @@ const registerProposalSchema: FastifySchema = {
       ...workedCommissionProperties,
       intermediary: intermediaryProperty,
       ...SIGNATURE_PROPERTIES,
+      // REQ-219: the imported PDF, base64-encoded like the reading's body.
+      sourceDocument: {
+        type: 'object',
+        required: ['fileName', 'contentType', 'content'],
+        additionalProperties: false,
+        properties: {
+          fileName: { type: 'string' },
+          contentType: { type: 'string' },
+          content: { type: 'string' },
+        },
+      },
     },
   },
 };
@@ -144,6 +156,19 @@ const listProposalsSchema: FastifySchema = {
 
 const getProposalSchema: FastifySchema = { params: proposalIdParams };
 
+/** REQ-218: the PDF travels base64-encoded in the JSON body, like the payment proof. */
+const readProposalPdfSchema: FastifySchema = {
+  body: {
+    type: 'object',
+    required: ['content'],
+    additionalProperties: false,
+    properties: { content: { type: 'string' } },
+  },
+};
+
+/** A proposal PDF is small; base64 costs four bytes per three. */
+const PDF_BODY_LIMIT = 12 * 1024 * 1024;
+
 interface ProposalIdParams {
   id: string;
 }
@@ -163,6 +188,7 @@ interface RegisterProposalBody {
   workedCommission: string;
   workedCommissionMode: WorkedCommissionMode;
   intermediary: { intermediaryId: string; ctu?: string | null } | null;
+  sourceDocument?: { fileName: string; contentType: string; content: string };
 }
 
 /** An absent CTU and a null one mean the same: not informed. */
@@ -188,35 +214,79 @@ export function registerProposalRoutes(app: FastifyInstance, useCases: UseCases)
     return useCases.getProposal.execute(id);
   });
 
-  // FP-01 steps 1 to 6.
-  app.post('/proposals', { schema: registerProposalSchema }, async (request, reply) => {
-    const body = request.body as RegisterProposalBody;
+  // REQ-218: reads the PDF and answers what it found, for the form to fill.
+  // Nothing is registered: the answer is 200 even when the reading FAILED,
+  // because a document that cannot be read is an outcome, not a bad request.
+  app.post(
+    '/proposals/pdf-reading',
+    { schema: readProposalPdfSchema, bodyLimit: PDF_BODY_LIMIT },
+    async (request) => {
+      const { content } = request.body as { content: string };
+      return useCases.readProposalPdf.read(new Uint8Array(Buffer.from(content, 'base64')));
+    },
+  );
 
-    const output = await useCases.registerProposal.execute({
-      clientId: body.clientId,
-      brokerId: body.brokerId,
-      insurerId: body.insurerId,
-      productId: body.productId,
-      paymentMethodId: body.paymentMethodId,
-      customerAccepted: body.customerAccepted,
-      proposalNumber: body.proposalNumber,
-      netPremium: body.netPremium,
-      coverageStart: body.coverageStart,
-      coverageEnd: body.coverageEnd,
-      installments: (body.installments ?? []).map(
-        (installment): RegisterProposalInstallmentInput => ({
-          amount: installment.amount,
-          dueDate: installment.dueDate ?? null,
-        }),
-      ),
-      workedCommission: body.workedCommission,
-      workedCommissionMode: body.workedCommissionMode,
-      intermediary: intermediaryOf(body.intermediary),
-      author: authorOf(request),
-    });
+  // FP-01 steps 1 to 6. The body may carry the imported PDF (REQ-219).
+  app.post(
+    '/proposals',
+    { schema: registerProposalSchema, bodyLimit: PDF_BODY_LIMIT },
+    async (request, reply) => {
+      const body = request.body as RegisterProposalBody;
 
-    return reply.code(201).send(output);
-  });
+      const output = await useCases.registerProposal.execute({
+        clientId: body.clientId,
+        brokerId: body.brokerId,
+        insurerId: body.insurerId,
+        productId: body.productId,
+        paymentMethodId: body.paymentMethodId,
+        customerAccepted: body.customerAccepted,
+        proposalNumber: body.proposalNumber,
+        netPremium: body.netPremium,
+        coverageStart: body.coverageStart,
+        coverageEnd: body.coverageEnd,
+        installments: (body.installments ?? []).map(
+          (installment): RegisterProposalInstallmentInput => ({
+            amount: installment.amount,
+            dueDate: installment.dueDate ?? null,
+          }),
+        ),
+        workedCommission: body.workedCommission,
+        workedCommissionMode: body.workedCommissionMode,
+        intermediary: intermediaryOf(body.intermediary),
+        author: authorOf(request),
+        sourceDocument:
+          body.sourceDocument === undefined
+            ? null
+            : {
+                fileName: body.sourceDocument.fileName,
+                contentType: body.sourceDocument.contentType,
+                content: new Uint8Array(Buffer.from(body.sourceDocument.content, 'base64')),
+              },
+      });
+
+      return reply.code(201).send(output);
+    },
+  );
+
+  /**
+   * REQ-219, CA-223: the PDF the proposal was imported from, as uploaded.
+   * Same headers as the payment proof: `attachment` and `nosniff` make the
+   * browser save the file instead of rendering it as a page of this app.
+   */
+  app.get(
+    '/proposals/:id/source-document',
+    { schema: getProposalSchema },
+    async (request, reply) => {
+      const { id } = request.params as ProposalIdParams;
+      const document = await useCases.getProposalSourceDocument.execute(id);
+
+      return reply
+        .header('content-type', document.contentType)
+        .header('content-disposition', contentDisposition(document.fileName))
+        .header('x-content-type-options', 'nosniff')
+        .send(Buffer.from(document.content));
+    },
+  );
 
   // FP-01 step 7, FA-203: a correction of the CT and its mode (REQ-214). A
   // change of the proposal, not a new resource, so it answers 200.

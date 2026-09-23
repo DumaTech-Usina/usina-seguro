@@ -8,10 +8,8 @@
  */
 export const POLICY_MESSAGES = {
   POLICY_NUMBER_REQUIRED: 'policy.policy_number_required',
-  POLICY_NUMBER_ALREADY_REGISTERED: 'policy.policy_number_already_registered',
   PREMIUM_MUST_BE_POSITIVE: 'policy.premium_must_be_positive',
   COVERAGE_END_MUST_FOLLOW_START: 'policy.coverage_end_must_follow_start',
-  INSTALLMENTS_REQUIRED: 'policy.installments_required',
   INSTALLMENTS_MUST_BE_SEQUENTIAL: 'policy.installments_must_be_sequential',
   INSTALLMENT_AMOUNT_MUST_BE_POSITIVE: 'policy.installment_amount_must_be_positive',
   INSTALLMENT_BELONGS_TO_ANOTHER_POLICY: 'policy.installment_belongs_to_another_policy',

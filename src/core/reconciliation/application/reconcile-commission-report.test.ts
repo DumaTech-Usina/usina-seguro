@@ -8,6 +8,7 @@ import type { CommissionBasis } from '../../commission/domain/commission-basis.t
 import { Commission } from '../../commission/domain/commission.ts';
 import { Installment } from '../../policy/domain/installment.ts';
 import { Policy } from '../../policy/domain/policy.ts';
+import { Authorship } from '../../proposal/domain/authorship.ts';
 import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { BusinessRuleViolation } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
@@ -73,7 +74,7 @@ async function registeredPolicy(
       receipt: { kind: 'DIRECT' },
       registeredBy: 'operator',
       registeredAt: new Date('2026-09-17T12:00:00.000Z'),
-    }).accept(),
+    }).recognizeIssuance(Authorship.of('operator', new Date('2026-09-20T10:00:00.000Z'))),
   );
 
   await policies.save(

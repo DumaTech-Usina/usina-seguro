@@ -200,6 +200,7 @@ async function issuePolicy(
     netPremium: '1200.00',
     coverageStart: '2026-10-01',
     coverageEnd: '2027-10-01',
+    installments: [{ amount: '1200.00', dueDate: '2026-10-10' }],
     workedCommission: '32.5',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
@@ -208,12 +209,7 @@ async function issuePolicy(
 
   const policy = await callApi('POST', '/policies', {
     proposalId: proposal.id,
-    policyNumber,
-    premium: '1200.00',
-    coverageStart: '2026-10-01',
-    coverageEnd: '2027-09-30',
-    renewalDate: '2027-09-30',
-    installments: [{ number: 1, amount: '1200.00', dueDate: '2026-10-10' }],
+    userId: 'operator',
   });
 
   return { proposalId: proposal.id, policyId: policy.id };
@@ -231,11 +227,11 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
   });
 
   it('shows the five fields of REQ-100 after the policy is registered (CA-029)', async () => {
-    await issuePolicy('PRP-WEB-N1', 'APL-WEB-N1');
+    await issuePolicy('PRP-WEB-N1', 'PRP-WEB-N1');
 
     await openNotifications();
 
-    const notified = rowOf('APL-WEB-N1');
+    const notified = rowOf('PRP-WEB-N1');
     // The five REQ-096 and REQ-100 require, side by side on one line.
     expect(notified.textContent).toContain('Maria Souza');
     expect(notified.textContent).toContain('Corretora Alfa');
@@ -254,18 +250,18 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
     });
 
     await openNotifications();
-    expect(rowOf('APL-WEB-N1').textContent).toContain('Maria Souza');
-    expect(rowOf('APL-WEB-N1').textContent).not.toContain('Maria Souza Lima');
+    expect(rowOf('PRP-WEB-N1').textContent).toContain('Maria Souza');
+    expect(rowOf('PRP-WEB-N1').textContent).not.toContain('Maria Souza Lima');
 
     // And a business registered from here on carries the corrected name.
-    await issuePolicy('PRP-WEB-N2', 'APL-WEB-N2');
+    await issuePolicy('PRP-WEB-N2', 'PRP-WEB-N2');
     await openNotifications();
-    expect(rowOf('APL-WEB-N2').textContent).toContain('Maria Souza Lima');
+    expect(rowOf('PRP-WEB-N2').textContent).toContain('Maria Souza Lima');
   });
 
   it('narrows to one broker with a new reading, not a local slice', async () => {
     // A second broker, with no name in IN-01: the identifier is what shows.
-    await issuePolicy('PRP-WEB-N3', 'APL-WEB-N3', 'broker-2');
+    await issuePolicy('PRP-WEB-N3', 'PRP-WEB-N3', 'broker-2');
 
     await openNotifications();
     expect(rows()).toHaveLength(3);
@@ -274,12 +270,12 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
 
     expect(requests).toContain('GET /notifications?recipientId=broker-1');
     expect(rows()).toHaveLength(2);
-    expect(rowOf('APL-WEB-N1')).toBeDefined();
+    expect(rowOf('PRP-WEB-N1')).toBeDefined();
 
     await filterByRecipient('broker-2');
     expect(requests).toContain('GET /notifications?recipientId=broker-2');
     expect(rows()).toHaveLength(1);
-    expect(rowOf('APL-WEB-N3').textContent).toContain('broker-2');
+    expect(rowOf('PRP-WEB-N3').textContent).toContain('broker-2');
   });
 
   it('offers only the brokers that were notified, and keeps the full list', async () => {
@@ -302,17 +298,17 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
   it('carries the reader from the notification to the policy it is about', async () => {
     await openNotifications();
 
-    const link = rowOf('APL-WEB-N1').querySelector('a.btn');
+    const link = rowOf('PRP-WEB-N1').querySelector('a.btn');
     const [notified] = (await callApi('GET', '/notifications?recipientId=broker-1')).filter(
-      (notification: Untyped) => notification.policyNumber === 'APL-WEB-N1',
+      (notification: Untyped) => notification.policyNumber === 'PRP-WEB-N1',
     );
 
     expect(link.getAttribute('href')).toBe(`/app/policies/detail.html?id=${notified.policyId}`);
 
     // FP-01 step 8: the policy is what the broker forwards to the insured, so
     // the notification has to land on it and not on a dead end.
-    await followToPolicy(rowOf('APL-WEB-N1'));
-    expect(text('#page')).toContain('APL-WEB-N1');
+    await followToPolicy(rowOf('PRP-WEB-N1'));
+    expect(text('#page')).toContain('PRP-WEB-N1');
   });
 
   it('writes nothing: the screen only reads (REQ-105)', async () => {

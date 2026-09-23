@@ -14,7 +14,7 @@ export interface InstallmentView {
   readonly id: string;
   readonly number: number;
   readonly amount: string;
-  readonly dueDate: string;
+  readonly dueDate: string | null;
   readonly status: string;
   /** REQ-123: who confirmed the client paid, and when. */
   readonly confirmedBy: string | null;
@@ -51,7 +51,7 @@ export function toPolicyView(policy: Policy, proposal: Proposal): PolicyView {
       id: installment.id,
       number: installment.number,
       amount: installment.amount.toString(),
-      dueDate: installment.dueDate.toString(),
+      dueDate: installment.dueDate?.toString() ?? null,
       status: installment.status,
       confirmedBy: installment.confirmation?.userId ?? null,
       confirmedAt: installment.confirmation?.at.toISOString() ?? null,

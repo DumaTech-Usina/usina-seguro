@@ -30,6 +30,15 @@ export interface ProposalInstallment {
 }
 
 /**
+ * REQ-219: the PDF the proposal was imported from. The bytes live in a
+ * document store; the proposal keeps which document it is and its name.
+ */
+export interface ProposalSourceDocument {
+  readonly documentId: string;
+  readonly fileName: string;
+}
+
+/**
  * What the proposal holds from its registration on and never changes
  * (REQ-261, REJ-211): the commercial data (REQ-201) and the standardized data
  * (REQ-202), all informed at registration (REQ-206).
@@ -52,6 +61,8 @@ export interface ProposalRegistrationData {
   readonly coverageEnd: CalendarDate;
   /** REQ-204: may be empty (REQ-202). */
   readonly installments: readonly ProposalInstallment[];
+  /** REQ-219: absent when the proposal was typed by hand. */
+  readonly sourceDocument?: ProposalSourceDocument | null;
   readonly registeredAt: Date;
 }
 
@@ -75,6 +86,8 @@ export interface ProposalState {
   /** Oldest first; never empty. */
   readonly receiptHistory: readonly ReceiptDeclaration[];
   readonly rejectionReason?: string | null;
+  /** REQ-209: present exactly when the issuance was recognised. */
+  readonly issuanceRecognition?: Authorship | null;
 }
 
 export class Proposal {
@@ -90,12 +103,15 @@ export class Proposal {
   readonly coverageStart: CalendarDate;
   readonly coverageEnd: CalendarDate;
   readonly installments: readonly ProposalInstallment[];
+  readonly sourceDocument: ProposalSourceDocument | null;
   readonly registeredAt: Date;
   readonly status: ProposalStatus;
   readonly workedCommissionHistory: readonly WorkedCommission[];
   readonly receiptHistory: readonly ReceiptDeclaration[];
   /** REQ-253: present exactly when the proposal was refused. */
   readonly rejectionReason: string | null;
+  /** REQ-209, CA-207: who identified the issuance, and when it was recorded. */
+  readonly issuanceRecognition: Authorship | null;
 
   private constructor(data: ProposalRegistrationData, state: ProposalState) {
     this.id = data.id;
@@ -110,11 +126,13 @@ export class Proposal {
     this.coverageStart = data.coverageStart;
     this.coverageEnd = data.coverageEnd;
     this.installments = data.installments;
+    this.sourceDocument = data.sourceDocument ?? null;
     this.registeredAt = data.registeredAt;
     this.status = state.status;
     this.workedCommissionHistory = state.workedCommissionHistory;
     this.receiptHistory = state.receiptHistory;
     this.rejectionReason = state.rejectionReason ?? null;
+    this.issuanceRecognition = state.issuanceRecognition ?? null;
   }
 
   /**
@@ -155,6 +173,25 @@ export class Proposal {
     if (!input.netPremium.isPositive()) {
       throw new BusinessRuleViolation('REQ-217', PROPOSAL_MESSAGES.NET_PREMIUM_MUST_BE_POSITIVE);
     }
+
+    // REQ-202, REJ-214: the coverage ends after it starts.
+    if (!input.coverageStart.isBefore(input.coverageEnd)) {
+      throw new BusinessRuleViolation('REQ-202', PROPOSAL_MESSAGES.COVERAGE_END_MUST_FOLLOW_START, {
+        start: input.coverageStart.toString(),
+        end: input.coverageEnd.toString(),
+      });
+    }
+
+    // REQ-204, REJ-215: every installment is worth something.
+    input.installments.forEach((installment, index) => {
+      if (!installment.amount.isPositive()) {
+        throw new BusinessRuleViolation(
+          'REQ-204',
+          PROPOSAL_MESSAGES.INSTALLMENT_AMOUNT_MUST_BE_POSITIVE,
+          { number: String(index + 1) },
+        );
+      }
+    });
 
     const signed = Authorship.of(input.registeredBy, input.registeredAt);
 
@@ -246,17 +283,16 @@ export class Proposal {
   }
 
   /**
-   * Moves the proposal to ISSUED on behalf of the V1 policy registration.
+   * REQ-209, FP-01 step 8: a user identified in the insurer's system that the
+   * proposal was issued. The signature carries who identified it and the
+   * moment it was recorded — the real issuance instant is unknown to the
+   * Usina. Recognising is the same act that creates the policy (REQ-240), so
+   * the proposal becomes ISSUED (REQ-251) and is frozen from then on (REQ-244).
    *
-   * The recognition of issuance (REQ-209, V2 section 7) is outside the current
-   * scope. This transition is the minimal bridge that keeps the V1 policy
-   * registration — and everything downstream of it — working on the V2
-   * proposal until that step is defined; it implements none of its rules.
-   * What it does enforce is what V2 already states about the states: a refused
-   * proposal originates no policy (REJ-210) and a proposal originates at most
-   * one (REQ-049).
+   * A refused proposal originates no policy (REJ-210) and a proposal
+   * originates at most one (REQ-049).
    */
-  accept(): Proposal {
+  recognizeIssuance(recognized: Authorship): Proposal {
     if (this.status === 'ISSUED') {
       throw new BusinessRuleViolation('REQ-049', PROPOSAL_MESSAGES.ALREADY_HAS_POLICY);
     }
@@ -268,7 +304,7 @@ export class Proposal {
       );
     }
 
-    return this.with({ status: 'ISSUED' });
+    return this.with({ status: 'ISSUED', issuanceRecognition: recognized });
   }
 
   /**
@@ -301,6 +337,7 @@ export class Proposal {
       workedCommissionHistory: this.workedCommissionHistory,
       receiptHistory: this.receiptHistory,
       rejectionReason: this.rejectionReason,
+      issuanceRecognition: this.issuanceRecognition,
       ...changes,
     });
   }

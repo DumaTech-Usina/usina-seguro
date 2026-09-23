@@ -40,15 +40,6 @@ describe('Policy.register', () => {
     expect(policy.installments).toHaveLength(2);
   });
 
-  it('keeps a policy number that differs from the proposal number (CA-008)', () => {
-    // The link to the proposal is what makes both numbers consultable: the
-    // policy never copies the proposal number.
-    const policy = Policy.register(validData({ policyNumber: 'APL-0001' }));
-
-    expect(policy.policyNumber).toBe('APL-0001');
-    expect(policy.proposalId).toBe('proposal-1');
-  });
-
   it('rejects a policy without a policy number (REJ-006)', () => {
     expect(() => Policy.register(validData({ policyNumber: '   ' }))).toThrow(
       BusinessRuleViolation,
@@ -81,13 +72,8 @@ describe('Policy.register', () => {
     ).toThrow(BusinessRuleViolation);
   });
 
-  it('rejects a policy with no installment (REQ-021)', () => {
-    try {
-      Policy.register(validData({ installments: [] }));
-      expect.unreachable('should have thrown');
-    } catch (error) {
-      expect((error as BusinessRuleViolation).rule).toBe('REQ-021');
-    }
+  it('accepts a policy with no installment, inherited from such a proposal (REQ-241, CA-216)', () => {
+    expect(Policy.register(validData({ installments: [] })).installments).toEqual([]);
   });
 
   it('rejects a schedule that is not numbered from 1 in sequence (REQ-091)', () => {

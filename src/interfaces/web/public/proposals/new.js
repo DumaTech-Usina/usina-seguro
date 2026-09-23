@@ -88,7 +88,7 @@ function renumber() {
   });
 }
 
-function addInstallmentRow() {
+function addInstallmentRow(amount = '') {
   const row = document.createElement('div');
   row.className = 'installment-row';
   row.innerHTML = `
@@ -110,12 +110,13 @@ function addInstallmentRow() {
     row.remove();
     renumber();
   });
+  row.querySelector('[name="amount"]').value = amount;
 
   installments.append(row);
   renumber();
 }
 
-document.querySelector('#add-installment').addEventListener('click', addInstallmentRow);
+document.querySelector('#add-installment').addEventListener('click', () => addInstallmentRow());
 
 function schedule() {
   return [...installments.querySelectorAll('.installment-row')].map((row) => {
@@ -126,6 +127,155 @@ function schedule() {
     };
   });
 }
+
+/* ------------------------------------------------------ PDF (REQ-218) -- */
+
+/** What each field the reader can fill is called on this form. */
+const PDF_FIELD_LABEL = {
+  proposalNumber: 'Número da proposta',
+  clientId: 'Cliente',
+  brokerId: 'Corretor',
+  insurerId: 'Seguradora',
+  productId: 'Produto / ramo',
+  paymentMethodId: 'Forma de pagamento',
+  netPremium: 'Prêmio líquido',
+  coverageStart: 'Início da vigência',
+  coverageEnd: 'Fim da vigência',
+  installments: 'Parcelas',
+};
+
+const PDF_STATUS = {
+  SUCCESS: { title: 'PDF lido.', tone: '' },
+  PARTIAL: { title: 'PDF lido parcialmente.', tone: 'banner--warning' },
+  FAILED: { title: 'Não foi possível ler o PDF.', tone: 'banner--danger' },
+};
+
+const PDF_FAILURE = {
+  UNREADABLE: 'O arquivo não pôde ser lido como PDF.',
+  NO_TEXT: 'O PDF não tem texto legível.',
+  UNRECOGNIZED_LAYOUT: 'O layout deste PDF ainda não é conhecido (hoje: proposta Allianz).',
+};
+
+const pdfForm = document.querySelector('#form-pdf');
+const pdfResult = document.querySelector('#pdf-result');
+
+/** The file as base64, without the `data:` prefix the reader adds. */
+function base64Of(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+/**
+ * Fills the fields the reading found. What the PDF brings overwrites what was
+ * typed (REQ-218); what it did not find is left exactly as it was.
+ */
+function fillFromPdf(fields) {
+  for (const [name, value] of Object.entries(fields)) {
+    if (name === 'installments') {
+      installments.replaceChildren();
+      for (const installment of value) {
+        addInstallmentRow(installment.amount);
+      }
+      continue;
+    }
+
+    const input = form.querySelector(`[name="${name}"]`);
+    if (input !== null) {
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+    }
+  }
+}
+
+function labelList(id, symbol, names) {
+  const list = document.createElement('ul');
+  list.id = id;
+  for (const name of names) {
+    const item = document.createElement('li');
+    item.textContent = `${symbol} ${PDF_FIELD_LABEL[name] ?? name}`;
+    list.append(item);
+  }
+  return list;
+}
+
+function showReading(reading) {
+  const status = PDF_STATUS[reading.status] ?? PDF_STATUS.FAILED;
+  const banner = document.createElement('div');
+  banner.className = `banner ${status.tone}`.trim();
+
+  const text = document.createElement('div');
+  text.className = 'banner__text stack';
+  const title = document.createElement('strong');
+  title.textContent = status.title;
+  text.append(title);
+
+  if (reading.status === 'FAILED') {
+    text.append(PDF_FAILURE[reading.reason] ?? '', ' Preencha os campos à mão.');
+  } else {
+    const found = Object.keys(reading.fields);
+    if (found.length > 0) {
+      text.append('Dados encontrados:', labelList('pdf-found', '✓', found));
+    }
+    if (reading.missing.length > 0) {
+      text.append('Dados não encontrados:', labelList('pdf-missing', '!', reading.missing));
+    }
+    text.append(
+      'Não vêm do PDF: aceite do cliente, comissão trabalhada e seu modo, recebimento (intermediária e CTU). Revise os dados antes de salvar.',
+    );
+  }
+
+  banner.append(text);
+  pdfResult.replaceChildren(banner);
+  pdfResult.classList.remove('hidden');
+}
+
+/**
+ * REQ-219: the PDF to be registered with the proposal — the last one sent,
+ * whatever the reading made of it (CA-223, CA-224). Each send replaces it.
+ */
+let sourceDocument = null;
+
+pdfForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const [file] = pdfForm.querySelector('[name="pdf"]').files ?? [];
+  if (file === undefined) {
+    return;
+  }
+
+  const button = pdfForm.querySelector('button[type="submit"]');
+  const label = button.textContent;
+  button.disabled = true;
+  button.textContent = 'Lendo…';
+
+  (async () => {
+    try {
+      const content = await base64Of(file);
+      sourceDocument = {
+        fileName: file.name,
+        contentType: file.type || 'application/pdf',
+        content,
+      };
+      const reading = await api.readProposalPdf(content);
+      if (reading.status !== 'FAILED') {
+        fillFromPdf(reading.fields);
+      }
+      showReading(reading);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        reportError(error);
+      } else {
+        showSnackbar('Falha de comunicação com o servidor.', { tone: 'danger' });
+      }
+    } finally {
+      button.disabled = false;
+      button.textContent = label;
+    }
+  })();
+});
 
 /* ------------------------------------------------------------- submit -- */
 
@@ -176,6 +326,7 @@ form.addEventListener('submit', (event) => {
       workedCommissionMode: value('workedCommissionMode'),
       intermediary: intermediaryOf(form),
       userId: value('userId'),
+      ...(sourceDocument === null ? {} : { sourceDocument }),
     });
 
     showSnackbar(`Proposta ${proposal.proposalNumber} registrada.`, { tone: 'success' });
@@ -228,6 +379,7 @@ function finish(proposal) {
   body.replaceChildren(empty);
 
   form.classList.add('hidden');
+  document.querySelector('[data-panel="pdf"]').classList.add('hidden');
   document.querySelector('[data-panel="done"]').classList.remove('hidden');
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }

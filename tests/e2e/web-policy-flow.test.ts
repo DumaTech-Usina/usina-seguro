@@ -274,6 +274,10 @@ async function registeredPolicy(
     netPremium: '100.00',
     coverageStart: '2026-10-01',
     coverageEnd: '2027-10-01',
+    installments: [
+      { amount: '50.00', dueDate: '2026-10-10' },
+      { amount: '50.00', dueDate: '2026-11-10' },
+    ],
     workedCommission: '40',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
@@ -282,15 +286,7 @@ async function registeredPolicy(
 
   const policy = await callApi('POST', '/policies', {
     proposalId: proposal.id,
-    policyNumber: numbers.policyNumber,
-    premium: '100.00',
-    coverageStart: '2026-10-01',
-    coverageEnd: '2027-09-30',
-    renewalDate: '2027-09-30',
-    installments: [
-      { number: 1, amount: '50.00', dueDate: '2026-10-10' },
-      { number: 2, amount: '50.00', dueDate: '2026-11-10' },
-    ],
+    userId: 'operator',
   });
 
   return policy.id;
@@ -313,14 +309,14 @@ describe('the policy screen', () => {
   it('shows the schedule and the agreed commission calculated at registration (FP-01 step 7)', async () => {
     const policyId = await registeredPolicy({
       proposalNumber: 'PRP-VIEW-1',
-      policyNumber: 'APL-VIEW-1',
+      policyNumber: 'PRP-VIEW-1',
     });
 
     await openPolicy(policyId);
 
     expect(requests).toContain(`GET /policies/${policyId}`);
     expect(requests).toContain(`GET /policies/${policyId}/commission`);
-    expect(text()).toContain('APL-VIEW-1');
+    expect(text()).toContain('PRP-VIEW-1');
     expect(text()).toContain('PRP-VIEW-1');
 
     // REQ-021: the schedule the policy was registered with.
@@ -340,7 +336,7 @@ describe('the policy screen', () => {
   });
 
   it('shows agreed and real side by side and flags the divergence (REQ-076, CA-016, CA-017)', async () => {
-    const numbers = { proposalNumber: 'PRP-DIV-2', policyNumber: 'APL-DIV-2' };
+    const numbers = { proposalNumber: 'PRP-DIV-2', policyNumber: 'PRP-DIV-2' };
     const policyId = await registeredPolicy(numbers);
     // FP-02 step 3: the report paid less than the agreement foresaw.
     await reconciled(numbers, '35.00');
@@ -357,7 +353,7 @@ describe('the policy screen', () => {
   });
 
   it('refuses a resolution with no justification and records one with it (REQ-085, CA-026)', async () => {
-    const numbers = { proposalNumber: 'PRP-RES-1', policyNumber: 'APL-RES-1' };
+    const numbers = { proposalNumber: 'PRP-RES-1', policyNumber: 'PRP-RES-1' };
     const policyId = await registeredPolicy(numbers);
     await reconciled(numbers, '35.00');
 
@@ -400,7 +396,7 @@ describe('the policy screen', () => {
   it('refuses an override with no justification and applies one with it (REQ-066, REQ-067, REJ-010)', async () => {
     const policyId = await registeredPolicy({
       proposalNumber: 'PRP-OVR-1',
-      policyNumber: 'APL-OVR-1',
+      policyNumber: 'PRP-OVR-1',
     });
 
     await openPolicy(policyId);
@@ -437,7 +433,7 @@ describe('the policy screen', () => {
   });
 
   it('holds the transfer until the receipt is confirmed, then releases and pays it (FP-03)', async () => {
-    const numbers = { proposalNumber: 'PRP-REP-1', policyNumber: 'APL-REP-1' };
+    const numbers = { proposalNumber: 'PRP-REP-1', policyNumber: 'PRP-REP-1' };
     // A payment method that waits for the client (REQ-091, EX-07).
     const policyId = await registeredPolicy(numbers, 'bank-slip');
     await reconciled(numbers, '40.00');
@@ -527,7 +523,7 @@ describe('the policy screen', () => {
   });
 
   it('opens the transfer already released for an immediate payment method (CA-022)', async () => {
-    const numbers = { proposalNumber: 'PRP-REP-2', policyNumber: 'APL-REP-2' };
+    const numbers = { proposalNumber: 'PRP-REP-2', policyNumber: 'PRP-REP-2' };
     const policyId = await registeredPolicy(numbers, 'credit');
     await reconciled(numbers, '40.00');
 
@@ -564,7 +560,7 @@ describe('the policy screen', () => {
  * FP-03 on the same policy.
  */
 describe('a policy that reached the screen without a commission', () => {
-  const numbers = { proposalNumber: 'PRP-LATE-1', policyNumber: 'APL-LATE-1' };
+  const numbers = { proposalNumber: 'PRP-LATE-1', policyNumber: 'PRP-LATE-1' };
   let policyId: string;
 
   it('shows the absence as a step of the flow, with the action to take', async () => {
@@ -580,6 +576,7 @@ describe('a policy that reached the screen without a commission', () => {
       netPremium: '100.00',
       coverageStart: '2026-10-01',
       coverageEnd: '2027-10-01',
+      installments: [{ amount: '100.00', dueDate: '2026-10-10' }],
       workedCommission: '40',
       workedCommissionMode: 'INTEGRAL',
       intermediary: null,
@@ -587,12 +584,7 @@ describe('a policy that reached the screen without a commission', () => {
     });
     const policy = await callApi('POST', '/policies', {
       proposalId: proposal.id,
-      policyNumber: numbers.policyNumber,
-      premium: '100.00',
-      coverageStart: '2026-10-01',
-      coverageEnd: '2027-09-30',
-      renewalDate: '2027-09-30',
-      installments: [{ number: 1, amount: '100.00', dueDate: '2026-10-10' }],
+      userId: 'operator',
     });
     policyId = policy.id;
 

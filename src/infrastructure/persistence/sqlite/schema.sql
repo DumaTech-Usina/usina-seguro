@@ -24,7 +24,17 @@ CREATE TABLE IF NOT EXISTS proposal (
   registered_at      TEXT    NOT NULL,
   status             TEXT    NOT NULL,
   -- Mandatory when the outcome is a refusal (REQ-253); the record stays.
-  rejection_reason   TEXT
+  rejection_reason   TEXT,
+  -- REQ-209: who recognised the issuance and when it was recorded. Both
+  -- present exactly when the proposal is issued.
+  issuance_recognized_by  TEXT,
+  issuance_recognized_at  TEXT,
+  -- REQ-219: the PDF the proposal was imported from, when there is one. The
+  -- bytes are a row in `document`; the name is what the page shows.
+  source_document_id         TEXT REFERENCES document (id),
+  source_document_file_name  TEXT,
+  CHECK ((source_document_id IS NULL) = (source_document_file_name IS NULL)),
+  CHECK ((issuance_recognized_by IS NULL) = (issuance_recognized_at IS NULL))
 );
 
 -- REQ-204: the installments informed at registration, in order. The due date
@@ -71,10 +81,9 @@ CREATE TABLE IF NOT EXISTS policy (
   -- enforces it through the proposal state; the constraint is the storage-level
   -- guarantee, and PostgreSQL enforces the same one.
   proposal_id     TEXT    NOT NULL UNIQUE REFERENCES proposal (id),
-  -- REQ-082 / CA-018: the conciliation key. The use case refuses a number
-  -- already registered; the constraint is the storage-level guarantee, and
-  -- PostgreSQL enforces the same one.
-  policy_number   TEXT    NOT NULL UNIQUE,
+  -- The proposal number, inherited (REQ-241). Not UNIQUE: proposal numbers
+  -- may repeat (DEC-207), and so may the policy numbers.
+  policy_number   TEXT    NOT NULL,
   premium         TEXT    NOT NULL,
   -- Calendar dates (REQ-020): 'YYYY-MM-DD', no time and no time zone.
   coverage_start  TEXT    NOT NULL,
@@ -91,7 +100,8 @@ CREATE TABLE IF NOT EXISTS installment (
   -- transfer against the first installment, so it has to be identifiable.
   number      INTEGER NOT NULL CHECK (number >= 1),
   amount      TEXT    NOT NULL,
-  due_date    TEXT    NOT NULL,
+  -- Optional, inherited from the proposal (REQ-204, REQ-241).
+  due_date    TEXT,
   status      TEXT    NOT NULL,
   -- REQ-123: the manual confirmation of receipt (IN-13, REQ-092) is one of the
   -- operations that must record who and when; it is what releases the transfer

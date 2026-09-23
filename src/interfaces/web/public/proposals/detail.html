@@ -141,7 +141,7 @@
                 aria-selected="true"
               >
                 <span class="material-symbols-outlined">task_alt</span>
-                Emitida — registrar apólice
+                Emitida — reconhecer emissão
               </button>
               <button
                 class="outcome-switch__option"
@@ -155,63 +155,35 @@
               </button>
             </div>
 
-            <!-- Registro da apólice da V1, mantido até o reconhecimento da emissão
-                 (REQ-209) ser definido. -->
-            <form id="form-policy">
+            <!-- Reconhecimento da emissão (REQ-209): cria a apólice, que herda todos
+                 os dados da proposta (REQ-240, REQ-241); nada é redigitado (REQ-242). -->
+            <form id="form-issuance">
               <div class="stack">
+                <div class="banner">
+                  <span class="material-symbols-outlined">info</span>
+                  <div class="banner__text">
+                    A apólice herda todos os dados da proposta. Depois do reconhecimento,
+                    nenhum dado da proposta pode ser alterado.
+                  </div>
+                </div>
                 <div class="form-grid">
                   <div class="field">
-                    <input class="field__input" name="policyNumber" placeholder=" " required />
+                    <input class="field__input" name="policyNumber" placeholder=" " readonly />
                     <label class="field__label">Número da apólice</label>
-                    <span class="field__hint">Pode coincidir ou não com o da proposta.</span>
+                    <span class="field__hint">É o número da proposta.</span>
                   </div>
                   <div class="field">
-                    <input
-                      class="field__input"
-                      name="premium"
-                      placeholder=" "
-                      inputmode="decimal"
-                      pattern="\d+(\.\d{1,2})?"
-                      required
-                    />
-                    <label class="field__label">Prêmio da apólice</label>
-                    <span class="field__hint">
-                      Sugerido a partir do prêmio líquido; é a base do cálculo da comissão.
-                    </span>
+                    <input class="field__input" name="userId" placeholder=" " required />
+                    <label class="field__label">Seu identificador</label>
+                    <span class="field__hint">Quem identificou a emissão no sistema da seguradora.</span>
                   </div>
-                </div>
-                <div class="form-grid form-grid--three">
-                  <div class="field">
-                    <input class="field__input" type="date" name="coverageStart" required />
-                    <label class="field__label">Início da vigência</label>
-                  </div>
-                  <div class="field">
-                    <input class="field__input" type="date" name="coverageEnd" required />
-                    <label class="field__label">Fim da vigência</label>
-                  </div>
-                  <div class="field">
-                    <input class="field__input" type="date" name="renewalDate" required />
-                    <label class="field__label">Data de renovação</label>
-                  </div>
-                </div>
-
-                <div>
-                  <div class="row row--between" style="margin-bottom: var(--space-3)">
-                    <span class="text-label">Cronograma de parcelas</span>
-                    <button class="btn btn--sm btn--outlined" type="button" id="add-installment">
-                      <span class="material-symbols-outlined">add</span>
-                      Adicionar parcela
-                    </button>
-                  </div>
-                  <div class="installments" id="policy-installments"></div>
-                  <p class="text-muted" id="installments-total" style="margin-top: var(--space-3)"></p>
                 </div>
               </div>
               <div
                 class="card__footer"
                 style="margin: var(--space-6) calc(var(--space-6) * -1) calc(var(--space-6) * -1)"
               >
-                <button class="btn btn--filled" type="submit">Registrar apólice</button>
+                <button class="btn btn--filled" type="submit">Reconhecer emissão</button>
               </div>
             </form>
 

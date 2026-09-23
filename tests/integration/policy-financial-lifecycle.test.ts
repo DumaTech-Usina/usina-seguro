@@ -72,7 +72,8 @@ async function registerPolicy(paymentMethodId = 'credit'): Promise<string> {
     netPremium: '100.00',
     coverageStart: '2026-10-01',
     coverageEnd: '2027-10-01',
-    installments: [],
+    // The policy inherits the schedule (REQ-241); REQ-091 needs a first one.
+    installments: [{ amount: '100.00', dueDate: '2026-10-10' }],
     workedCommission: '40',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
@@ -81,12 +82,7 @@ async function registerPolicy(paymentMethodId = 'credit'): Promise<string> {
 
   const policy = await useCases.registerPolicy.execute({
     proposalId: proposal.id,
-    policyNumber: 'APL-1',
-    premium: '100.00',
-    coverageStart: '2026-10-01',
-    coverageEnd: '2027-09-30',
-    renewalDate: '2027-09-30',
-    installments: [{ number: 1, amount: '100.00', dueDate: '2026-10-10' }],
+    userId: 'operator',
   });
 
   return policy.id;
@@ -96,7 +92,7 @@ async function registerPolicy(paymentMethodId = 'credit'): Promise<string> {
 async function reconcile(producerCommission = '40.00'): Promise<void> {
   await application.useCases.reconcileCommissionReport.execute({
     competence: '2026-10',
-    lines: [{ policyNumber: 'APL-1', proposalNumber: 'PRP-1', producerCommission }],
+    lines: [{ policyNumber: 'PRP-1', proposalNumber: 'PRP-1', producerCommission }],
   });
 }
 
@@ -138,7 +134,7 @@ describe('the financial life of a policy', () => {
     expect(await commissionOf(policyId)).not.toBeNull();
     expect(await settlementOf(policyId)).not.toBeNull();
     const policy = await application.useCases.getPolicy.execute(policyId);
-    expect(policy.policyNumber).toBe('APL-1');
+    expect(policy.policyNumber).toBe('PRP-1');
   });
 
   it('B — the commission is created after other steps have happened', async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
+import { Authorship } from '../domain/authorship.ts';
 import { CalendarDate } from '../domain/calendar-date.ts';
 import { Money } from '../domain/money.ts';
 import { Percentage } from '../domain/percentage.ts';
@@ -35,7 +36,11 @@ async function scenario() {
   await proposals.save(proposal('open-1', '2026-09-16T12:00:00.000Z'));
   await proposals.save(proposal('open-2', '2026-09-18T12:00:00.000Z'));
   await proposals.save(proposal('refused-1', '2026-09-17T12:00:00.000Z').reject('perfil de risco'));
-  await proposals.save(proposal('issued-1', '2026-09-15T12:00:00.000Z').accept());
+  await proposals.save(
+    proposal('issued-1', '2026-09-15T12:00:00.000Z').recognizeIssuance(
+      Authorship.of('operator', new Date('2026-09-20T10:00:00.000Z')),
+    ),
+  );
 
   return { proposals, useCase: new ListProposals({ proposals }) };
 }

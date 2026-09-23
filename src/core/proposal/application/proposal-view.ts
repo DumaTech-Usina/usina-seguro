@@ -52,6 +52,11 @@ export interface ProposalView {
   readonly registeredAt: string;
   /** REQ-253: present exactly when the proposal was refused. */
   readonly rejectionReason: string | null;
+  /** REQ-209, CA-207: present exactly when the issuance was recognised. */
+  readonly issuanceRecognizedBy: string | null;
+  readonly issuanceRecognizedAt: string | null;
+  /** REQ-219: the PDF the proposal was imported from, when there is one. */
+  readonly sourceDocument: { readonly fileName: string } | null;
 }
 
 export interface ProposalInstallmentView {
@@ -109,5 +114,9 @@ export function toProposalView(proposal: Proposal): ProposalView {
     })),
     registeredAt: proposal.registeredAt.toISOString(),
     rejectionReason: proposal.rejectionReason,
+    issuanceRecognizedBy: proposal.issuanceRecognition?.author ?? null,
+    issuanceRecognizedAt: proposal.issuanceRecognition?.at.toISOString() ?? null,
+    sourceDocument:
+      proposal.sourceDocument === null ? null : { fileName: proposal.sourceDocument.fileName },
   };
 }

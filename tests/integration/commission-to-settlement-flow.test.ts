@@ -64,8 +64,8 @@ async function registries(): Promise<void> {
 
 interface PolicyOptions {
   readonly paymentMethodId?: string;
+  /** Also the policy number: the policy inherits it (REQ-241). */
   readonly proposalNumber?: string;
-  readonly policyNumber?: string;
   readonly premium?: string;
   /** IN-05: the broker the business belongs to, for the statement of OUT-07. */
   readonly brokerId?: string;
@@ -86,25 +86,18 @@ async function registerPolicy(options: PolicyOptions = {}) {
     netPremium: premium,
     coverageStart: '2026-10-01',
     coverageEnd: '2027-10-01',
-    installments: [],
+    // The policy inherits the schedule (REQ-241); REQ-091 needs a first one.
+    installments: [
+      { amount: '50.00', dueDate: '2026-10-10' },
+      { amount: '50.00', dueDate: '2026-11-10' },
+    ],
     workedCommission: '40',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
     author: 'operator',
   });
 
-  return useCases.registerPolicy.execute({
-    proposalId: proposal.id,
-    policyNumber: options.policyNumber ?? 'APL-4711',
-    premium,
-    coverageStart: '2026-10-01',
-    coverageEnd: '2027-09-30',
-    renewalDate: '2027-09-30',
-    installments: [
-      { number: 1, amount: '50.00', dueDate: '2026-10-10' },
-      { number: 2, amount: '50.00', dueDate: '2026-11-10' },
-    ],
-  });
+  return useCases.registerPolicy.execute({ proposalId: proposal.id, userId: 'operator' });
 }
 
 describe('policy to agreed commission (FP-01 step 7)', () => {
@@ -177,12 +170,7 @@ describe('policy to agreed commission (FP-01 step 7)', () => {
 
     const policy = await useCases.registerPolicy.execute({
       proposalId: proposal.id,
-      policyNumber: 'APL-2',
-      premium: '100.00',
-      coverageStart: '2026-10-01',
-      coverageEnd: '2027-09-30',
-      renewalDate: '2027-09-30',
-      installments: [{ number: 1, amount: '100.00', dueDate: '2026-10-10' }],
+      userId: 'operator',
     });
 
     expect(policy.status).toBe('ACTIVE');
@@ -197,7 +185,7 @@ describe('commission to reconciliation (FP-02)', () => {
     const report = await application.useCases.reconcileCommissionReport.execute({
       competence: '2026-10',
       lines: [
-        { policyNumber: 'APL-4711', proposalNumber: 'PRP-9001', producerCommission: '40.00' },
+        { policyNumber: 'PRP-9001', proposalNumber: 'PRP-9001', producerCommission: '40.00' },
       ],
     });
 
@@ -226,7 +214,7 @@ describe('commission to reconciliation (FP-02)', () => {
     await application.useCases.reconcileCommissionReport.execute({
       competence: '2026-10',
       lines: [
-        { policyNumber: 'APL-4711', proposalNumber: 'PRP-9001', producerCommission: '31.00' },
+        { policyNumber: 'PRP-9001', proposalNumber: 'PRP-9001', producerCommission: '31.00' },
       ],
     });
 
@@ -242,7 +230,7 @@ describe('commission to reconciliation (FP-02)', () => {
     await application.useCases.reconcileCommissionReport.execute({
       competence: '2026-10',
       lines: [
-        { policyNumber: 'APL-4711', proposalNumber: 'PRP-9001', producerCommission: '31.00' },
+        { policyNumber: 'PRP-9001', proposalNumber: 'PRP-9001', producerCommission: '31.00' },
       ],
     });
 
@@ -307,7 +295,7 @@ describe('commission to reconciliation (FP-02)', () => {
     const report = {
       competence: '2026-10',
       lines: [
-        { policyNumber: 'APL-4711', proposalNumber: 'PRP-9001', producerCommission: '40.00' },
+        { policyNumber: 'PRP-9001', proposalNumber: 'PRP-9001', producerCommission: '40.00' },
       ],
     };
 
@@ -338,7 +326,7 @@ describe('commission to reconciliation (FP-02)', () => {
       application.useCases.reconcileCommissionReport.execute({
         competence: '2026-10',
         lines: [
-          { policyNumber: 'APL-4711', proposalNumber: 'PRP-9001', producerCommission: '40.00' },
+          { policyNumber: 'PRP-9001', proposalNumber: 'PRP-9001', producerCommission: '40.00' },
           { proposalNumber: 'PRP-DESCONHECIDA', producerCommission: 'nao-e-um-valor' },
         ],
       }),
@@ -356,8 +344,8 @@ describe('commission to reconciliation (FP-02)', () => {
 describe('agreed versus real panel (OUT-05, REQ-076)', () => {
   /** Two businesses, so a listing has something to order and to filter. */
   async function twoPolicies() {
-    const first = await registerPolicy({ proposalNumber: 'PRP-9001', policyNumber: 'APL-4711' });
-    const second = await registerPolicy({ proposalNumber: 'PRP-9002', policyNumber: 'APL-4712' });
+    const first = await registerPolicy({ proposalNumber: 'PRP-9001' });
+    const second = await registerPolicy({ proposalNumber: 'PRP-9002' });
     return { first, second };
   }
 
@@ -370,7 +358,7 @@ describe('agreed versus real panel (OUT-05, REQ-076)', () => {
     // tie-break, not a rule; what the panel promises is that both are on it.
     expect(panel.map((line) => line.policyId).sort()).toEqual([first.id, second.id].sort());
 
-    const line = panel.find((entry) => entry.policyNumber === 'APL-4712');
+    const line = panel.find((entry) => entry.policyNumber === 'PRP-9002');
     expect(line?.proposalNumber).toBe('PRP-9002');
     expect(line?.clientId).toBe('client-1');
     expect(line?.insurerId).toBe('insurer-1');
@@ -387,7 +375,7 @@ describe('agreed versus real panel (OUT-05, REQ-076)', () => {
     application = open();
 
     const panel = await application.useCases.listCommissions.execute();
-    expect(panel.map((line) => line.policyNumber).sort()).toEqual(['APL-4711', 'APL-4712']);
+    expect(panel.map((line) => line.policyNumber).sort()).toEqual(['PRP-9001', 'PRP-9002']);
   });
 
   it('narrows to the divergences the Financeiro has to treat (FP-02 step 5)', async () => {
@@ -396,8 +384,8 @@ describe('agreed versus real panel (OUT-05, REQ-076)', () => {
     await application.useCases.reconcileCommissionReport.execute({
       competence: '2026-10',
       lines: [
-        { policyNumber: 'APL-4711', proposalNumber: 'PRP-9001', producerCommission: '31.00' },
-        { policyNumber: 'APL-4712', proposalNumber: 'PRP-9002', producerCommission: '40.00' },
+        { policyNumber: 'PRP-9001', proposalNumber: 'PRP-9001', producerCommission: '31.00' },
+        { policyNumber: 'PRP-9002', proposalNumber: 'PRP-9002', producerCommission: '40.00' },
       ],
     });
 
@@ -603,25 +591,22 @@ describe('broker commission statement (OUT-07)', () => {
     // Four businesses of the same broker, one in each situation OUT-07 names.
     const forecast = await registerPolicy({
       proposalNumber: 'PRP-8001',
-      policyNumber: 'APL-8001',
     });
     const held = await registerPolicy({
       paymentMethodId: 'bank-slip',
       proposalNumber: 'PRP-8002',
-      policyNumber: 'APL-8002',
     });
     const released = await registerPolicy({
       proposalNumber: 'PRP-8003',
-      policyNumber: 'APL-8003',
     });
-    const paid = await registerPolicy({ proposalNumber: 'PRP-8004', policyNumber: 'APL-8004' });
+    const paid = await registerPolicy({ proposalNumber: 'PRP-8004' });
 
     await application.useCases.reconcileCommissionReport.execute({
       competence: '2026-10',
       lines: [
-        { policyNumber: 'APL-8002', proposalNumber: 'PRP-8002', producerCommission: '40.00' },
-        { policyNumber: 'APL-8003', proposalNumber: 'PRP-8003', producerCommission: '40.00' },
-        { policyNumber: 'APL-8004', proposalNumber: 'PRP-8004', producerCommission: '40.00' },
+        { policyNumber: 'PRP-8002', proposalNumber: 'PRP-8002', producerCommission: '40.00' },
+        { policyNumber: 'PRP-8003', proposalNumber: 'PRP-8003', producerCommission: '40.00' },
+        { policyNumber: 'PRP-8004', proposalNumber: 'PRP-8004', producerCommission: '40.00' },
       ],
     });
 
@@ -669,11 +654,10 @@ describe('broker commission statement (OUT-07)', () => {
       rate: '25',
     });
 
-    await registerPolicy({ proposalNumber: 'PRP-8101', policyNumber: 'APL-8101' });
+    await registerPolicy({ proposalNumber: 'PRP-8101' });
     await registerPolicy({
       brokerId: 'broker-2',
       proposalNumber: 'PRP-8102',
-      policyNumber: 'APL-8102',
     });
 
     await application.shutdown();
@@ -687,9 +671,9 @@ describe('broker commission statement (OUT-07)', () => {
     });
     const everyone = await application.useCases.listBrokerStatement.execute();
 
-    expect(first.lines.map((line) => line.policyNumber)).toEqual(['APL-8101']);
+    expect(first.lines.map((line) => line.policyNumber)).toEqual(['PRP-8101']);
     // IN-05: a different table produces a different value for the same premium.
-    expect(second.lines.map((line) => line.policyNumber)).toEqual(['APL-8102']);
+    expect(second.lines.map((line) => line.policyNumber)).toEqual(['PRP-8102']);
     expect(second.totals.payable).toBe('10.00');
     expect(everyone.brokerId).toBeNull();
     expect(everyone.lines).toHaveLength(2);
@@ -700,6 +684,6 @@ describe('broker commission statement (OUT-07)', () => {
 async function reconcile(producerCommission = '40.00'): Promise<void> {
   await application.useCases.reconcileCommissionReport.execute({
     competence: '2026-10',
-    lines: [{ policyNumber: 'APL-4711', proposalNumber: 'PRP-9001', producerCommission }],
+    lines: [{ policyNumber: 'PRP-9001', proposalNumber: 'PRP-9001', producerCommission }],
   });
 }

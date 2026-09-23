@@ -3,22 +3,17 @@
  *
  * While it awaits issuance it shows what the Usina expects to receive
  * (REQ-232) and offers the corrections REQ-252 allows — the CT with its mode,
- * and the receipt — plus the outcome: the refusal (REQ-253), or the V1 policy
- * registration kept as it was until the recognition of issuance is defined.
- * Once issued or refused, it offers nothing (REQ-260, REQ-253).
+ * and the receipt — plus the outcome: the refusal (REQ-253), or the
+ * recognition of issuance (REQ-209), which creates the policy from the
+ * proposal's own data (REQ-240, REQ-241). Once issued or refused, it offers
+ * nothing (REQ-260, REQ-253).
  *
  * Which act is admissible is the domain's answer, not this file's; every
  * refusal shown is the sentence the server rendered through `src/i18n`.
  */
 
 import { ApiError, api } from '/app/shared/api.js';
-import {
-  formatDate,
-  formatInstant,
-  formatMoney,
-  formatPercentage,
-  sumMoney,
-} from '/app/shared/money.js';
+import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
 import {
   bindReceiptFields,
   intermediaryOf,
@@ -165,6 +160,18 @@ function summaryCard(proposal) {
     definition('Registro', formatInstant(proposal.registeredAt)),
   );
 
+  // REQ-219, CA-223: the PDF the data was imported from, kept as uploaded.
+  if (proposal.sourceDocument !== null) {
+    const source = element('a', 'definition__value');
+    source.id = 'source-document';
+    source.href = api.proposalSourceDocumentUrl(proposal.id);
+    source.append(icon('attach_file'), ` ${proposal.sourceDocument.fileName}`);
+
+    const wrapper = element('div', 'definition');
+    wrapper.append(element('span', 'text-label', 'Documento de origem'), source);
+    details.append(wrapper);
+  }
+
   body.append(head, details, installmentsBlock(proposal.installments));
   section.append(body);
   return section;
@@ -273,6 +280,21 @@ function historyCard(proposal) {
   }
 
   body.append(commission, receipt);
+
+  // REQ-209, CA-207: who identified the issuance, and when it was recorded.
+  if (proposal.issuanceRecognizedBy !== null) {
+    const issuance = element('div', 'definitions');
+    issuance.append(
+      definition(
+        `Emissão reconhecida · ${proposal.issuanceRecognizedBy} · ${formatInstant(
+          proposal.issuanceRecognizedAt,
+        )}`,
+        'Emitida',
+      ),
+    );
+    body.append(issuance);
+  }
+
   section.append(header, body);
   return section;
 }
@@ -339,75 +361,11 @@ function policyCard(policy) {
   return section;
 }
 
-/* ---------------------------------------------- outcome: the schedule -- */
-
-const installments = document.querySelector('#policy-installments');
-
-function renumber() {
-  const rows = [...installments.querySelectorAll('.installment-row')];
-
-  rows.forEach((row, index) => {
-    // The domain requires a sequence starting at 1 (REQ-091 needs a first
-    // installment), so the position is derived, never typed.
-    row.querySelector('.installment-row__number').textContent = String(index + 1);
-    row.dataset.number = String(index + 1);
-    row.querySelector('.installment-row__remove').disabled = rows.length === 1;
-  });
-
-  updateTotal();
-}
-
-function updateTotal() {
-  const amounts = [...installments.querySelectorAll('[name="amount"]')].map((input) => input.value);
-  const total = sumMoney(amounts);
-  const label = document.querySelector('#installments-total');
-
-  if (total === null) {
-    label.textContent = '';
-    return;
-  }
-
-  // Informative only: the domain does not require the schedule to add up to
-  // the premium, and this line must not start implying that it does.
-  label.textContent = `Soma das parcelas: ${formatMoney(total)}`;
-}
-
-function addInstallmentRow() {
-  const row = document.createElement('div');
-  row.className = 'installment-row';
-  row.innerHTML = `
-    <div class="installment-row__number"></div>
-    <div class="field">
-      <input class="field__input" name="amount" placeholder=" " inputmode="decimal"
-             pattern="\\d+(\\.\\d{1,2})?" required />
-      <label class="field__label">Valor</label>
-    </div>
-    <div class="field installment-row__date">
-      <input class="field__input" type="date" name="dueDate" required />
-      <label class="field__label">Vencimento</label>
-    </div>
-    <button class="installment-row__remove" type="button" title="Remover parcela">
-      <span class="material-symbols-outlined">close</span>
-    </button>`;
-
-  row.querySelector('.installment-row__remove').addEventListener('click', () => {
-    row.remove();
-    renumber();
-  });
-  row.querySelector('[name="amount"]').addEventListener('input', updateTotal);
-
-  installments.append(row);
-  renumber();
-}
-
-document.querySelector('#add-installment').addEventListener('click', addInstallmentRow);
-addInstallmentRow();
-
 /* ------------------------------------------------------------ actions -- */
 
 const commissionForm = document.querySelector('#form-worked-commission');
 const receiptForm = document.querySelector('#form-receipt');
-const policyForm = document.querySelector('#form-policy');
+const issuanceForm = document.querySelector('#form-issuance');
 const rejectionForm = document.querySelector('#form-rejection');
 
 function values(form) {
@@ -422,7 +380,7 @@ for (const option of document.querySelectorAll('.outcome-switch__option')) {
       other.setAttribute('aria-selected', String(other === option));
     }
 
-    policyForm.classList.toggle('hidden', !accept);
+    issuanceForm.classList.toggle('hidden', !accept);
     rejectionForm.classList.toggle('hidden', accept);
   });
 }
@@ -463,28 +421,18 @@ receiptForm.addEventListener('submit', (event) => {
   });
 });
 
-policyForm.addEventListener('submit', (event) => {
+// FP-01 step 8 (REQ-209): signed by who identified it; the policy is created
+// from the proposal (REQ-240, REQ-241) — nothing else is sent (REQ-242).
+issuanceForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  const input = values(policyForm);
+  const input = values(issuanceForm);
 
-  const schedule = [...installments.querySelectorAll('.installment-row')].map((row) => ({
-    number: Number(row.dataset.number),
-    amount: row.querySelector('[name="amount"]').value,
-    dueDate: row.querySelector('[name="dueDate"]').value,
-  }));
+  submitting(issuanceForm, async () => {
+    const policy = await api.registerPolicy({ proposalId, userId: input.userId });
 
-  submitting(policyForm, async () => {
-    const policy = await api.registerPolicy({
-      proposalId,
-      policyNumber: input.policyNumber,
-      premium: input.premium,
-      coverageStart: input.coverageStart,
-      coverageEnd: input.coverageEnd,
-      renewalDate: input.renewalDate,
-      installments: schedule,
+    showSnackbar(`Emissão reconhecida. Apólice ${policy.policyNumber} criada.`, {
+      tone: 'success',
     });
-
-    showSnackbar(`Apólice ${policy.policyNumber} registrada.`, { tone: 'success' });
     await render();
   });
 });
@@ -586,8 +534,8 @@ async function render() {
   } else {
     fillCorrections(proposal);
     show(['corrections', 'outcome']);
-    // A convenience, not a rule: the V1 policy form still asks for its premium.
-    policyForm.querySelector('[name="premium"]').value = proposal.netPremium;
+    // REQ-241: the policy number is the proposal number.
+    issuanceForm.querySelector('[name="policyNumber"]').value = proposal.proposalNumber;
   }
 
   page.replaceChildren(...sections);

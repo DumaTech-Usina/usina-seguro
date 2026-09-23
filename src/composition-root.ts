@@ -24,6 +24,7 @@ import { PayInstallment } from './core/policy/application/pay-installment.ts';
 import type { PolicyRepository } from './core/policy/application/policy-repository.ts';
 import { RegisterPolicy } from './core/policy/application/register-policy.ts';
 import type { Transaction } from './core/policy/application/transaction.ts';
+import { GetProposalSourceDocument } from './core/proposal/application/get-proposal-source-document.ts';
 import { GetProposal } from './core/proposal/application/get-proposal.ts';
 import { ListProposals } from './core/proposal/application/list-proposals.ts';
 import type { ProposalRepository } from './core/proposal/application/proposal-repository.ts';
@@ -48,6 +49,7 @@ import { RegisterPaymentMethodReleaseRule } from './core/settlement/application/
 import { RegisterSettlementPayment } from './core/settlement/application/register-settlement-payment.ts';
 import { ReleaseSettlement } from './core/settlement/application/release-settlement.ts';
 import type { SettlementRepository } from './core/settlement/application/settlement-repository.ts';
+import { ProposalPdfReader, identifyByText } from './infrastructure/pdf/proposal-pdf-reader.ts';
 import { ImmediateTransaction } from './infrastructure/persistence/in-memory/immediate-transaction.ts';
 import { InMemoryBrokerCommissionRateRepository } from './infrastructure/persistence/in-memory/in-memory-broker-commission-rate-repository.ts';
 import { InMemoryCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
@@ -82,7 +84,14 @@ export interface UseCases {
   readonly reviseWorkedCommission: ReviseWorkedCommission;
   readonly reviseReceipt: ReviseReceipt;
   readonly rejectProposal: RejectProposal;
+  /**
+   * REQ-218: an aid to filling the registration form, not a use case of the
+   * core — it saves nothing and holds no business rule.
+   */
+  readonly readProposalPdf: ProposalPdfReader;
   readonly getProposal: GetProposal;
+  /** REQ-219: the PDF the proposal was imported from. */
+  readonly getProposalSourceDocument: GetProposalSourceDocument;
   readonly listProposals: ListProposals;
   readonly registerPolicy: RegisterPolicy;
   readonly getPolicy: GetPolicy;
@@ -169,11 +178,16 @@ export function composeApplication(config: Config): Application {
 
   return {
     useCases: {
-      registerProposal: new RegisterProposal({ proposals, newId, now }),
+      // REQ-219: the same document store the settlement proof uses.
+      registerProposal: new RegisterProposal({ proposals, documents, newId, now }),
       reviseWorkedCommission: new ReviseWorkedCommission({ proposals, now }),
       reviseReceipt: new ReviseReceipt({ proposals, now }),
       rejectProposal: new RejectProposal({ proposals }),
+      // DEC-208: the identifiers are the text of the document until a formal
+      // registry exists; that is the only thing to change here then.
+      readProposalPdf: new ProposalPdfReader({ identify: identifyByText }),
       getProposal: new GetProposal({ proposals }),
+      getProposalSourceDocument: new GetProposalSourceDocument({ proposals, documents }),
       listProposals: new ListProposals({ proposals }),
       registerPolicy: new RegisterPolicy({
         proposals,

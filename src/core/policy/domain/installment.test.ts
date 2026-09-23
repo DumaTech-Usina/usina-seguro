@@ -23,7 +23,11 @@ describe('Installment.create', () => {
     expect(installment.policyId).toBe('policy-1');
     expect(installment.number).toBe(1);
     expect(installment.amount.toString()).toBe('100.00');
-    expect(installment.dueDate.toString()).toBe('2026-10-10');
+    expect(installment.dueDate?.toString()).toBe('2026-10-10');
+  });
+
+  it('keeps no due date when the proposal informed none (REQ-204, REQ-241, CA-208)', () => {
+    expect(Installment.create(validData({ dueDate: null })).dueDate).toBeNull();
   });
 
   it('rejects a non-positive amount', () => {

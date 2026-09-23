@@ -39,7 +39,8 @@ export interface InstallmentData {
   /** Position in the schedule, starting at 1 (REQ-091 needs a first one). */
   readonly number: number;
   readonly amount: Money;
-  readonly dueDate: CalendarDate;
+  /** REQ-204, REQ-241: optional on the proposal, inherited as it is. */
+  readonly dueDate: CalendarDate | null;
 }
 
 /**
@@ -59,7 +60,7 @@ export class Installment {
   readonly policyId: string;
   readonly number: number;
   readonly amount: Money;
-  readonly dueDate: CalendarDate;
+  readonly dueDate: CalendarDate | null;
   readonly status: InstallmentStatus;
   /** REQ-123: who confirmed the client paid, and when. */
   readonly confirmation: InstallmentPaymentConfirmation | null;

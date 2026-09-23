@@ -186,22 +186,43 @@ describe('SqlitePolicyRepository', () => {
     ).toThrow(/UNIQUE constraint failed/);
   });
 
-  it('enforces one policy per policy number the way PostgreSQL would (REQ-082)', async () => {
-    await policies.save(policy());
+  it('stores two policies with the same number (DEC-207); the first registered answers', async () => {
+    await proposals.save(transmittedProposal('proposal-2', 'PRP-9001'));
+    await policies.save(
+      Policy.restore(
+        { ...policy('later', 'proposal-1'), registeredAt: new Date('2026-09-21T10:00:00.000Z') },
+        'ACTIVE',
+      ),
+    );
+    await policies.save(
+      Policy.restore(
+        { ...policy('earlier', 'proposal-2'), registeredAt: new Date('2026-09-19T10:00:00.000Z') },
+        'ACTIVE',
+      ),
+    );
 
-    // Raw insert: the use case refuses it first, the constraint is what holds
-    // if anything ever reaches the table around it. REQ-082 makes this number
-    // the conciliation key, so it has to identify one policy.
-    expect(() =>
-      db
-        .prepare(
-          `INSERT INTO policy (id, proposal_id, policy_number, premium,
-             coverage_start, coverage_end, renewal_date, registered_at, status)
-           VALUES ('policy-2', 'proposal-2', 'APL-4711', '1.00',
-             '2026-10-01', '2027-09-30', '2027-09-30', '2026-09-20T10:00:00.000Z', 'ACTIVE')`,
-        )
-        .run(),
-    ).toThrow(/UNIQUE constraint failed/);
+    expect((await policies.findByPolicyNumber('APL-4711'))?.id).toBe('earlier');
+  });
+
+  it('keeps an installment with no due date, as inherited from the proposal (REQ-204, CA-208)', async () => {
+    await policies.save(
+      Policy.register({
+        ...policy(),
+        installments: [
+          Installment.create({
+            id: 'policy-1-installment-1',
+            policyId: 'policy-1',
+            number: 1,
+            amount: Money.fromString('1200.00'),
+            dueDate: null,
+          }),
+        ],
+      }),
+    );
+
+    const read = await policies.findById('policy-1');
+
+    expect(read?.installments[0]?.dueDate).toBeNull();
   });
 
   it('round-trips who confirmed the receipt of an installment and when (REQ-123)', async () => {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../domain/errors.ts';
 import { RegisterProposal } from './register-proposal.ts';
@@ -12,6 +13,7 @@ async function scenario() {
 
   await new RegisterProposal({
     proposals,
+    documents: new InMemoryDocumentStorage(),
     newId: () => 'proposal-1',
     now: () => REGISTERED_AT,
   }).execute({
