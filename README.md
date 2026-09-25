@@ -121,19 +121,15 @@ curl -X POST http://127.0.0.1:3000/proposals/<proposta>/rejection \
   -H 'content-type: application/json' -d '{"reason":"perfil de risco"}'
 # 200 {"status":"REJECTED","rejectionReason":"perfil de risco"}
 
-# 4b. Desfecho aceite: registra a apólice e as parcelas (REQ-048, REQ-020)
-curl -X POST http://127.0.0.1:3000/policies -H 'content-type: application/json' -d '{
-  "proposalId":"<proposta>","policyNumber":"APL-4711","premium":"1200.00",
-  "coverageStart":"2026-10-01","coverageEnd":"2027-09-30","renewalDate":"2027-09-30",
-  "installments":[
-    {"number":1,"amount":"600.00","dueDate":"2026-10-10"},
-    {"number":2,"amount":"600.00","dueDate":"2026-11-10"}
-  ]
-}'
-# 201 {"id":"<apolice>","policyNumber":"APL-4711","proposalNumber":"PRP-9001",
+# 4b. Desfecho emitida: reconhecimento da emissão, assinado por quem identificou
+#     (REQ-209). Cria a apólice, que herda todos os dados da proposta — o número
+#     é o da proposta e nada é redigitado (REQ-240, REQ-241, REQ-242).
+curl -X POST http://127.0.0.1:3000/policies -H 'content-type: application/json' \
+  -d '{"proposalId":"<proposta>","userId":"carla.dias"}'
+# 201 {"id":"<apolice>","policyNumber":"PRP-9001","proposalNumber":"PRP-9001",
 #      "status":"ACTIVE","installments":[{"number":1,...,"status":"PENDING"},...]}
 
-# 5. Consultar: os dois números e o cronograma (CA-008)
+# 5. Consultar: os dois números e o cronograma (REQ-050, REQ-241)
 curl http://127.0.0.1:3000/policies/<apolice>
 
 # A apólice que a proposta originou, para quem partiu do rastreio (REQ-049, REQ-050)
@@ -142,9 +138,9 @@ curl http://127.0.0.1:3000/proposals/<proposta>/policy
 # 6. O controle das apólices vendidas (OUT-03), da renovação mais próxima
 #    para a mais distante (REQ-055).
 curl http://127.0.0.1:3000/policies
-# 200 [{"id":"<apolice>","policyNumber":"APL-4711","proposalNumber":"PRP-9001",
+# 200 [{"id":"<apolice>","policyNumber":"PRP-9001","proposalNumber":"PRP-9001",
 #       "status":"ACTIVE","premium":"1200.00","coverageStart":"2026-10-01",
-#       "coverageEnd":"2027-09-30","renewalDate":"2027-09-30",...}]
+#       "coverageEnd":"2027-10-01","renewalDate":"2027-10-01",...}]
 
 #    As apólices a vencer (OUT-04, CA-032): as que renovam até o dia informado,
 #    ele inclusive. A janela é de quem pergunta — nenhum requisito define o que
@@ -155,7 +151,7 @@ curl 'http://127.0.0.1:3000/policies?renewalUntil=2027-06-30'
 #    POST: ela é efeito do passo 4b, não um ato do usuário. Sem recipientId
 #    lista todas; com ele, as de um corretor.
 curl 'http://127.0.0.1:3000/notifications?recipientId=broker-1'
-# 200 [{"event":"POLICY_ISSUED","recipientId":"broker-1","policyNumber":"APL-4711",
+# 200 [{"event":"POLICY_ISSUED","recipientId":"broker-1","policyNumber":"PRP-9001",
 #       "client":{"id":"client-1","name":"Ana Lima"},
 #       "broker":{"id":"broker-1","name":"Corretora Alfa"},
 #       "product":{"id":"auto","name":"Automóvel"},
@@ -216,7 +212,7 @@ curl http://127.0.0.1:3000/policies/<apolice>/commission
 curl -X POST http://127.0.0.1:3000/commission-reconciliations \
   -H 'content-type: application/json' -d '{
   "competence":"2026-10",
-  "lines":[{"policyNumber":"APL-4711","proposalNumber":"PRP-9001","producerCommission":"480.00"}]
+  "lines":[{"policyNumber":"PRP-9001","proposalNumber":"PRP-9001","producerCommission":"480.00"}]
 }'
 # 201 {"reconciled":1,"divergent":0,"duplicated":0,"pending":0,"lines":[...]}
 
@@ -288,9 +284,8 @@ Rejeições, com a regra e o texto traduzido na resposta:
 # Ajuste de comissão sem justificativa (CA-015, REJ-010)
 # 422 {"rule":"REQ-067","message":"Ajuste de comissão por apólice exige justificativa."}
 
-# Número de apólice repetido — é a chave de conciliação (REQ-082, CA-018)
-# 422 {"rule":"REQ-082",
-#      "message":"Número de apólice 'APL-4711' já registrado em outra apólice."}
+# Reconhecimento da emissão sem identificar quem reconheceu (REJ-205, REQ-216)
+# 422 {"rule":"REQ-216","message":"Informe quem está registrando esta informação."}
 
 # Confirmação de recebimento sem usuário (REQ-123)
 # 422 {"rule":"REQ-123",

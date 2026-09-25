@@ -6,5 +6,7 @@ coverage/
 *.sqlite-shm
 .env
 data/
-requisitos_refinados.md
+requisitos_refinados*.md
 tree.md
+# Reference PDFs with real personal data: local only, never versioned.
+/*.pdf
