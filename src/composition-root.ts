@@ -3,16 +3,19 @@ import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { Config } from './config/config.ts';
-import type { BrokerCommissionRateRepository } from './core/commission/application/broker-commission-rate-repository.ts';
 import { CalculateAgreedCommission } from './core/commission/application/calculate-agreed-commission.ts';
-import { CalculatePolicyCommission } from './core/commission/application/calculate-policy-commission.ts';
 import type { CommissionRepository } from './core/commission/application/commission-repository.ts';
+import { DeclarePayoutEligibility } from './core/commission/application/declare-payout-eligibility.ts';
 import { GetCommission } from './core/commission/application/get-commission.ts';
-import { ListBrokerCommissionRates } from './core/commission/application/list-broker-commission-rates.ts';
+import { GetPolicyPayout } from './core/commission/application/get-policy-payout.ts';
+import { InformPayoutRate } from './core/commission/application/inform-payout-rate.ts';
 import { ListCommissions } from './core/commission/application/list-commissions.ts';
+import { ListEligiblePayouts } from './core/commission/application/list-eligible-payouts.ts';
+import { ListPoliciesWithoutPayoutRate } from './core/commission/application/list-policies-without-payout-rate.ts';
 import { OverrideCommission } from './core/commission/application/override-commission.ts';
-import { RegisterBrokerCommissionRate } from './core/commission/application/register-broker-commission-rate.ts';
+import type { PayoutCommissionRepository } from './core/commission/application/payout-commission-repository.ts';
 import { ResolveCommissionDivergence } from './core/commission/application/resolve-commission-divergence.ts';
+import { RevisePayoutRate } from './core/commission/application/revise-payout-rate.ts';
 import { ListNotifications } from './core/notification/application/list-notifications.ts';
 import type { NotificationChannel } from './core/notification/application/notification-channel.ts';
 import type { NotificationRepository } from './core/notification/application/notification-repository.ts';
@@ -32,46 +35,32 @@ import { RegisterProposal } from './core/proposal/application/register-proposal.
 import { RejectProposal } from './core/proposal/application/reject-proposal.ts';
 import { ReviseReceipt } from './core/proposal/application/revise-receipt.ts';
 import { ReviseWorkedCommission } from './core/proposal/application/revise-worked-commission.ts';
+import type { SourceDocumentStorage } from './core/proposal/application/source-document-storage.ts';
 import { ListReconciliationPendencies } from './core/reconciliation/application/list-reconciliation-pendencies.ts';
 import { ReconcileCommissionReport } from './core/reconciliation/application/reconcile-commission-report.ts';
 import type { ReconciliationPendencyRepository } from './core/reconciliation/application/reconciliation-pendency-repository.ts';
 import { ListReferences } from './core/registry/application/list-references.ts';
 import type { ReferenceRepository } from './core/registry/application/reference-repository.ts';
 import { RegisterReference } from './core/registry/application/register-reference.ts';
-import type { DocumentStorage } from './core/settlement/application/document-storage.ts';
-import { GetSettlementPaymentProof } from './core/settlement/application/get-settlement-payment-proof.ts';
-import { GetSettlement } from './core/settlement/application/get-settlement.ts';
-import { ListBrokerStatement } from './core/settlement/application/list-broker-statement.ts';
-import { ListPaymentMethodReleaseRules } from './core/settlement/application/list-payment-method-release-rules.ts';
-import { OpenSettlement } from './core/settlement/application/open-settlement.ts';
-import type { PaymentMethodReleaseRuleRepository } from './core/settlement/application/payment-method-release-rule-repository.ts';
-import { RegisterPaymentMethodReleaseRule } from './core/settlement/application/register-payment-method-release-rule.ts';
-import { RegisterSettlementPayment } from './core/settlement/application/register-settlement-payment.ts';
-import { ReleaseSettlement } from './core/settlement/application/release-settlement.ts';
-import type { SettlementRepository } from './core/settlement/application/settlement-repository.ts';
 import { ProposalPdfReader, identifyByText } from './infrastructure/pdf/proposal-pdf-reader.ts';
 import { ImmediateTransaction } from './infrastructure/persistence/in-memory/immediate-transaction.ts';
-import { InMemoryBrokerCommissionRateRepository } from './infrastructure/persistence/in-memory/in-memory-broker-commission-rate-repository.ts';
 import { InMemoryCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
 import { InMemoryDocumentStorage } from './infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryNotificationRepository } from './infrastructure/persistence/in-memory/in-memory-notification-repository.ts';
-import { InMemoryPaymentMethodReleaseRuleRepository } from './infrastructure/persistence/in-memory/in-memory-payment-method-release-rule-repository.ts';
+import { InMemoryPayoutCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-payout-commission-repository.ts';
 import { InMemoryPolicyRepository } from './infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from './infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { InMemoryReconciliationPendencyRepository } from './infrastructure/persistence/in-memory/in-memory-reconciliation-pendency-repository.ts';
 import { InMemoryReferenceRepository } from './infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
-import { InMemorySettlementRepository } from './infrastructure/persistence/in-memory/in-memory-settlement-repository.ts';
-import { SqliteBrokerCommissionRateRepository } from './infrastructure/persistence/sqlite/sqlite-broker-commission-rate-repository.ts';
 import { SqliteCommissionRepository } from './infrastructure/persistence/sqlite/sqlite-commission-repository.ts';
 import { openSqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.ts';
 import { SqliteDocumentStorage } from './infrastructure/persistence/sqlite/sqlite-document-storage.ts';
 import { SqliteNotificationRepository } from './infrastructure/persistence/sqlite/sqlite-notification-repository.ts';
-import { SqlitePaymentMethodReleaseRuleRepository } from './infrastructure/persistence/sqlite/sqlite-payment-method-release-rule-repository.ts';
+import { SqlitePayoutCommissionRepository } from './infrastructure/persistence/sqlite/sqlite-payout-commission-repository.ts';
 import { SqlitePolicyRepository } from './infrastructure/persistence/sqlite/sqlite-policy-repository.ts';
 import { SqliteProposalRepository } from './infrastructure/persistence/sqlite/sqlite-proposal-repository.ts';
 import { SqliteReconciliationPendencyRepository } from './infrastructure/persistence/sqlite/sqlite-reconciliation-pendency-repository.ts';
 import { SqliteReferenceRepository } from './infrastructure/persistence/sqlite/sqlite-reference-repository.ts';
-import { SqliteSettlementRepository } from './infrastructure/persistence/sqlite/sqlite-settlement-repository.ts';
 import { SqliteTransaction } from './infrastructure/persistence/sqlite/sqlite-transaction.ts';
 
 /**
@@ -98,26 +87,22 @@ export interface UseCases {
   readonly getPolicyByProposal: GetPolicyByProposal;
   readonly listPolicies: ListPolicies;
   readonly payInstallment: PayInstallment;
-  readonly registerBrokerCommissionRate: RegisterBrokerCommissionRate;
-  readonly listBrokerCommissionRates: ListBrokerCommissionRates;
   readonly getCommission: GetCommission;
-  readonly calculatePolicyCommission: CalculatePolicyCommission;
   readonly listCommissions: ListCommissions;
   readonly overrideCommission: OverrideCommission;
   readonly resolveCommissionDivergence: ResolveCommissionDivergence;
+  /** FP-02 (V2 section 9A): the CR, its calculation and the eligibility. */
+  readonly getPolicyPayout: GetPolicyPayout;
+  readonly informPayoutRate: InformPayoutRate;
+  readonly revisePayoutRate: RevisePayoutRate;
+  readonly declarePayoutEligibility: DeclarePayoutEligibility;
+  readonly listEligiblePayouts: ListEligiblePayouts;
+  readonly listPoliciesWithoutPayoutRate: ListPoliciesWithoutPayoutRate;
   readonly reconcileCommissionReport: ReconcileCommissionReport;
   readonly listReconciliationPendencies: ListReconciliationPendencies;
-  readonly registerPaymentMethodReleaseRule: RegisterPaymentMethodReleaseRule;
-  readonly listPaymentMethodReleaseRules: ListPaymentMethodReleaseRules;
   readonly registerReference: RegisterReference;
   readonly listReferences: ListReferences;
   readonly listNotifications: ListNotifications;
-  readonly openSettlement: OpenSettlement;
-  readonly releaseSettlement: ReleaseSettlement;
-  readonly registerSettlementPayment: RegisterSettlementPayment;
-  readonly getSettlement: GetSettlement;
-  readonly getSettlementPaymentProof: GetSettlementPaymentProof;
-  readonly listBrokerStatement: ListBrokerStatement;
 }
 
 export interface Application {
@@ -136,11 +121,9 @@ export function composeApplication(config: Config): Application {
     proposals,
     policies,
     commissions,
-    brokerRates,
+    payouts,
     pendencies,
-    releaseRules,
     references,
-    settlements,
     documents,
     notifications,
     transaction,
@@ -154,7 +137,6 @@ export function composeApplication(config: Config): Application {
   const agreedCommission = new CalculateAgreedCommission({
     proposals,
     commissions,
-    brokerRates,
     newId,
   });
 
@@ -178,7 +160,7 @@ export function composeApplication(config: Config): Application {
 
   return {
     useCases: {
-      // REQ-219: the same document store the settlement proof uses.
+      // REQ-219: the imported PDF is kept with the proposal.
       registerProposal: new RegisterProposal({ proposals, documents, newId, now }),
       reviseWorkedCommission: new ReviseWorkedCommission({ proposals, now }),
       reviseReceipt: new ReviseReceipt({ proposals, now }),
@@ -202,23 +184,26 @@ export function composeApplication(config: Config): Application {
       getPolicyByProposal: new GetPolicyByProposal({ proposals, policies }),
       listPolicies: new ListPolicies({ policies, proposals, references }),
       payInstallment: new PayInstallment({ proposals, policies, now }),
-      registerBrokerCommissionRate: new RegisterBrokerCommissionRate({ brokerRates, now }),
-      // IN-05 read back: the broker table the calculation uses is data, and an
-      // administrator has to be able to see it.
-      listBrokerCommissionRates: new ListBrokerCommissionRates({ brokerRates }),
       getCommission: new GetCommission({ commissions }),
-      // FP-01 step 7 reached by hand: a policy registered before the
-      // registries existed has no other way back to a commission.
-      calculatePolicyCommission: new CalculatePolicyCommission({
-        policies,
-        proposals,
-        commissions,
-        brokerRates,
-        agreedCommission,
-      }),
       listCommissions: new ListCommissions({ commissions, policies, proposals, references }),
       overrideCommission: new OverrideCommission({ commissions, now }),
       resolveCommissionDivergence: new ResolveCommissionDivergence({ commissions, now }),
+      getPolicyPayout: new GetPolicyPayout({ policies, proposals, payouts }),
+      informPayoutRate: new InformPayoutRate({ policies, proposals, payouts, newId, now }),
+      revisePayoutRate: new RevisePayoutRate({ policies, proposals, payouts, newId, now }),
+      declarePayoutEligibility: new DeclarePayoutEligibility({
+        policies,
+        proposals,
+        payouts,
+        newId,
+        now,
+      }),
+      listEligiblePayouts: new ListEligiblePayouts({ policies, payouts }),
+      listPoliciesWithoutPayoutRate: new ListPoliciesWithoutPayoutRate({
+        policies,
+        proposals,
+        payouts,
+      }),
       reconcileCommissionReport: new ReconcileCommissionReport({
         proposals,
         policies,
@@ -229,43 +214,11 @@ export function composeApplication(config: Config): Application {
         now,
       }),
       listReconciliationPendencies: new ListReconciliationPendencies({ pendencies }),
-      registerPaymentMethodReleaseRule: new RegisterPaymentMethodReleaseRule({
-        releaseRules,
-        now,
-      }),
-      listPaymentMethodReleaseRules: new ListPaymentMethodReleaseRules({ releaseRules }),
       // IN-01: the reference records every listing above resolves names from.
       registerReference: new RegisterReference({ references, now }),
       listReferences: new ListReferences({ references }),
       // OUT-10, REQ-105: what was notified, to whom and when.
       listNotifications: new ListNotifications({ notifications }),
-      openSettlement: new OpenSettlement({
-        proposals,
-        policies,
-        commissions,
-        releaseRules,
-        settlements,
-        newId,
-        now,
-      }),
-      releaseSettlement: new ReleaseSettlement({ policies, settlements, now }),
-      // REQ-095, CA-028: the payment carries an attached document, so the use
-      // case needs somewhere to put it and an id to put it under.
-      registerSettlementPayment: new RegisterSettlementPayment({
-        settlements,
-        documents,
-        newId,
-        now,
-      }),
-      getSettlement: new GetSettlement({ settlements }),
-      getSettlementPaymentProof: new GetSettlementPaymentProof({ settlements, documents }),
-      listBrokerStatement: new ListBrokerStatement({
-        commissions,
-        policies,
-        proposals,
-        settlements,
-        references,
-      }),
     },
     shutdown,
   };
@@ -275,12 +228,10 @@ interface Persistence {
   readonly proposals: ProposalRepository;
   readonly policies: PolicyRepository;
   readonly commissions: CommissionRepository;
-  readonly brokerRates: BrokerCommissionRateRepository;
+  readonly payouts: PayoutCommissionRepository;
   readonly pendencies: ReconciliationPendencyRepository;
-  readonly releaseRules: PaymentMethodReleaseRuleRepository;
   readonly references: ReferenceRepository;
-  readonly settlements: SettlementRepository;
-  readonly documents: DocumentStorage;
+  readonly documents: SourceDocumentStorage;
   readonly notifications: NotificationRepository;
   readonly transaction: Transaction;
   readonly shutdown: () => Promise<void>;
@@ -293,11 +244,9 @@ function composePersistence(config: Config): Persistence {
         proposals: new InMemoryProposalRepository(),
         policies: new InMemoryPolicyRepository(),
         commissions: new InMemoryCommissionRepository(),
-        brokerRates: new InMemoryBrokerCommissionRateRepository(),
+        payouts: new InMemoryPayoutCommissionRepository(),
         pendencies: new InMemoryReconciliationPendencyRepository(),
-        releaseRules: new InMemoryPaymentMethodReleaseRuleRepository(),
         references: new InMemoryReferenceRepository(),
-        settlements: new InMemorySettlementRepository(),
         documents: new InMemoryDocumentStorage(),
         notifications: new InMemoryNotificationRepository(),
         transaction: new ImmediateTransaction(),
@@ -310,11 +259,9 @@ function composePersistence(config: Config): Persistence {
         proposals: new SqliteProposalRepository(db),
         policies: new SqlitePolicyRepository(db),
         commissions: new SqliteCommissionRepository(db),
-        brokerRates: new SqliteBrokerCommissionRateRepository(db),
+        payouts: new SqlitePayoutCommissionRepository(db),
         pendencies: new SqliteReconciliationPendencyRepository(db),
-        releaseRules: new SqlitePaymentMethodReleaseRuleRepository(db),
         references: new SqliteReferenceRepository(db),
-        settlements: new SqliteSettlementRepository(db),
         documents: new SqliteDocumentStorage(db),
         notifications: new SqliteNotificationRepository(db),
         transaction: new SqliteTransaction(db),

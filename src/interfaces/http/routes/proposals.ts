@@ -7,7 +7,6 @@ import type {
 } from '../../../core/proposal/application/register-proposal.ts';
 import type { WorkedCommissionMode } from '../../../core/proposal/domain/worked-commission.ts';
 import { SIGNATURE_PROPERTIES, SIGNATURE_REQUIRED, authorOf } from '../author.ts';
-import { contentDisposition } from './settlements.ts';
 
 /**
  * Request shape validation (Fastify JSON Schema).
@@ -329,4 +328,17 @@ export function registerProposalRoutes(app: FastifyInstance, useCases: UseCases)
 
     return useCases.rejectProposal.execute({ proposalId: id, reason });
   });
+}
+
+/**
+ * `Content-Disposition` for a name the user chose, which may hold quotes,
+ * accents or anything else a file name can hold.
+ *
+ * RFC 6266: the plain `filename` carries an ASCII fallback for old clients,
+ * and `filename*` carries the real name percent-encoded as UTF-8.
+ */
+function contentDisposition(fileName: string): string {
+  const ascii = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
+
+  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
 }

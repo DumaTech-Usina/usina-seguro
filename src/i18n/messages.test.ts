@@ -3,7 +3,6 @@ import { COMMISSION_MESSAGES } from '../core/commission/domain/errors.ts';
 import { POLICY_MESSAGES } from '../core/policy/domain/errors.ts';
 import { PROPOSAL_MESSAGES } from '../core/proposal/domain/errors.ts';
 import { RECONCILIATION_MESSAGES } from '../core/reconciliation/domain/errors.ts';
-import { SETTLEMENT_MESSAGES } from '../core/settlement/domain/errors.ts';
 import { translate } from './messages.ts';
 
 describe('translate', () => {
@@ -33,7 +32,6 @@ describe('translate', () => {
       ...Object.values(POLICY_MESSAGES),
       ...Object.values(COMMISSION_MESSAGES),
       ...Object.values(RECONCILIATION_MESSAGES),
-      ...Object.values(SETTLEMENT_MESSAGES),
     ];
 
     for (const key of keys) {

@@ -58,12 +58,12 @@ const NAV = [
         href: '/app/reconciliations/',
         ready: true,
       },
-      // OUT-07.
+      // FP-02 of V2: policies without CR and eligible commissions.
       {
-        id: 'settlements',
+        id: 'payouts',
         label: 'Repasses',
-        icon: 'payments',
-        href: '/app/settlements/',
+        icon: 'volunteer_activism',
+        href: '/app/payouts/',
         ready: true,
       },
       // OUT-10 (REQ-100, REQ-102, REQ-105): what the broker was told when the

@@ -14,7 +14,7 @@ import { createHttpServer } from '../../src/interfaces/http/server.ts';
  * where it matters.
  *
  * Until this slice every screen identified a business by the identifier typed
- * on the proposal — `client-1`, `broker-1`, `auto`. REQ-096 asks a repasse
+ * on the proposal — `client-1`, `broker-1`, `auto`. REQ-096 asks a
  * document to identify it by the *name* of the client, the broker and the
  * ramo, and the checklist recorded the absence of those names as what blocked
  * it. This file walks the loop that closes it: register the names, see the
@@ -71,7 +71,6 @@ beforeAll(async () => {
 
   // Two businesses already sold, the way FP-01 leaves them, before anybody
   // maintains IN-01: this is the state the registry is introduced into.
-  await seedRegistries();
   await registeredPolicy({
     clientId: 'client-1',
     proposalNumber: 'PRP-A',
@@ -121,7 +120,6 @@ async function open(page: string, module: string, settled: string): Promise<void
 
 const openSettings = () => open('settings/index.html', '/app/settings/index.js', '.registry');
 const openPolicies = () => open('policies/index.html', '/app/policies/index.js', '#list');
-const openSettlements = () => open('settlements/index.html', '/app/settlements/index.js', '#list');
 
 function field(form: string, name: string): Untyped {
   const input = document.querySelector(`${form} [name="${name}"]`);
@@ -178,15 +176,6 @@ async function callApi(method: string, apiPath: string, body?: unknown): Promise
       : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
   });
   return response.status === 204 ? null : await response.json();
-}
-
-/** IN-02 and IN-05: without them the policy is registered with no commission. */
-async function seedRegistries(): Promise<void> {
-  await callApi('POST', '/broker-commission-rates', { brokerId: 'broker-1', rate: '50' });
-  await callApi('POST', '/payment-method-release-rules', {
-    paymentMethodId: 'credit',
-    release: 'IMMEDIATE',
-  });
 }
 
 async function registeredPolicy(options: {
@@ -295,21 +284,6 @@ describe('the reference registry (IN-01)', () => {
     expect(unnamed.textContent).toContain('cliente-sem-cadastro');
     expect(unnamed.textContent).toContain('Seguradora Norte');
     expect(rows('#list')).toHaveLength(2);
-  });
-
-  it('names the broker on the statement and in its own selector (OUT-07)', async () => {
-    await openSettlements();
-
-    expect(text('#list')).toContain('Corretora Alfa');
-    expect(text('#list')).toContain('Ana Lima');
-
-    const options = [...document.querySelectorAll('#broker option')].map(
-      (option: Untyped) => option.textContent,
-    );
-    // The selector is still built from the businesses that have commission,
-    // not from the registry — the registry only gave the option its name.
-    expect(options).toContain('Corretora Alfa');
-    expect(options).toContain('Todos os corretores');
   });
 
   it('offers the registered identifiers on the new-proposal form, without requiring them', async () => {

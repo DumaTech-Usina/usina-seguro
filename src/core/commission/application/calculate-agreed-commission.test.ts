@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryBrokerCommissionRateRepository } from '../../../infrastructure/persistence/in-memory/in-memory-broker-commission-rate-repository.ts';
 import { InMemoryCommissionRepository } from '../../../infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
@@ -7,7 +6,6 @@ import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal } from '../../proposal/domain/proposal.ts';
 import type { Receipt } from '../../proposal/domain/receipt.ts';
-import { BrokerCommissionRate } from '../domain/broker-commission-rate.ts';
 import { CalculateAgreedCommission } from './calculate-agreed-commission.ts';
 
 const REGISTERED_AT = new Date('2026-09-20T10:00:00.000Z');
@@ -15,17 +13,15 @@ const REGISTERED_AT = new Date('2026-09-20T10:00:00.000Z');
 function scenario() {
   const proposals = new InMemoryProposalRepository();
   const commissions = new InMemoryCommissionRepository();
-  const brokerRates = new InMemoryBrokerCommissionRateRepository();
   let sequence = 0;
 
   const useCase = new CalculateAgreedCommission({
     proposals,
     commissions,
-    brokerRates,
     newId: () => `commission-${++sequence}`,
   });
 
-  return { proposals, commissions, brokerRates, useCase };
+  return { proposals, commissions, useCase };
 }
 
 async function acceptedProposal(
@@ -55,19 +51,6 @@ async function acceptedProposal(
   );
 }
 
-async function brokerRate(
-  brokerRates: InMemoryBrokerCommissionRateRepository,
-  rate: string,
-): Promise<void> {
-  await brokerRates.save(
-    BrokerCommissionRate.register({
-      brokerId: 'broker-1',
-      rate: Percentage.fromString(rate),
-      registeredAt: REGISTERED_AT,
-    }),
-  );
-}
-
 const request = {
   policyId: 'policy-1',
   proposalId: 'proposal-1',
@@ -75,58 +58,32 @@ const request = {
 };
 
 describe('CalculateAgreedCommission', () => {
-  it('records the agreed pair from the CT of the proposal (REQ-236, REQ-230)', async () => {
-    const { proposals, commissions, brokerRates, useCase } = scenario();
+  it('records the agreed value from the CT of the proposal (REQ-236, REQ-230)', async () => {
+    const { proposals, commissions, useCase } = scenario();
     await acceptedProposal(proposals);
-    await brokerRate(brokerRates, '50');
 
     await useCase.calculateFor(request);
 
     const commission = await commissions.findByPolicyId('policy-1');
     expect(commission?.policyId).toBe('policy-1');
     expect(commission?.status).toBe('FORECAST');
-    // 100.00 x CT 40% to the Usina; the broker table on what the Usina receives.
+    // 100.00 x CT 40% to the Usina.
     expect(commission?.agreedReceivable.toString()).toBe('40.00');
-    expect(commission?.agreedPayable.toString()).toBe('20.00');
     expect(commission?.basis.insurerRate.toString()).toBe('40');
   });
 
   it('chains CT and CTU when the proposal declares an intermediary (REQ-236, REQ-231)', async () => {
-    const { proposals, commissions, brokerRates, useCase } = scenario();
+    const { proposals, commissions, useCase } = scenario();
     await acceptedProposal(proposals, {
       kind: 'INTERMEDIARY',
       intermediaryId: 'mega',
       ctu: Percentage.fromString('50'),
     });
-    await brokerRate(brokerRates, '50');
 
     await useCase.calculateFor(request);
 
     const commission = await commissions.findByPolicyId('policy-1');
     expect(commission?.basis.intermediaryId).toBe('mega');
     expect(commission?.agreedReceivable.toString()).toBe('20.00');
-    expect(commission?.agreedPayable.toString()).toBe('10.00');
-  });
-
-  it('copies the broker rate, so a later table cannot change it (REJ-011)', async () => {
-    const { proposals, commissions, brokerRates, useCase } = scenario();
-    await acceptedProposal(proposals);
-    await brokerRate(brokerRates, '50');
-
-    await useCase.calculateFor(request);
-    await brokerRate(brokerRates, '10');
-
-    const commission = await commissions.findByPolicyId('policy-1');
-    expect(commission?.basis.brokerRate.toString()).toBe('50');
-    expect(commission?.agreedPayable.toString()).toBe('20.00');
-  });
-
-  it('calculates nothing when the broker has no commission table (IN-05)', async () => {
-    const { proposals, commissions, useCase } = scenario();
-    await acceptedProposal(proposals);
-
-    await useCase.calculateFor(request);
-
-    expect(await commissions.findByPolicyId('policy-1')).toBeNull();
   });
 });

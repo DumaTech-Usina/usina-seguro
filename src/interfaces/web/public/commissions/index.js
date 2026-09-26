@@ -113,10 +113,7 @@ function row(commission) {
   );
   line.append(real);
 
-  line.append(
-    element('td', 'is-numeric', formatMoney(commission.effectivePayable)),
-    element('td', undefined, commission.reconciledCompetence ?? '—'),
-  );
+  line.append(element('td', undefined, commission.reconciledCompetence ?? '—'));
 
   const status = element('td');
   status.append(statusChip('commission', commission.status));
@@ -145,7 +142,6 @@ function table(commissions) {
     ['Apólice', ''],
     ['Acordado a receber', 'is-numeric'],
     ['Real a receber', 'is-numeric'],
-    ['A pagar ao corretor', 'is-numeric'],
     ['Competência', ''],
     ['Situação', ''],
     ['', 'is-action'],

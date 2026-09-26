@@ -126,15 +126,6 @@ export class Policy {
   }
 
   /**
-   * REQ-091: the transfer for a payment method that requires confirmation is
-   * released against the **first** installment, so the schedule has to answer
-   * about it specifically.
-   */
-  get isFirstInstallmentPaid(): boolean {
-    return this.installments.some((installment) => installment.number === 1 && installment.isPaid);
-  }
-
-  /**
    * IN-13: records that the client paid one installment of the schedule, with
    * the user and the moment REQ-123 requires.
    *

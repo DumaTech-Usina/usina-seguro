@@ -92,8 +92,7 @@ export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): 
     return useCases.getPolicyByProposal.execute(id);
   });
 
-  // IN-13, REQ-092, FP-03 step 3: a user confirms the client paid. REQ-091
-  // makes the first installment the condition that releases the transfer.
+  // IN-13: a user confirms the client paid an installment.
   app.post(
     '/policies/:id/installments/:number/payment',
     { schema: payInstallmentSchema },

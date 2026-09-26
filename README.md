@@ -6,21 +6,19 @@ Fonte de verdade dos requisitos: [`requisitos_refinados.md`](./requisitos_refina
 Identificadores `REQ-xxx`, `CA-xxx`, `ITP-xxx` e `DEC-xxx` no código referenciam esse
 documento.
 
-> **Estado atual: `Proposta → Apólice → Parcela → Comissão → Conciliação → Repasse`,
-> com `Notificação` fechando o passo 7 de `FP-01`.**
+> **Estado atual: `Proposta → Apólice → CR → Comissão elegível` (FP-01 e FP-02 da V2),
+> com a conciliação e a notificação da V1.**
 > `FP-01` vai do registro da proposta (`REQ-040`), passa pela emissão devolvida pela
 > seguradora (`REQ-041`) e pelo rastreio das propostas em
 > aberto (`REQ-043`, `OUT-01`, passo 5) e chega, no momento em que a apólice nasce, ao
 > cálculo da comissão acordada e à **notificação do corretor** (`REQ-048`, `REQ-075`,
 > `REQ-100`, passo 7). `FP-02` concilia o relatório de comissionamento contra as
-> apólices (`REQ-082`, `REQ-083`, `REQ-086`) e `FP-03` conduz o repasse ao corretor até
-> o registro do pagamento (`REQ-090`–`REQ-095`).
+> apólices (`REQ-082`, `REQ-083`, `REQ-086`). O `FP-02` da V2 vai da CR informada na
+> apólice à comissão elegível e ao extrato de elegibilidade (`REQ-270`–`REQ-286`); o
+> sistema não paga nem movimenta dinheiro (`REQ-280`).
 >
 > O controle das apólices vendidas e das que estão a vencer (`REQ-055`, `OUT-03`,
 > `OUT-04`) é lido da mesma base.
->
-> O comprovante do repasse é um **anexo real** (`REQ-095`, `CA-028`): o documento é
-> enviado no registro do pagamento, guardado e servido de volta byte a byte.
 >
 > **Fora**: cotação, **geração** da renovação (`REQ-056`), endosso, sinistro e
 > cancelamento de apólice. A entrega da notificação é interna (`REQ-102`): o contrato de
@@ -183,28 +181,17 @@ curl -X POST http://127.0.0.1:3000/commission-agreements \
 # Cadeia com intermediária (REQ-063/REQ-064): base do corretor configurável.
 #   "intermediary":{"intermediaryId":"mega","intermediaryRate":"80","brokerBase":"INTERMEDIARY"}
 
-# Tabela do corretor (IN-05): metade do que a Usina recebeu.
-curl -X POST http://127.0.0.1:3000/broker-commission-rates \
-  -H 'content-type: application/json' -d '{"brokerId":"broker-1","rate":"50"}'
-
-# Regra de liberação por forma de pagamento (REQ-090, REQ-091).
-curl -X POST http://127.0.0.1:3000/payment-method-release-rules \
-  -H 'content-type: application/json' \
-  -d '{"paymentMethodId":"bank-slip","release":"REQUIRES_RECEIPT_CONFIRMATION"}'
-
 # Cada cadastro é lido de volta pela mesma forma com que foi gravado. É o que
 # torna REQ-061/REQ-125 utilizáveis: um parâmetro que ninguém consegue conferir
 # só aparece errado na comissão que ele já produziu.
 curl http://127.0.0.1:3000/commission-agreements
-curl http://127.0.0.1:3000/broker-commission-rates
-curl http://127.0.0.1:3000/payment-method-release-rules
 # Registrar a mesma chave de novo substitui o registro; no acordo comercial a
 # chave inclui a vigência, então uma nova vigência é um novo registro e a
 # anterior continua listada (REQ-065, REQ-124, CA-012).
 
 # 1. A comissão acordada nasce junto com a apólice (FP-01 passo 7): nada a chamar.
 curl http://127.0.0.1:3000/policies/<apolice>/commission
-# {"status":"FORECAST","agreedReceivable":"480.00","agreedPayable":"240.00",
+# {"status":"FORECAST","agreedReceivable":"480.00",
 #  "realReceivable":null,"divergent":false,...}
 
 # 2. Conciliação do relatório (FP-02). O arquivo em si é DEC-001: aqui entram
@@ -223,44 +210,22 @@ curl http://127.0.0.1:3000/commission-reconciliations/pendencies   # OUT-06
 curl http://127.0.0.1:3000/commissions
 curl 'http://127.0.0.1:3000/commissions?status=DIVERGENT'
 
-# 3. Repasse (FP-03). Em boleto nasce retido (CA-023).
-curl -X POST http://127.0.0.1:3000/policies/<apolice>/settlement
-# 201 {"status":"AWAITING_CONFIRMATION","amount":"240.00","brokerId":"broker-1"}
+# 3. CR da apólice (FP-02 da V2, REQ-270–REQ-279). A base é o valor da Usina.
+curl http://127.0.0.1:3000/policies/<apolice>/payout
+# {"situation":"WITHOUT_CR","usinaValue":"480.00","commission":null,...}
+curl -X POST http://127.0.0.1:3000/policies/<apolice>/payout \
+  -H 'content-type: application/json' -d '{"rate":"60","userId":"ana"}'
+# 201 {"situation":"CALCULATED","commission":{"payout":"288.00","retained":"192.00",...}}
+curl -X POST http://127.0.0.1:3000/policies/<apolice>/payout/revision \
+  -H 'content-type: application/json' -d '{"rate":"50","reason":"renegociado","userId":"bruno"}'
 
-#    O extrato de comissão por corretor (OUT-07): previsto, retido, liberado e
-#    pago, com os totais somados em centavos exatos. Sem corretor, todos eles.
-curl 'http://127.0.0.1:3000/broker-commission-statements?brokerId=broker-1'
-# {"brokerId":"broker-1","lines":[...],
-#  "totals":{"payable":"240.00","awaitingConfirmation":"240.00","released":"0.00","paid":"0.00"}}
+# 4. Elegibilidade assinada (REQ-281–REQ-283): gera o extrato de elegibilidade.
+curl -X POST http://127.0.0.1:3000/policies/<apolice>/payout/eligibility \
+  -H 'content-type: application/json' -d '{"userId":"carla"}'
 
-# 4. Confirmação manual do pagamento da 1ª parcela pelo cliente (IN-13, REQ-092).
-#    REQ-123 exige registrar quem confirmou: a confirmação é o que libera o repasse.
-curl -X POST http://127.0.0.1:3000/policies/<apolice>/installments/1/payment \
-  -H 'content-type: application/json' -d '{"userId":"financeiro-1"}'
-
-curl -X POST http://127.0.0.1:3000/policies/<apolice>/settlement/release
-# 200 {"status":"RELEASED",...}
-
-# 5. Registro do pagamento enviado ao corretor, com o comprovante **anexo**
-#    (REQ-095, CA-028, IN-15). O documento viaja base64 no corpo JSON — é o
-#    transporte que o resto da API já usa, sem parser multipart e sem build —
-#    e o servidor o devolve a bytes na sua própria fronteira.
-curl -X POST http://127.0.0.1:3000/policies/<apolice>/settlement/payment \
-  -H 'content-type: application/json' -d "{
-    \"amount\": \"240.00\", \"userId\": \"financeiro-1\",
-    \"proof\": {
-      \"fileName\": \"comprovante.pdf\", \"contentType\": \"application/pdf\",
-      \"content\": \"$(base64 -i comprovante.pdf | tr -d '\n')\"
-    }
-  }"
-# 200 {"status":"PAID","payment":{"amount":"240.00","userId":"financeiro-1",
-#      "proof":{"fileName":"comprovante.pdf","contentType":"application/pdf",
-#               "byteSize":18342},...}}
-
-#    E o comprovante de volta, como arquivo. É a única rota da API que não
-#    responde JSON, e vai com `attachment` + `nosniff`: um anexo enviado como
-#    HTML ou SVG nunca é executado como página desta aplicação.
-curl -OJ http://127.0.0.1:3000/policies/<apolice>/settlement/payment/proof
+# 5. Consultas (REQ-284, REQ-286).
+curl 'http://127.0.0.1:3000/payouts/eligible?broker=alfa&renewalFrom=2027-01&renewalUntil=2027-12'
+curl http://127.0.0.1:3000/payouts/policies-without-rate
 ```
 
 Rejeições, com a regra e o texto traduzido na resposta:
@@ -277,9 +242,8 @@ Rejeições, com a regra e o texto traduzido na resposta:
 # Apólice a partir de proposta recusada (CA-006)
 # 422 {"rule":"REQ-047","message":"Proposta recusada não origina apólice."}
 
-# Liberar repasse de boleto sem confirmação (REJ-009, EX-07)
-# 422 {"rule":"REQ-091",
-#      "message":"Repasse exige confirmação do pagamento da primeira parcela pelo cliente."}
+# Elegibilidade de apólice sem CR (EX-205)
+# 422 {"rule":"REQ-273","message":"A apólice ainda não tem CR informada."}
 
 # Ajuste de comissão sem justificativa (CA-015, REJ-010)
 # 422 {"rule":"REQ-067","message":"Ajuste de comissão por apólice exige justificativa."}
@@ -315,11 +279,11 @@ O que existe hoje:
 | Nova proposta e emissão pela seguradora (`FP-01` passos 3 e 4) | `/app/proposals/new.html` | Pronta |
 | Propostas, por estado (`OUT-01`, `OUT-02`, passo 5) | `/app/proposals/` | Pronta |
 | Proposta: dados, emissão e desfecho — aceite vira apólice, recusa exige motivo (passo 6) | `/app/proposals/detail.html?id=…` | Pronta |
-| Apólice: parcelas, comissão acordada × real, repasse | `/app/policies/detail.html?id=…` | Pronta — o pagamento do repasse leva o comprovante como anexo (`REQ-095`) |
+| Apólice: parcelas, comissão acordada × real, CR e elegibilidade (`FP-02`) | `/app/policies/detail.html?id=…` | Pronta |
 | Conciliação do comissionamento (`FP-02`, `OUT-06`) | `/app/reconciliations/` | Pronta — as linhas são digitadas; o arquivo é `DEC-001` |
 | Comissões: acordado × real de todas as apólices (`OUT-05`) | `/app/commissions/` | Pronta |
-| Repasses: extrato de comissão por corretor (`OUT-07`) | `/app/settlements/` | Pronta — sem relatório do período nem recibo (`DEC-008`) |
-| Cadastros (`IN-01`..`IN-06`) | `/app/settings/` | Pronta — grava e lista cada cadastro, inclusive as referências de `IN-01` (cobertura fora) |
+| Repasses: apólices sem CR e comissões elegíveis (`REQ-284`, `REQ-286`) | `/app/payouts/` | Pronta — o pagamento acontece fora do sistema (`REQ-280`) |
+| Cadastros de referência (`IN-01`) | `/app/settings/` | Pronta (cobertura fora) |
 | Apólices: vendidas e a vencer (`OUT-03`, `OUT-04`) | `/app/policies/` | Pronta — o corte por data de renovação é informado pelo operador (`CA-032` não define a janela) |
 | Notificações de emissão efetivada (`OUT-10`, `REQ-100`) | `/app/notifications/` | Pronta — só leitura; a entrega é interna (`REQ-102`) |
 

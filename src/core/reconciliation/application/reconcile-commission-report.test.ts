@@ -24,9 +24,6 @@ const BASIS: CommissionBasis = {
   insurerAmount: Money.fromString('40.00'),
   intermediaryId: null,
   intermediaryRate: null,
-  brokerBase: 'USINA',
-  brokerBaseAmount: Money.fromString('40.00'),
-  brokerRate: Percentage.fromString('50'),
 };
 
 function scenario() {
@@ -105,7 +102,6 @@ async function registeredPolicy(
       policyId: 'policy-1',
       basis: BASIS,
       agreedReceivable: Money.fromString('40.00'),
-      agreedPayable: Money.fromString('20.00'),
       calculatedAt: new Date('2026-09-20T10:00:00.000Z'),
     }),
   );

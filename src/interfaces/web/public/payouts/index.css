@@ -1,0 +1,12 @@
+/* Only what this page adds to the design system. */
+
+.policy-number {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+/* The eligible list is wide: it scrolls inside the card, never the page. */
+#eligible,
+#without-rate {
+  overflow-x: auto;
+}

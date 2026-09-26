@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Repasses — Usina do Seguro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/app/shared/base.css" />
+    <link rel="stylesheet" href="/app/payouts/index.css" />
+  </head>
+  <body class="shell" data-nav="payouts">
+    <main class="content">
+      <div class="content__inner">
+        <div class="page-head">
+          <div class="page-head__text">
+            <h1 class="text-display">Repasses</h1>
+            <p class="text-muted">
+              FP-02: as apólices que ainda precisam de uma CR e as comissões já elegíveis.
+              O sistema não paga nem movimenta dinheiro: a elegibilidade gera o extrato que
+              o financeiro usa.
+            </p>
+          </div>
+        </div>
+
+        <!-- REQ-286: só as apólices que podem receber CR hoje; CT parcelada fica fora. -->
+        <section class="card">
+          <div class="card__header">
+            <span class="material-symbols-outlined">pending_actions</span>
+            <h2 class="text-title">Apólices sem CR</h2>
+            <div class="card__header-actions" id="without-summary"></div>
+          </div>
+          <div class="card__body card__body--flush" id="without-rate">
+            <div class="card__body stack">
+              <div class="skeleton" style="width: 40%"></div>
+              <div class="skeleton" style="width: 70%"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- REQ-284: somente leitura, com os filtros confirmados. -->
+        <section class="card">
+          <div class="card__header">
+            <span class="material-symbols-outlined">verified</span>
+            <h2 class="text-title">Comissões elegíveis</h2>
+            <div class="card__header-actions" id="eligible-summary"></div>
+          </div>
+          <form id="eligible-filters">
+            <div class="card__body stack">
+              <p class="text-muted">
+                Número, corretor e cliente casam por trecho, sem diferenciar maiúsculas. Os
+                períodos incluem as duas pontas.
+              </p>
+              <div class="form-grid form-grid--three">
+                <div class="field">
+                  <input class="field__input" name="policyNumber" placeholder=" " />
+                  <label class="field__label">Número da apólice</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="broker" placeholder=" " />
+                  <label class="field__label">Corretor</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="client" placeholder=" " />
+                  <label class="field__label">Cliente</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="eligibleFrom" type="date" placeholder=" " />
+                  <label class="field__label">Elegível de</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="eligibleUntil" type="date" placeholder=" " />
+                  <label class="field__label">Elegível até</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="renewalFrom" type="month" placeholder=" " />
+                  <label class="field__label">Renovação de (mês/ano)</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="renewalUntil" type="month" placeholder=" " />
+                  <label class="field__label">Renovação até (mês/ano)</label>
+                </div>
+              </div>
+            </div>
+            <div class="card__footer">
+              <button class="btn btn--outlined" id="clear-filters" type="button">Limpar</button>
+              <button class="btn btn--filled" type="submit">Filtrar</button>
+            </div>
+          </form>
+          <div class="card__body card__body--flush" id="eligible">
+            <div class="card__body stack">
+              <div class="skeleton" style="width: 40%"></div>
+              <div class="skeleton" style="width: 70%"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <script type="module" src="/app/shared/shell.js"></script>
+    <script type="module" src="/app/payouts/index.js"></script>
+  </body>
+</html>

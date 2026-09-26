@@ -22,9 +22,6 @@ function basis(premium: string) {
     insurerAmount: Money.fromString('40.00'),
     intermediaryId: null,
     intermediaryRate: null,
-    brokerBase: 'USINA' as const,
-    brokerBaseAmount: Money.fromString('40.00'),
-    brokerRate: Percentage.fromString('50'),
   };
 }
 
@@ -94,7 +91,6 @@ async function business(
     policyId: `policy-${suffix}`,
     basis: basis('100.00'),
     agreedReceivable: Money.fromString('40.00'),
-    agreedPayable: Money.fromString('20.00'),
     calculatedAt: new Date(calculatedAt),
   });
 
@@ -145,7 +141,6 @@ describe('ListCommissions', () => {
     const [divergent, reconciled, forecast] = panel;
     expect(divergent?.effectiveReceivable).toBe('40.00');
     expect(divergent?.realReceivable).toBe('31.00');
-    expect(divergent?.effectivePayable).toBe('20.00');
     expect(divergent?.reconciledCompetence).toBe('2026-10');
     expect(reconciled?.realReceivable).toBe('40.00');
     // REQ-075: nothing was apurado for this one yet.
@@ -224,7 +219,6 @@ describe('ListCommissions', () => {
         policyId: 'policy-gone',
         basis: basis('100.00'),
         agreedReceivable: Money.fromString('40.00'),
-        agreedPayable: Money.fromString('20.00'),
         calculatedAt: new Date('2026-09-18T12:00:00.000Z'),
       }),
     );

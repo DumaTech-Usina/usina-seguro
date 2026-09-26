@@ -1,21 +1,12 @@
 /**
- * The registries the Administrator maintains: references (IN-01), the broker
- * table (IN-05) and the release rule per payment method (IN-06).
+ * The registry the Administrator maintains: references (IN-01).
  *
- * There is no commercial agreement here any more: the Usina side of a
- * commission comes from the CT (and CTU) informed on each proposal (REQ-236).
+ * No rate is registered here: the Usina side of a commission comes from the
+ * CT (and CTU) informed on each proposal (REQ-236), and the broker's part is
+ * the CR informed on each policy (REQ-270).
  *
- * These are parameters the calculation reads. They are
- * data rather than code so they change without a deploy, which is why no
- * payment method and no rate is ever named here either: the form takes
- * whatever identifier the business uses.
- *
- * Each card writes and reads back the same registry. Reading it back is what
- * makes REQ-061 and REQ-125 usable: a parameter nobody can inspect is only
- * half of "configurável sem deploy" — a wrong percentage would be visible only
- * in the commission it had already produced, and a missing release rule only
- * in the repasse it refused.
- *
+ * The card writes and reads back the same registry, so what was registered is
+ * visible right below the form.
  */
 
 import { ApiError, api } from '/app/shared/api.js';
@@ -217,84 +208,6 @@ wire(
   () => references.load(),
 );
 
-/* -------------------------------------------------------- broker rate -- */
-
-const brokerRates = registry({
-  region: '#list-broker-rates',
-  title: 'Tabelas registradas',
-  read: () => api.listBrokerRates(),
-  headers: [
-    ['Corretor', ''],
-    ['% do corretor', 'is-numeric'],
-    ['Registrado em', ''],
-  ],
-  row: (rate) => {
-    const line = element('tr');
-    line.append(
-      element('td', 'registry-key', rate.brokerId),
-      element('td', 'is-numeric', formatPercentage(rate.rate)),
-      element('td', 'text-muted', formatInstant(rate.registeredAt)),
-    );
-    return line;
-  },
-  empty: {
-    icon: 'badge',
-    title: 'Nenhuma tabela registrada',
-    description: 'Sem tabela do corretor, a comissão a pagar do negócio dele não é calculada.',
-  },
-});
-
-wire(
-  '#form-broker-rate',
-  (input) => api.registerBrokerRate({ brokerId: input.brokerId, rate: input.rate }),
-  (rate) => `Tabela do corretor ${rate.brokerId} registrada em ${rate.rate}%.`,
-  () => brokerRates.load(),
-);
-
-/* ------------------------------------------------------- release rule -- */
-
-const releaseRules = registry({
-  region: '#list-release-rules',
-  title: 'Regras registradas',
-  read: () => api.listReleaseRules(),
-  headers: [
-    ['Forma de pagamento', ''],
-    ['Regra', ''],
-    ['Registrado em', ''],
-  ],
-  row: (rule) => {
-    const line = element('tr');
-    const regra = element('td');
-    regra.append(statusChip('releaseRule', rule.release));
-
-    line.append(
-      element('td', 'registry-key', rule.paymentMethodId),
-      regra,
-      element('td', 'text-muted', formatInstant(rule.registeredAt)),
-    );
-    return line;
-  },
-  empty: {
-    icon: 'rule',
-    title: 'Nenhuma regra registrada',
-    description:
-      'Uma forma de pagamento sem regra faz o repasse ser recusado — o sistema não adivinha a liberação.',
-  },
-});
-
-wire(
-  '#form-release-rule',
-  (input) =>
-    api.registerReleaseRule({
-      paymentMethodId: input.paymentMethodId,
-      release: input.release,
-    }),
-  (rule) => `Regra de ${rule.paymentMethodId} registrada.`,
-  () => releaseRules.load(),
-);
-
 /* --------------------------------------------------------------- load -- */
 
 references.load();
-brokerRates.load();
-releaseRules.load();

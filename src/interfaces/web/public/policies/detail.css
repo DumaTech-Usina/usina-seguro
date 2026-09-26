@@ -54,52 +54,23 @@
   }
 }
 
-/*
- * Campo de arquivo (REQ-095): o rótulo flutuante do design system depende de
- * `:placeholder-shown`, que um `input[type=file]` não tem. Aqui o rótulo fica
- * acima do campo, em posição fixa, em vez de sobrepô-lo.
- */
-.field--file .field__label--static {
-  position: static;
-  transform: none;
-  margin-bottom: var(--space-1);
-  font-size: 11px;
-  font-weight: 500;
-  pointer-events: auto;
-}
-
-.field--file .field__input {
-  height: auto;
-  padding: var(--space-3) var(--space-4);
-}
-
-/* REQ-095, CA-028: o comprovante anexado, aberto a partir do repasse. */
-.proof-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  color: var(--primary);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.proof-link .material-symbols-outlined {
-  font-size: 16px;
-}
-
-/*
- * Dois caminhos no mesmo estado vazio: calcular a comissão agora ou ir aos
- * cadastros antes. `.empty` empilha os filhos; aqui eles ficam lado a lado,
- * e quebram a linha em tela estreita.
- */
-.empty__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--space-3);
-}
-
 /* REQ-050: o número da proposta leva ao registro que originou a apólice. */
 .policy-head__origin {
   color: var(--primary);
+}
+
+/* REQ-279: o histórico da CR, que pode ser mais largo que o cartão. */
+.payout-history {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow-x: auto;
+}
+
+/* REQ-283: o extrato de elegibilidade, destacado do restante do cartão. */
+.payout-statement {
+  padding: var(--space-4) var(--space-5);
+  border-left: 3px solid var(--success);
+  background: var(--surface-variant);
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }

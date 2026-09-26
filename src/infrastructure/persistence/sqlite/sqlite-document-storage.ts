@@ -1,8 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 import type {
-  DocumentStorage,
-  StoredDocument,
-} from '../../../core/settlement/application/document-storage.ts';
+  SourceDocument,
+  SourceDocumentStorage,
+} from '../../../core/proposal/application/source-document-storage.ts';
 
 interface DocumentRow {
   id: string;
@@ -19,14 +19,14 @@ interface DocumentRow {
  * a copy, and there is no way for the row and the file to disagree. See
  * `SQLITE-NOTES.md` for where PostgreSQL differs (`bytea`).
  */
-export class SqliteDocumentStorage implements DocumentStorage {
+export class SqliteDocumentStorage implements SourceDocumentStorage {
   private readonly db: DatabaseSync;
 
   constructor(db: DatabaseSync) {
     this.db = db;
   }
 
-  async save(document: StoredDocument): Promise<void> {
+  async save(document: SourceDocument): Promise<void> {
     this.db
       .prepare(
         `INSERT INTO document (id, file_name, content_type, content)
@@ -39,7 +39,7 @@ export class SqliteDocumentStorage implements DocumentStorage {
       .run(document.id, document.fileName, document.contentType, document.content);
   }
 
-  async findById(id: string): Promise<StoredDocument | null> {
+  async findById(id: string): Promise<SourceDocument | null> {
     const row = this.db.prepare('SELECT * FROM document WHERE id = ?').get(id) as
       | DocumentRow
       | undefined;

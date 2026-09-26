@@ -123,7 +123,6 @@ describe('Policy.payInstallment', () => {
     const policy = scheduled().payInstallment(1, confirmation);
 
     expect(policy.installments[0]?.status).toBe('PAID');
-    expect(policy.isFirstInstallmentPaid).toBe(true);
   });
 
   it('carries the user and the moment of the confirmation (REQ-123)', () => {
@@ -137,14 +136,6 @@ describe('Policy.payInstallment', () => {
     const policy = scheduled().payInstallment(1, confirmation);
 
     expect(policy.installments[1]?.status).toBe('PENDING');
-  });
-
-  it('answers REQ-091 about the first installment specifically', () => {
-    const policy = scheduled();
-
-    expect(policy.isFirstInstallmentPaid).toBe(false);
-    // A later installment paid does not release the transfer of REQ-091.
-    expect(policy.payInstallment(2, confirmation).isFirstInstallmentPaid).toBe(false);
   });
 
   it('reports an installment that is not in the schedule', () => {

@@ -64,17 +64,15 @@ const RECONCILIATION = {
   NO_COMMISSION: { label: 'Sem comissão calculada', tone: 'info' },
 };
 
-const SETTLEMENT = {
-  AWAITING_CONFIRMATION: { label: 'Aguardando confirmação', tone: 'warning' },
-  RELEASED: { label: 'Liberado', tone: 'info' },
-  PAID: { label: 'Pago', tone: 'success' },
-  DIVERGENT: { label: 'Divergente', tone: 'danger' },
-  RESOLVED: { label: 'Resolvido', tone: 'info' },
-};
-
-const RELEASE_RULE = {
-  IMMEDIATE: { label: 'Liberação imediata', tone: 'success' },
-  REQUIRES_RECEIPT_CONFIRMATION: { label: 'Exige confirmação', tone: 'warning' },
+/**
+ * REQ-285: as três situações de uma apólice com CT integral quanto ao
+ * repasse. `CALCULATED` e `ELIGIBLE` são também os estados da comissão
+ * (REQ-276).
+ */
+const PAYOUT = {
+  WITHOUT_CR: { label: 'Sem CR', tone: 'warning' },
+  CALCULATED: { label: 'Calculada', tone: 'info' },
+  ELIGIBLE: { label: 'Elegível', tone: 'success' },
 };
 
 const MAPS = {
@@ -83,8 +81,7 @@ const MAPS = {
   installment: INSTALLMENT,
   commission: COMMISSION,
   reconciliation: RECONCILIATION,
-  settlement: SETTLEMENT,
-  releaseRule: RELEASE_RULE,
+  payout: PAYOUT,
 };
 
 /**

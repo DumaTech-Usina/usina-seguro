@@ -6,13 +6,11 @@ import type { ProposalRepository } from '../../proposal/application/proposal-rep
 import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { calculateCommission } from '../domain/commission-basis.ts';
 import { Commission } from '../domain/commission.ts';
-import type { BrokerCommissionRateRepository } from './broker-commission-rate-repository.ts';
 import type { CommissionRepository } from './commission-repository.ts';
 
 export interface CalculateAgreedCommissionDependencies {
   readonly proposals: ProposalRepository;
   readonly commissions: CommissionRepository;
-  readonly brokerRates: BrokerCommissionRateRepository;
   readonly newId: () => string;
 }
 
@@ -26,10 +24,6 @@ export interface CalculateAgreedCommissionDependencies {
  * REQ-236: the Usina side comes from the proposal — its CT, or CT then CTU
  * through the intermediary — never from a registered commercial agreement,
  * which no longer exists.
- *
- * **When the broker has no commission table (IN-05), nothing is calculated**
- * and the policy is registered all the same: no requirement makes the table a
- * precondition for registering a policy.
  */
 export class CalculateAgreedCommission implements AgreedCommissionCalculator {
   private readonly deps: CalculateAgreedCommissionDependencies;
@@ -45,13 +39,7 @@ export class CalculateAgreedCommission implements AgreedCommissionCalculator {
       throw new RecordNotFound(PROPOSAL_MESSAGES.NOT_FOUND, { id: request.proposalId });
     }
 
-    const brokerRate = await this.deps.brokerRates.findByBrokerId(proposal.brokerId);
-
-    if (brokerRate === null) {
-      return;
-    }
-
-    const calculated = calculateCommission(proposal, brokerRate);
+    const calculated = calculateCommission(proposal);
 
     await this.deps.commissions.save(
       Commission.forecast({
@@ -59,7 +47,6 @@ export class CalculateAgreedCommission implements AgreedCommissionCalculator {
         policyId: request.policyId,
         basis: calculated.basis,
         agreedReceivable: calculated.receivable,
-        agreedPayable: calculated.payable,
         calculatedAt: request.calculatedAt,
       }),
     );

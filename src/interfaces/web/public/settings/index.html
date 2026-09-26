@@ -24,7 +24,7 @@
           <div class="page-head__text">
             <h1 class="text-display">Cadastros</h1>
             <p class="text-muted">
-              Os parâmetros que o cálculo lê. São dados, não código: mudam sem deploy.
+              Os nomes de quem aparece na operação. São dados, não código: mudam sem deploy.
             </p>
           </div>
         </div>
@@ -32,10 +32,10 @@
         <div class="banner">
           <span class="material-symbols-outlined">info</span>
           <div class="banner__text">
-            Registrar novamente a mesma chave substitui o valor anterior; os cálculos já
-            feitos guardam os percentuais que usaram. O que a Usina recebe não é cadastrado
-            aqui: vem da comissão trabalhada (CT, e CTU com intermediária) informada em cada
-            proposta.
+            Registrar novamente a mesma chave substitui o valor anterior. Nenhum percentual
+            é cadastrado aqui: o que a Usina recebe vem da CT (e da CTU, com intermediária)
+            informada em cada proposta, e a parte do corretor é a CR informada em cada
+            apólice.
           </div>
         </div>
 
@@ -83,77 +83,6 @@
           <div class="registry" id="list-references"></div>
         </section>
 
-        <!-- Tabela do corretor (IN-05). -->
-        <section class="card">
-          <div class="card__header">
-            <span class="material-symbols-outlined">badge</span>
-            <h2 class="text-title">Tabela de comissão do corretor</h2>
-          </div>
-          <form id="form-broker-rate">
-            <div class="card__body">
-              <div class="form-grid">
-                <div class="field">
-                  <input class="field__input" name="brokerId" placeholder=" " required />
-                  <label class="field__label">Corretor</label>
-                </div>
-                <div class="field">
-                  <input
-                    class="field__input"
-                    name="rate"
-                    placeholder=" "
-                    inputmode="decimal"
-                    pattern="\d+(\.\d+)?"
-                    required
-                  />
-                  <label class="field__label">% do corretor</label>
-                  <span class="field__hint">Aplicado sobre a base definida pela cadeia.</span>
-                </div>
-              </div>
-            </div>
-            <div class="card__footer">
-              <button class="btn btn--filled" type="submit">Registrar tabela</button>
-            </div>
-          </form>
-          <div class="registry" id="list-broker-rates"></div>
-        </section>
-
-        <!-- Regra de liberação por forma de pagamento (IN-06). -->
-        <section class="card">
-          <div class="card__header">
-            <span class="material-symbols-outlined">rule</span>
-            <h2 class="text-title">Liberação por forma de pagamento</h2>
-          </div>
-          <form id="form-release-rule">
-            <div class="card__body stack">
-              <p class="text-muted">
-                Define se o repasse ao corretor nasce liberado ou se espera a confirmação
-                do pagamento da primeira parcela pelo cliente. Nenhuma forma de pagamento
-                tem regra embutida no sistema — inclusive o Pix, cuja regra ainda não foi
-                decidida pelo negócio.
-              </p>
-              <div class="form-grid">
-                <div class="field">
-                  <input class="field__input" name="paymentMethodId" placeholder=" " required />
-                  <label class="field__label">Forma de pagamento</label>
-                  <span class="field__hint">O mesmo identificador usado na proposta.</span>
-                </div>
-                <div class="field">
-                  <select class="field__input" name="release" required>
-                    <option value="IMMEDIATE">Liberação imediata</option>
-                    <option value="REQUIRES_RECEIPT_CONFIRMATION">
-                      Exige confirmação do recebimento
-                    </option>
-                  </select>
-                  <label class="field__label">Regra</label>
-                </div>
-              </div>
-            </div>
-            <div class="card__footer">
-              <button class="btn btn--filled" type="submit">Registrar regra</button>
-            </div>
-          </form>
-          <div class="registry" id="list-release-rules"></div>
-        </section>
       </div>
     </main>
 

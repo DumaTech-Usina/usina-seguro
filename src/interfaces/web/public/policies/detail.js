@@ -1,5 +1,6 @@
 /**
- * The policy an operator works on: schedule, commission and broker transfer.
+ * The policy an operator works on: schedule, agreed commission and the payout
+ * commission of FP-02 — the CR, its recalculation and the eligibility.
  *
  * Where FP-01 lands. The agreed commission shown here is the one calculated
  * when the policy was registered; the real one appears once a commission
@@ -8,14 +9,13 @@
  *
  * The page renders state and offers actions. Which action is admissible is the
  * domain's answer: a button that the domain refuses shows the refusal, it does
- * not disappear on a rule this file invented. The only thing hidden is what
- * cannot exist yet — a transfer that was never opened has nothing to release.
+ * not disappear on a rule this file invented.
  */
 
 import { ApiError, api } from '/app/shared/api.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
-import { describeStatus, stageStrip, statusChip } from '/app/shared/status.js';
+import { stageStrip, statusChip } from '/app/shared/status.js';
 
 const policyId = new URLSearchParams(window.location.search).get('id');
 const page = document.querySelector('#page');
@@ -103,11 +103,14 @@ function ask(id, prepare) {
   });
 }
 
-/** Runs an operation and reloads the page state, reporting a refusal. */
+/**
+ * Runs an operation and reloads the page state, reporting a refusal.
+ * `success` is the message, or a function of what the operation answered.
+ */
 async function perform(work, success) {
   try {
-    await work();
-    showSnackbar(success, { tone: 'success' });
+    const result = await work();
+    showSnackbar(typeof success === 'function' ? success(result) : success, { tone: 'success' });
     await render();
   } catch (error) {
     if (error instanceof ApiError) {
@@ -250,29 +253,13 @@ function commissionCard(policy, commission) {
   const body = element('div', 'card__body stack');
 
   if (commission === null) {
-    // Estado válido do ciclo de vida, não corrupção: a apólice pode ter sido
-    // registrada antes da tabela do corretor (IN-05). O que a
-    // tela precisa dizer é o que falta e qual é a ação — REQ-124 impede
-    // apagar a apólice para recomeçar, então o caminho é calcular aqui.
-    const actions = element('div', 'empty__actions');
-    actions.append(
-      button('Calcular comissão', {
-        variant: 'filled',
-        iconName: 'calculate',
-        onClick: () =>
-          perform(() => api.calculatePolicyCommission(policy.id), 'Comissão calculada.'),
-      }),
-    );
-    const link = element('a', 'btn btn--outlined', 'Abrir cadastros');
-    link.href = '/app/settings/';
-    actions.append(link);
-
+    // A comissão acordada nasce com a apólice (REQ-236); a ausência só ocorre
+    // num registro anterior a essa regra.
     body.append(
       emptyState(
         'price_change',
-        'Comissão ainda não calculada',
-        'A apólice existe e continua válida. A comissão é calculada pela comissão trabalhada (CT, e CTU com intermediária) da proposta e pela tabela do corretor — se a tabela faltava naquele momento, cadastre-a e calcule aqui.',
-        actions,
+        'Comissão acordada não calculada',
+        'A comissão acordada é calculada no reconhecimento da emissão, pela CT (e CTU com intermediária) da proposta.',
       ),
     );
     section.append(body);
@@ -301,7 +288,6 @@ function commissionCard(policy, commission) {
       commission.realReceivable === null ? 'Não apurado' : formatMoney(commission.realReceivable),
       commission.divergent,
     ),
-    metric('A pagar ao corretor', formatMoney(commission.effectivePayable)),
   );
   body.append(comparison);
 
@@ -310,11 +296,6 @@ function commissionCard(policy, commission) {
     definition('Prêmio base', formatMoney(commission.basis.premium)),
     definition('% seguradora', formatPercentage(commission.basis.insurerRate)),
     definition('Valor da seguradora', formatMoney(commission.basis.insurerAmount)),
-    definition('% corretor', formatPercentage(commission.basis.brokerRate)),
-    definition(
-      'Base do corretor',
-      commission.basis.brokerBase === 'USINA' ? 'Valor da Usina' : 'Valor da intermediária',
-    ),
     definition('Competência', commission.reconciledCompetence ?? '—'),
   );
   body.append(basis);
@@ -377,17 +358,15 @@ async function overrideCommission(policy) {
     return;
   }
 
-  const input = { justification: answer.justification, userId: answer.userId };
-  // An absent value means "do not touch this side" (REQ-066); an empty string
-  // is not a value, so it is left out rather than sent as one.
-  if (answer.receivable !== '') {
-    input.receivable = answer.receivable;
-  }
-  if (answer.payable !== '') {
-    input.payable = answer.payable;
-  }
-
-  await perform(() => api.overrideCommission(policy.id, input), 'Ajuste aplicado.');
+  await perform(
+    () =>
+      api.overrideCommission(policy.id, {
+        receivable: answer.receivable,
+        justification: answer.justification,
+        userId: answer.userId,
+      }),
+    'Ajuste aplicado.',
+  );
 }
 
 async function resolveDivergence(policy) {
@@ -399,23 +378,100 @@ async function resolveDivergence(policy) {
   await perform(() => api.resolveDivergence(policy.id, answer), 'Resolução registrada.');
 }
 
-/* --------------------------------------------------------- settlement -- */
+/* ------------------------------------------------------------- payout -- */
 
-function settlementCard(policy, settlement) {
-  const { section, header } = card('Repasse ao corretor', 'payments');
+/**
+ * REQ-278: the values that follow a CR, in one sentence. The numbers are the
+ * server's; nothing is calculated here.
+ */
+function payoutOutcome(view) {
+  const commission = view.commission;
+  return `CR ${formatPercentage(commission.rate)}: ${formatMoney(commission.payout)} a repassar ao corretor, ${formatMoney(commission.retained)} ficam na Usina.`;
+}
+
+function payoutHistory(entries) {
+  const table = element('table', 'table');
+  const head = element('thead');
+  const headRow = element('tr');
+  for (const [label, className] of [
+    ['CR', 'is-numeric'],
+    ['Anterior', 'is-numeric'],
+    ['Valor da Usina', 'is-numeric'],
+    ['A repassar', 'is-numeric'],
+    ['Fica na Usina', 'is-numeric'],
+    ['Motivo', ''],
+    ['Quem · quando', ''],
+  ]) {
+    headRow.append(element('th', className, label));
+  }
+  head.append(headRow);
+
+  const rows = element('tbody');
+  for (const entry of entries) {
+    const row = element('tr');
+    row.append(
+      element('td', 'is-numeric', formatPercentage(entry.rate)),
+      element(
+        'td',
+        'is-numeric text-muted',
+        entry.previousRate === null ? '—' : formatPercentage(entry.previousRate),
+      ),
+      element('td', 'is-numeric', formatMoney(entry.base)),
+      element('td', 'is-numeric', formatMoney(entry.payout)),
+      element('td', 'is-numeric', formatMoney(entry.retained)),
+      element('td', undefined, entry.reason ?? 'Primeira informação'),
+      element('td', 'text-muted', `${entry.informedBy} · ${formatInstant(entry.informedAt)}`),
+    );
+    rows.append(row);
+  }
+
+  table.append(head, rows);
+  const wrapper = element('div', 'payout-history');
+  wrapper.append(element('span', 'text-label', 'Histórico da CR'), table);
+  return wrapper;
+}
+
+/** REQ-283: the eligibility statement, as it was generated. */
+function statementBlock(statement) {
+  const block = element('div', 'payout-statement stack');
+  const details = element('div', 'definitions');
+  details.append(
+    definition('Número da apólice', statement.policyNumber),
+    definition('Corretor', statement.broker),
+    definition('Cliente', statement.client),
+    definition('Prêmio líquido', formatMoney(statement.netPremium)),
+    definition('CT', formatPercentage(statement.workedCommission)),
+    definition('CR', formatPercentage(statement.payoutRate)),
+  );
+  if (statement.ctu !== null) {
+    details.append(definition('CTU', formatPercentage(statement.ctu)));
+  }
+  details.append(
+    definition('Valor recebido pela Usina', formatMoney(statement.usinaValue)),
+    definition('Data da elegibilidade', formatInstant(statement.eligibleAt)),
+    definition('Fica na Usina', formatMoney(statement.retained)),
+    definition('A repassar ao corretor', formatMoney(statement.payout)),
+    definition('Confirmado por', statement.signedBy),
+  );
+  block.append(element('span', 'text-label', 'Extrato de elegibilidade'), details);
+  return block;
+}
+
+function payoutCard(policy, view) {
+  const { section, header } = card('Comissão de repasse (CR)', 'volunteer_activism');
   const body = element('div', 'card__body stack');
 
-  if (settlement === null) {
+  // REQ-271, REQ-285, FA-214: parcelled CT is outside the three situations.
+  if (view.situation === null) {
+    const chip = element('span', 'chip', 'CT parcelada');
+    const actions = element('div', 'card__header-actions');
+    actions.append(chip);
+    header.append(actions);
     body.append(
       emptyState(
-        'payments',
-        'Repasse não aberto',
-        'O repasse é aberto pelo Financeiro depois que a comissão real é apurada na conciliação.',
-        button('Abrir repasse', {
-          variant: 'filled',
-          iconName: 'add',
-          onClick: () => perform(() => api.openSettlement(policy.id), 'Repasse aberto.'),
-        }),
+        'block',
+        'Sem CR para CT parcelada',
+        'Apólice com CT parcelada não recebe CR nem tem comissão calculada ou elegível enquanto a regra do recebimento parcelado (DEC-210) não for definida.',
       ),
     );
     section.append(body);
@@ -423,162 +479,103 @@ function settlementCard(policy, settlement) {
   }
 
   const actions = element('div', 'card__header-actions');
-  actions.append(statusChip('settlement', settlement.status));
+  actions.append(statusChip('payout', view.situation));
   header.append(actions);
-
-  const details = element('div', 'definitions');
-  details.append(
-    definition('Valor', formatMoney(settlement.amount)),
-    definition('Corretor', settlement.brokerId),
-    definition('Regra de liberação', describeStatus('releaseRule', settlement.releaseRule).label),
-    definition(
-      'Liberado em',
-      settlement.releasedAt === null ? '—' : formatInstant(settlement.releasedAt),
-    ),
-  );
-  body.append(details);
-
-  if (settlement.payment !== null) {
-    const payment = element('div', 'audit-note audit-note--resolved');
-    const text = element('div', 'audit-note__body');
-    text.append(
-      element('span', 'text-label', 'Pagamento registrado'),
-      element('span', undefined, formatMoney(settlement.payment.amount)),
-    );
-
-    // REQ-095, CA-028: o comprovante é o documento. Um anexo que ninguém
-    // consegue abrir de volta não comprova coisa alguma, então ele aparece
-    // como link para o próprio arquivo.
-    const proof = element('a', 'proof-link');
-    proof.href = api.settlementPaymentProofUrl(policy.id);
-    proof.append(
-      icon('attach_file'),
-      element('span', undefined, settlement.payment.proof.fileName),
-      element('span', 'text-muted', formatByteSize(settlement.payment.proof.byteSize)),
-    );
-    text.append(proof);
-
-    text.append(
-      element(
-        'span',
-        'text-muted',
-        `${settlement.payment.userId} · ${formatInstant(settlement.payment.paidAt)}`,
-      ),
-    );
-    payment.append(icon('receipt'), text);
-    body.append(payment);
-  }
 
   const footer = element('div', 'card__footer');
 
-  if (settlement.status === 'AWAITING_CONFIRMATION') {
+  if (view.commission === null) {
+    body.append(
+      metric('Valor da Usina', formatMoney(view.usinaValue)),
+      emptyState(
+        'pending_actions',
+        'Apólice sem CR',
+        'A apólice é válida, mas ainda não tem repasse calculado nem pode ser tornada elegível. Nenhuma CR é assumida: informe-a.',
+      ),
+    );
     footer.append(
-      button('Liberar repasse', {
+      button('Informar CR', {
         variant: 'filled',
-        iconName: 'lock_open',
-        onClick: () => perform(() => api.releaseSettlement(policy.id), 'Repasse liberado.'),
+        iconName: 'edit',
+        onClick: () => informPayoutRate(policy),
       }),
     );
+    section.append(body, footer);
+    return section;
   }
 
-  if (settlement.status === 'RELEASED') {
-    footer.append(
-      button('Registrar pagamento', {
-        variant: 'filled',
-        iconName: 'paid',
-        onClick: () => registerPayment(policy, settlement),
-      }),
-    );
+  const commission = view.commission;
+  const values = element('div', 'comparison');
+  values.append(
+    metric('Valor da Usina', formatMoney(commission.base)),
+    metric('CR', formatPercentage(commission.rate)),
+    metric('A repassar ao corretor', formatMoney(commission.payout), true),
+    metric('Fica na Usina', formatMoney(commission.retained)),
+  );
+  body.append(values);
+
+  if (commission.statement !== null) {
+    body.append(statementBlock(commission.statement));
   }
 
+  body.append(payoutHistory(commission.entries));
   section.append(body);
-  if (footer.childElementCount > 0) {
+
+  // REQ-277: while calculated, the only acts are the recalculation and the
+  // eligibility. REQ-282: an eligible commission is only consulted.
+  if (commission.status === 'CALCULATED') {
+    footer.append(
+      button('Recalcular CR', { iconName: 'tune', onClick: () => revisePayoutRate(policy) }),
+      button('Assinar elegibilidade', {
+        variant: 'filled',
+        iconName: 'verified',
+        onClick: () => declareEligibility(policy),
+      }),
+    );
     section.append(footer);
   }
+
   return section;
 }
 
-/**
- * O tamanho do anexo, para o operador reconhecer o arquivo que subiu.
- *
- * Fica nesta página e não em `shared/`: é a única tela que mostra o tamanho —
- * o extrato mostra só o nome — e um módulo compartilhado para uma função não
- * se paga.
- */
-function formatByteSize(bytes) {
-  if (typeof bytes !== 'number' || bytes < 0) {
-    return '';
-  }
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${Math.round(bytes / 1024)} KB`;
-  }
-  return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`;
-}
-
-/**
- * O arquivo anexado, em base64, no formato que a API espera (REQ-095).
- *
- * `readAsDataURL` devolve `data:<tipo>;base64,<conteúdo>`; o que interessa é o
- * que vem depois da vírgula. O tipo vem do próprio arquivo, e quando o sistema
- * não souber dizer qual é, vale o genérico — nenhum requisito restringe o
- * formato do comprovante, então a tela não recusa por isso.
- */
-function readProof(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.addEventListener('load', () => {
-      resolve({
-        fileName: file.name,
-        contentType: file.type === '' ? 'application/octet-stream' : file.type,
-        content: String(reader.result).split(',')[1] ?? '',
-      });
-    });
-    reader.addEventListener('error', () => reject(reader.error));
-    reader.readAsDataURL(file);
-  });
-}
-
-async function registerPayment(policy, settlement) {
-  const dialog = document.querySelector('#dialog-payment');
-
-  const answer = await ask('#dialog-payment', (node) => {
-    // The expected amount is offered, not imposed: REQ-095 records what was
-    // actually sent, which may differ.
-    node.querySelector('[name="amount"]').value = settlement.amount;
-  });
-
+async function informPayoutRate(policy) {
+  const answer = await ask('#dialog-payout-rate');
   if (answer === null) {
     return;
   }
 
-  const file = dialog.querySelector('[name="proof"]').files?.[0] ?? null;
+  await perform(
+    () => api.informPayoutRate(policy.id, { rate: answer.rate, userId: answer.userId }),
+    payoutOutcome,
+  );
+}
 
-  if (file === null) {
-    // CA-028: sem documento não há comprovante. A recusa do servidor viria de
-    // qualquer forma (REQ-095); dizer isso aqui evita uma ida em vão.
-    showSnackbar('Anexe o comprovante do pagamento.', { tone: 'danger', rule: 'REQ-095' });
-    return;
-  }
-
-  let proof;
-  try {
-    proof = await readProof(file);
-  } catch {
-    showSnackbar('Não foi possível ler o arquivo anexado.', { tone: 'danger' });
+async function revisePayoutRate(policy) {
+  const answer = await ask('#dialog-payout-revision');
+  if (answer === null) {
     return;
   }
 
   await perform(
     () =>
-      api.registerSettlementPayment(policy.id, {
-        amount: answer.amount,
+      api.revisePayoutRate(policy.id, {
+        rate: answer.rate,
+        reason: answer.reason,
         userId: answer.userId,
-        proof,
       }),
-    'Pagamento registrado.',
+    payoutOutcome,
+  );
+}
+
+async function declareEligibility(policy) {
+  const answer = await ask('#dialog-payout-eligibility');
+  if (answer === null) {
+    return;
+  }
+
+  await perform(
+    () => api.declarePayoutEligibility(policy.id, answer.userId),
+    'Elegibilidade assinada. O extrato de elegibilidade foi gerado.',
   );
 }
 
@@ -620,16 +617,16 @@ async function render() {
     return;
   }
 
-  const [commission, settlement] = await Promise.all([
+  const [commission, payout] = await Promise.all([
     optional(() => api.getCommission(policyId)),
-    optional(() => api.getSettlement(policyId)),
+    api.getPolicyPayout(policyId),
   ]);
 
   const head = element('div', 'page-head');
   const text = element('div', 'page-head__text');
   text.append(
     element('h1', 'text-display', 'Apólice'),
-    element('p', 'text-muted', 'Parcelas, comissão acordada × real e repasse ao corretor.'),
+    element('p', 'text-muted', 'Parcelas, comissão acordada × real e comissão de repasse (CR).'),
   );
   const actions = element('div', 'page-head__actions');
   const another = element('a', 'btn btn--outlined', 'Novo negócio');
@@ -642,7 +639,7 @@ async function render() {
     policyCard(policy),
     installmentsCard(policy),
     commissionCard(policy, commission),
-    settlementCard(policy, settlement),
+    payoutCard(policy, payout),
   );
 }
 

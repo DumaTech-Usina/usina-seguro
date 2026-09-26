@@ -16,6 +16,13 @@ import type { Percentage } from './percentage.ts';
 const DECIMAL_PLACES = 2;
 const DECIMAL_STRING = /^-?\d+(\.\d{1,2})?$/;
 
+/**
+ * How a rate applied to an amount lands on the cent. V2 states two modes:
+ * the Usina value rounds half up at each step (REQ-237), and the broker's
+ * amount from the CR is floored (REQ-275).
+ */
+export type Rounding = 'HALF_UP' | 'FLOOR';
+
 export class Money {
   private readonly cents: bigint;
 
@@ -56,14 +63,19 @@ export class Money {
    * floating point (REQ-120) and the informed precision of the rate is used in
    * full (REQ-121).
    *
-   * The result has to land on a cent, and no requirement states a rounding
-   * rule, so the conventional one for BRL amounts is used: half away from
-   * zero. It is stated here, in one place, rather than reappearing in each
-   * step of the chain.
+   * The result has to land on a cent. By default it rounds half away from
+   * zero, which is half up for the Usina value (REQ-237); the broker's amount
+   * from the CR is floored instead (REQ-275). The mode is stated here, in one
+   * place, rather than reappearing in each step of a chain.
    */
-  applyRate(rate: Percentage): Money {
+  applyRate(rate: Percentage, rounding: Rounding = 'HALF_UP'): Money {
     const { numerator, scale } = rate.asFraction();
-    return new Money(divideHalfUp(this.cents * numerator, 100n * 10n ** BigInt(scale)));
+    const product = this.cents * numerator;
+    const denominator = 100n * 10n ** BigInt(scale);
+
+    return new Money(
+      rounding === 'FLOOR' ? divideFloor(product, denominator) : divideHalfUp(product, denominator),
+    );
   }
 
   /**
@@ -76,6 +88,11 @@ export class Money {
    */
   plus(other: Money): Money {
     return new Money(this.cents + other.cents);
+  }
+
+  /** Exact difference, on integer cents (REQ-275: what stays with the Usina). */
+  minus(other: Money): Money {
+    return new Money(this.cents - other.cents);
   }
 
   isPositive(): boolean {
@@ -107,4 +124,10 @@ function divideHalfUp(numerator: bigint, denominator: bigint): bigint {
   const quotient = absolute / denominator;
   const rounded = (absolute % denominator) * 2n >= denominator ? quotient + 1n : quotient;
   return negative ? -rounded : rounded;
+}
+
+/** Integer division rounding towards negative infinity. */
+function divideFloor(numerator: bigint, denominator: bigint): bigint {
+  const quotient = numerator / denominator;
+  return numerator % denominator < 0n ? quotient - 1n : quotient;
 }

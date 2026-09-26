@@ -95,4 +95,32 @@ describe('Money (REQ-120)', () => {
       );
     });
   });
+
+  describe('applyRate rounding down (REQ-275)', () => {
+    it('floors on the cent: 10.00 x 70.55% = 7.055 -> 7.05 (CA-227)', () => {
+      expect(
+        Money.fromString('10.00').applyRate(Percentage.fromString('70.55'), 'FLOOR').toString(),
+      ).toBe('7.05');
+    });
+
+    it('keeps an exact result exact (CA-225, CA-226)', () => {
+      expect(
+        Money.fromString('300.00').applyRate(Percentage.fromString('60'), 'FLOOR').toString(),
+      ).toBe('180.00');
+      expect(
+        Money.fromString('160.00').applyRate(Percentage.fromString('70'), 'FLOOR').toString(),
+      ).toBe('112.00');
+    });
+
+    it('does not change the default, which rounds halves up (REQ-237)', () => {
+      expect(Money.fromString('10.00').applyRate(Percentage.fromString('70.55')).toString()).toBe(
+        '7.06',
+      );
+    });
+  });
+
+  it('subtracts exactly, on cents (REQ-275)', () => {
+    expect(Money.fromString('10.00').minus(Money.fromString('7.05')).toString()).toBe('2.95');
+    expect(Money.fromString('300.00').minus(Money.fromString('0.00')).toString()).toBe('300.00');
+  });
 });

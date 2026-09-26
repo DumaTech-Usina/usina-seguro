@@ -6,11 +6,11 @@ import { registerWebInterface } from '../web/web.ts';
 import { registerCommissionRoutes } from './routes/commissions.ts';
 import { registerHealthRoute } from './routes/health.ts';
 import { registerNotificationRoutes } from './routes/notifications.ts';
+import { registerPayoutRoutes } from './routes/payouts.ts';
 import { registerPolicyRoutes } from './routes/policies.ts';
 import { registerProposalRoutes } from './routes/proposals.ts';
 import { registerReconciliationRoutes } from './routes/reconciliations.ts';
 import { registerReferenceRoutes } from './routes/references.ts';
-import { registerSettlementRoutes } from './routes/settlements.ts';
 
 export interface HttpServerOptions {
   readonly logger: boolean;
@@ -84,8 +84,8 @@ export function createHttpServer(
   registerProposalRoutes(app, useCases);
   registerPolicyRoutes(app, useCases);
   registerCommissionRoutes(app, useCases);
+  registerPayoutRoutes(app, useCases);
   registerReconciliationRoutes(app, useCases);
-  registerSettlementRoutes(app, useCases);
   registerReferenceRoutes(app, useCases);
   registerNotificationRoutes(app, useCases);
 

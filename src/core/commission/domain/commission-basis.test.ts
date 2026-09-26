@@ -5,7 +5,6 @@ import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal } from '../../proposal/domain/proposal.ts';
 import type { Receipt } from '../../proposal/domain/receipt.ts';
-import { BrokerCommissionRate } from './broker-commission-rate.ts';
 import { calculateCommission } from './commission-basis.ts';
 
 function proposal(receipt: Receipt, workedCommission = '20'): Proposal {
@@ -30,14 +29,6 @@ function proposal(receipt: Receipt, workedCommission = '20'): Proposal {
   });
 }
 
-function brokerRate(rate: string): BrokerCommissionRate {
-  return BrokerCommissionRate.register({
-    brokerId: 'broker-1',
-    rate: Percentage.fromString(rate),
-    registeredAt: new Date('2026-01-01T00:00:00.000Z'),
-  });
-}
-
 const THROUGH_INTERMEDIARY: Receipt = {
   kind: 'INTERMEDIARY',
   intermediaryId: 'mega',
@@ -46,7 +37,7 @@ const THROUGH_INTERMEDIARY: Receipt = {
 
 describe('calculateCommission', () => {
   it('receives premium x CT when the receipt is direct (REQ-236, REQ-230)', () => {
-    const result = calculateCommission(proposal({ kind: 'DIRECT' }), brokerRate('10'));
+    const result = calculateCommission(proposal({ kind: 'DIRECT' }));
 
     expect(result.receivable.toString()).toBe('20.00');
     expect(result.basis.insurerRate.toString()).toBe('20');
@@ -56,25 +47,16 @@ describe('calculateCommission', () => {
   });
 
   it('chains CT and CTU through the intermediary (REQ-236, REQ-231, CA-219)', () => {
-    const result = calculateCommission(proposal(THROUGH_INTERMEDIARY), brokerRate('10'));
+    const result = calculateCommission(proposal(THROUGH_INTERMEDIARY));
 
     expect(result.basis.insurerAmount.toString()).toBe('20.00');
     expect(result.basis.intermediaryId).toBe('mega');
     expect(result.basis.intermediaryRate?.toString()).toBe('50');
     expect(result.receivable.toString()).toBe('10.00');
-    expect(result.payable.toString()).toBe('1.00');
-  });
-
-  it('bases the broker on what the Usina receives (REQ-234)', () => {
-    const result = calculateCommission(proposal(THROUGH_INTERMEDIARY), brokerRate('10'));
-
-    expect(result.basis.brokerBase).toBe('USINA');
-    expect(result.basis.brokerBaseAmount.toString()).toBe('10.00');
-    expect(result.basis.brokerRate.toString()).toBe('10');
   });
 
   it('uses the net premium of the proposal as the base (REQ-235, REQ-211)', () => {
-    const result = calculateCommission(proposal({ kind: 'DIRECT' }), brokerRate('10'));
+    const result = calculateCommission(proposal({ kind: 'DIRECT' }));
 
     expect(result.basis.premium.toString()).toBe('100.00');
   });
@@ -86,6 +68,6 @@ describe('calculateCommission', () => {
       informed: Authorship.of('bruno.lima', new Date('2026-09-23T09:30:00.000Z')),
     });
 
-    expect(calculateCommission(revised, brokerRate('10')).receivable.toString()).toBe('25.00');
+    expect(calculateCommission(revised).receivable.toString()).toBe('25.00');
   });
 });

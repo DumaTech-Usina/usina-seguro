@@ -4,7 +4,6 @@ import type { PolicyMessageKey } from '../core/policy/domain/errors.ts';
 import type { ProposalMessageKey } from '../core/proposal/domain/errors.ts';
 import type { ReconciliationMessageKey } from '../core/reconciliation/domain/errors.ts';
 import type { RegistryMessageKey } from '../core/registry/domain/errors.ts';
-import type { SettlementMessageKey } from '../core/settlement/domain/errors.ts';
 
 /**
  * Message dictionary.
@@ -25,8 +24,7 @@ export type MessageKey =
   | CommissionMessageKey
   | ReconciliationMessageKey
   | RegistryMessageKey
-  | NotificationMessageKey
-  | SettlementMessageKey;
+  | NotificationMessageKey;
 
 export type Locale = 'pt-BR';
 
@@ -80,22 +78,11 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
       'Confirmação de pagamento da parcela {number} exige a identificação do usuário.',
 
     'registry.reference_field_required': 'Cadastro de referência exige o campo {field}.',
-    'commission.agreement_field_required': 'Acordo comercial exige o campo {field}.',
-    'commission.intermediary_required':
-      'Cadeia com intermediária exige a identificação da intermediária.',
-    'commission.broker_rate_field_required':
-      'Tabela de comissão do corretor exige o campo {field}.',
     'commission.not_found': "Apólice '{policyId}' não possui comissão calculada.",
-    'commission.already_calculated':
-      'Apólice já possui comissão calculada. Use o ajuste por apólice para alterá-la.',
-    'commission.no_broker_rate':
-      "Não há tabela de comissão registrada para o corretor '{brokerId}'.",
     'commission.override_justification_required':
       'Ajuste de comissão por apólice exige justificativa.',
     'commission.override_user_required':
       'Ajuste de comissão por apólice exige a identificação do usuário.',
-    'commission.override_value_required':
-      'Ajuste de comissão exige ao menos um valor: a receber ou a pagar.',
     'commission.override_must_be_positive': 'Valor de ajuste de comissão deve ser positivo.',
     'commission.only_divergent_can_be_resolved':
       'Somente comissão divergente pode ser resolvida. Estado atual: {status}.',
@@ -105,6 +92,16 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'commission.competence_required': 'Conciliação exige a competência do arquivo.',
     'commission.already_reconciled_for_competence':
       'Apólice já conciliada na competência {competence}.',
+    'commission.payout_rate_too_precise':
+      "A CR aceita no máximo duas casas decimais. Recebido: '{value}'.",
+    'commission.payout_requires_integral_ct':
+      'A CR só pode ser informada em apólice com CT integral; com CT parcelada ela ainda não está definida.',
+    'commission.payout_already_informed':
+      'A apólice já tem CR. Para mudá-la, faça o recálculo com motivo.',
+    'commission.payout_not_informed': 'A apólice ainda não tem CR informada.',
+    'commission.payout_revision_reason_required': 'A alteração da CR exige um motivo.',
+    'commission.payout_eligible_is_final':
+      'A comissão já é elegível: é definitiva e só pode ser consultada.',
 
     'reconciliation.competence_required':
       'Importação do arquivo de comissionamento exige a competência.',
@@ -115,26 +112,6 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
 
     'notification.recipient_required':
       'Notificação de emissão efetivada exige a identificação do corretor destinatário.',
-
-    'settlement.release_rule_not_configured':
-      "Forma de pagamento '{paymentMethodId}' não tem regra de liberação configurada.",
-    'settlement.payment_method_required':
-      'Regra de liberação exige a identificação da forma de pagamento.',
-    'settlement.commission_not_reconciled':
-      'Repasse exige comissão real apurada na conciliação. Estado atual: {status}.',
-    'settlement.already_open': 'Apólice já possui repasse registrado.',
-    'settlement.not_found': "Apólice '{policyId}' não possui repasse registrado.",
-    'settlement.awaiting_receipt_confirmation':
-      'Repasse exige confirmação do pagamento da primeira parcela pelo cliente.',
-    'settlement.only_awaiting_can_be_released':
-      'Somente repasse aguardando confirmação pode ser liberado. Estado atual: {status}.',
-    'settlement.only_released_can_be_paid':
-      'Somente repasse liberado pode ser pago. Estado atual: {status}.',
-    'settlement.payment_amount_must_be_positive': 'Valor do repasse pago deve ser positivo.',
-    'settlement.payment_proof_required': 'Registro de repasse exige comprovante anexo.',
-    'settlement.payment_proof_not_found':
-      "Repasse da apólice '{policyId}' não possui comprovante anexo registrado.",
-    'settlement.payment_user_required': 'Registro de repasse exige a identificação do usuário.',
   },
 };
 

@@ -15,9 +15,7 @@ export interface SourceDocument {
 /**
  * Where the source document of a proposal is kept (REQ-219).
  *
- * Declared here, by its consumer, and not imported from the settlement module:
- * the proposal module depends on no other. It has the same shape as the
- * settlement's `DocumentStorage`, so the same adapter serves both.
+ * Declared here, by its consumer: the proposal module depends on no other.
  *
  * No `delete`: the document is the origin of the proposal's data, and nothing
  * of a proposal is erased (REQ-124).

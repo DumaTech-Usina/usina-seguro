@@ -6,18 +6,6 @@ import type { ListCommissionsInput } from '../../../core/commission/application/
  * Request shape validation only. What the commission is worth and what an
  * override requires are domain rules and are not restated here.
  */
-const registerBrokerRateSchema: FastifySchema = {
-  body: {
-    type: 'object',
-    required: ['brokerId', 'rate'],
-    additionalProperties: false,
-    properties: {
-      brokerId: { type: 'string' },
-      rate: { type: 'string' },
-    },
-  },
-};
-
 const policyIdParams = {
   type: 'object',
   required: ['id'],
@@ -28,13 +16,12 @@ const overrideSchema: FastifySchema = {
   params: policyIdParams,
   body: {
     type: 'object',
-    required: ['justification', 'userId'],
+    required: ['receivable', 'justification', 'userId'],
     additionalProperties: false,
     properties: {
-      // Money as a decimal string (REQ-120). At least one of the two is
-      // required, which the domain checks (REQ-066).
+      // Money as a decimal string (REQ-120). Receivable side only: the
+      // broker's part is the CR of FP-02 (REQ-270).
       receivable: { type: 'string' },
-      payable: { type: 'string' },
       justification: { type: 'string' },
       userId: { type: 'string' },
     },
@@ -77,22 +64,6 @@ interface PolicyIdParams {
 }
 
 export function registerCommissionRoutes(app: FastifyInstance, useCases: UseCases): void {
-  // IN-05: the broker's commission table.
-  app.post(
-    '/broker-commission-rates',
-    { schema: registerBrokerRateSchema },
-    async (request, reply) => {
-      const body = request.body as { brokerId: string; rate: string };
-      const output = await useCases.registerBrokerCommissionRate.execute(body);
-      return reply.code(201).send(output);
-    },
-  );
-
-  // IN-05: the broker commission table as it stands.
-  app.get('/broker-commission-rates', async () => {
-    return useCases.listBrokerCommissionRates.execute();
-  });
-
   // OUT-05: the same comparison over every policy. No filter is the whole
   // panel of REQ-076; `status=DIVERGENT` is the worklist of FP-02 step 5.
   app.get('/commissions', { schema: listCommissionsSchema }, async (request) => {
@@ -107,31 +78,10 @@ export function registerCommissionRoutes(app: FastifyInstance, useCases: UseCase
   });
 
   // IN-14, FA-07, REQ-066: extraordinary agreement on a single policy.
-  /**
-   * FP-01 step 7, run on demand (REQ-075).
-   *
-   * The commission normally appears with the policy. This is for the policy
-   * that was registered before the commercial agreement or the broker table
-   * existed: without it that policy could never have one, because nothing
-   * else creates a commission and REQ-124 forbids deleting the record.
-   *
-   * There is no body: everything the calculation needs is already stored.
-   */
-  app.post(
-    '/policies/:id/commission',
-    { schema: { params: policyIdParams } },
-    async (request, reply) => {
-      const { id } = request.params as PolicyIdParams;
-      const output = await useCases.calculatePolicyCommission.execute({ policyId: id });
-      return reply.code(201).send(output);
-    },
-  );
-
   app.post('/policies/:id/commission/override', { schema: overrideSchema }, async (request) => {
     const { id } = request.params as PolicyIdParams;
     const body = request.body as {
-      receivable?: string;
-      payable?: string;
+      receivable: string;
       justification: string;
       userId: string;
     };

@@ -14,9 +14,6 @@ const BASIS: CommissionBasis = {
   insurerAmount: Money.fromString('40.00'),
   intermediaryId: null,
   intermediaryRate: null,
-  brokerBase: 'USINA',
-  brokerBaseAmount: Money.fromString('40.00'),
-  brokerRate: Percentage.fromString('50'),
 };
 
 function forecast(): Commission {
@@ -25,18 +22,16 @@ function forecast(): Commission {
     policyId: 'policy-1',
     basis: BASIS,
     agreedReceivable: Money.fromString('40.00'),
-    agreedPayable: Money.fromString('20.00'),
     calculatedAt: CALCULATED_AT,
   });
 }
 
 describe('Commission', () => {
-  it('starts forecast, with the agreed pair and no real value (REQ-075, section 10.5)', () => {
+  it('starts forecast, with the agreed value and no real value (REQ-075, section 10.5)', () => {
     const commission = forecast();
 
     expect(commission.status).toBe('FORECAST');
     expect(commission.agreedReceivable.toString()).toBe('40.00');
-    expect(commission.agreedPayable.toString()).toBe('20.00');
     expect(commission.realReceivable).toBeNull();
     expect(commission.isDivergent).toBe(false);
   });
@@ -87,24 +82,21 @@ describe('Commission', () => {
   describe('applyOverride', () => {
     const override = {
       receivable: Money.fromString('45.00'),
-      payable: Money.fromString('25.00'),
       justification: 'acordo extraordinario',
       userId: 'user-1',
       at: CALCULATED_AT,
     };
 
-    it('adjusts what the Usina receives and pays on this policy (REQ-066, CA-014)', () => {
+    it('adjusts what the Usina receives on this policy (REQ-066, CA-014)', () => {
       const overridden = forecast().applyOverride(override);
 
       expect(overridden.effectiveReceivable.toString()).toBe('45.00');
-      expect(overridden.effectivePayable.toString()).toBe('25.00');
     });
 
     it('keeps the calculated values next to the override (REQ-124)', () => {
       const overridden = forecast().applyOverride(override);
 
       expect(overridden.agreedReceivable.toString()).toBe('40.00');
-      expect(overridden.agreedPayable.toString()).toBe('20.00');
       expect(overridden.override?.justification).toBe('acordo extraordinario');
       expect(overridden.override?.userId).toBe('user-1');
     });
@@ -121,9 +113,9 @@ describe('Commission', () => {
       );
     });
 
-    it('is rejected when it carries no value at all (REQ-066)', () => {
+    it('is rejected when the value is not positive (REQ-066)', () => {
       expect(() =>
-        forecast().applyOverride({ ...override, receivable: null, payable: null }),
+        forecast().applyOverride({ ...override, receivable: Money.fromString('0.00') }),
       ).toThrow(BusinessRuleViolation);
     });
 
@@ -137,7 +129,7 @@ describe('Commission', () => {
         });
 
       // The agreed side is then adjusted to the value the insurer confirmed.
-      const overridden = resolved.applyOverride({ ...override, payable: null });
+      const overridden = resolved.applyOverride(override);
 
       expect(overridden.isDivergent).toBe(false);
       // CA-026 keeps who closed the divergence, when and why, on the record.
@@ -150,7 +142,7 @@ describe('Commission', () => {
       expect(reconciled.status).toBe('DIVERGENT');
 
       // The agreement was in fact 45.00, so there is no divergence any more.
-      const overridden = reconciled.applyOverride({ ...override, payable: null });
+      const overridden = reconciled.applyOverride(override);
 
       expect(overridden.isDivergent).toBe(false);
       expect(overridden.status).toBe('RECONCILED');

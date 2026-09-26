@@ -20,12 +20,14 @@ import { COMMISSION_MESSAGES } from './errors.ts';
 export type CommissionStatus = 'FORECAST' | 'RECONCILED' | 'RECEIVED' | 'DIVERGENT' | 'RESOLVED';
 
 /**
- * REQ-066: an extraordinary agreement on a single policy, over the agreed
- * side. REQ-067 and REQ-123 make the justification and the user mandatory.
+ * REQ-066: an extraordinary agreement on a single policy, over what the Usina
+ * receives. REQ-067 and REQ-123 make the justification and the user mandatory.
+ *
+ * Receivable side only: the broker's part is the CR of FP-02 (REQ-270), so
+ * there is no payable to adjust here.
  */
 export interface CommissionOverride {
-  readonly receivable: Money | null;
-  readonly payable: Money | null;
+  readonly receivable: Money;
   readonly justification: string;
   readonly userId: string;
   readonly at: Date;
@@ -55,7 +57,6 @@ export interface CommissionData {
   readonly policyId: string;
   readonly basis: CommissionBasis;
   readonly agreedReceivable: Money;
-  readonly agreedPayable: Money;
   readonly calculatedAt: Date;
 }
 
@@ -70,8 +71,7 @@ export interface CommissionData {
  * the installment is the point from which commissioning is generated, and a
  * policy cannot be registered without a schedule.
  *
- * The **payable** real value is not held here: what the Usina actually paid the
- * broker is the payment registered on the settlement (REQ-095).
+ * There is no payable side: the broker's part is the CR of FP-02 (REQ-270).
  *
  * Nothing is ever erased (REQ-124): an override keeps the calculated values
  * next to the overridden ones, and a resolution is an added record, not an
@@ -82,7 +82,6 @@ export class Commission {
   readonly policyId: string;
   readonly basis: CommissionBasis;
   readonly agreedReceivable: Money;
-  readonly agreedPayable: Money;
   readonly calculatedAt: Date;
   readonly status: CommissionStatus;
   readonly override: CommissionOverride | null;
@@ -96,7 +95,6 @@ export class Commission {
     this.policyId = data.policyId;
     this.basis = data.basis;
     this.agreedReceivable = data.agreedReceivable;
-    this.agreedPayable = data.agreedPayable;
     this.calculatedAt = data.calculatedAt;
     this.status = state.status;
     this.override = state.override;
@@ -127,15 +125,10 @@ export class Commission {
    * What the Usina expects to receive, override included (REQ-066).
    *
    * The calculated value stays on `agreedReceivable`; this is the value the
-   * comparison of REQ-076 and the transfer of REQ-093 actually use.
+   * comparison of REQ-076 actually uses.
    */
   get effectiveReceivable(): Money {
     return this.override?.receivable ?? this.agreedReceivable;
-  }
-
-  /** What the Usina expects to pay the broker, override included (REQ-066). */
-  get effectivePayable(): Money {
-    return this.override?.payable ?? this.agreedPayable;
   }
 
   /** REQ-076, CA-017: agreed and real disagree. Never blocking (REQ-077). */
@@ -187,8 +180,7 @@ export class Commission {
   }
 
   /**
-   * REQ-066, CA-014: adjusts, on this policy alone, what the Usina receives
-   * and what it pays the broker.
+   * REQ-066, CA-014: adjusts, on this policy alone, what the Usina receives.
    *
    * REQ-067 and REJ-010 make the justification and the user mandatory. The
    * agreed side is the only one an override touches: the real side is what a
@@ -196,14 +188,8 @@ export class Commission {
    * divergence REQ-076 exists to show.
    */
   applyOverride(override: CommissionOverride): Commission {
-    if (override.receivable === null && override.payable === null) {
-      throw new BusinessRuleViolation('REQ-066', COMMISSION_MESSAGES.OVERRIDE_VALUE_REQUIRED);
-    }
-
-    for (const value of [override.receivable, override.payable]) {
-      if (value !== null && !value.isPositive()) {
-        throw new BusinessRuleViolation('REQ-066', COMMISSION_MESSAGES.OVERRIDE_MUST_BE_POSITIVE);
-      }
+    if (!override.receivable.isPositive()) {
+      throw new BusinessRuleViolation('REQ-066', COMMISSION_MESSAGES.OVERRIDE_MUST_BE_POSITIVE);
     }
 
     if (override.justification.trim() === '') {
@@ -218,8 +204,7 @@ export class Commission {
     }
 
     const applied: CommissionOverride = {
-      receivable: override.receivable ?? this.override?.receivable ?? null,
-      payable: override.payable ?? this.override?.payable ?? null,
+      receivable: override.receivable,
       justification: override.justification.trim(),
       userId: override.userId.trim(),
       at: override.at,

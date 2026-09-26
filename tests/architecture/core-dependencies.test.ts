@@ -77,9 +77,8 @@ describe('core dependency rule', () => {
       // (`AgreedCommissionCalculator`) and reads `CalendarDate`, so the arrow
       // points this way and the policy module never names a commission.
       'commission -> policy',
-      // REQ-065 selects the agreement by insurer and product and IN-05 selects
-      // the broker table by broker. All three live on the proposal (REQ-022),
-      // not on the policy.
+      // REQ-236: the agreed commission is calculated from the proposal's CT,
+      // or CT then CTU (REQ-230, REQ-231), which live on the proposal.
       'commission -> proposal',
       // FP-02 step 3: a matched line produces the real commission of REQ-075,
       // so the reconciliation drives the commission through its own states.
@@ -90,15 +89,6 @@ describe('core dependency rule', () => {
       // REQ-082, CA-019: a line that brings only the proposal number reaches
       // the policy through the link of REQ-050.
       'reconciliation -> proposal',
-      // REQ-093: the transfer is worth what the commission says it is worth,
-      // override of REQ-066 included.
-      'settlement -> commission',
-      // REQ-091: the transfer of a payment method that requires confirmation
-      // waits on the first installment of the policy schedule.
-      'settlement -> policy',
-      // REQ-090 keys the release rule by the payment method, and REQ-096 pays
-      // the broker: both live on the proposal.
-      'settlement -> proposal',
       // IN-01 is a registry like any other: it throws the shared
       // `BusinessRuleViolation` and nothing else crosses this way. The arrow
       // points at the proposal, never back, which is what lets the three
@@ -107,11 +97,10 @@ describe('core dependency rule', () => {
       // REQ-096 identifies a business by the *name* of the client, the broker
       // and the ramo, not by the identifier the proposal stores (REQ-022).
       // Each listing resolves the references it already shows; the registry is
-      // read-only to all three, and none of them can refuse a business for
+      // read-only to all of them, and none of them can refuse a business for
       // having no record there (REQ-002).
       'policy -> registry',
       'commission -> registry',
-      'settlement -> registry',
       // FP-01 step 7, REQ-100: the emission was effectuated, so the broker is
       // notified. The notification module implements the port the policy
       // module declares (`PolicyIssuedNotifier`), so the arrow points this way

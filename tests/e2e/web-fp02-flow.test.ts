@@ -63,8 +63,6 @@ beforeAll(async () => {
   }) as typeof globalThis.fetch;
 
   window.scrollTo = () => {};
-
-  await callApi('POST', '/broker-commission-rates', { brokerId: 'broker-1', rate: '50' });
 });
 
 afterAll(async () => {

@@ -99,8 +99,6 @@ beforeAll(async () => {
   window.scrollTo = () => {};
   installDialogSupport();
 
-  await callApi('POST', '/broker-commission-rates', { brokerId: 'broker-1', rate: '50' });
-
   // The three states FP-02 can leave a policy in: reported short, reported as
   // agreed, and never reported at all.
   await reconciled(await registeredPolicy('PRP-PANEL-DIV', 'PRP-PANEL-DIV'), '31.00');
@@ -326,9 +324,6 @@ describe('the agreed versus real panel (OUT-05)', () => {
     const forecast = rowOf('PRP-PANEL-FORE');
     expect(forecast.textContent).toContain('Não apurado');
     expect(forecast.textContent).toContain('Prevista');
-
-    // REQ-093: what the Usina expects to pay the broker is on every line.
-    expect(rows().every((row: Untyped) => row.textContent.includes('R$ 20,00'))).toBe(true);
 
     expect(text('#summary')).toContain('3 apólices');
     expect(text('#summary')).toContain('1 com divergência');

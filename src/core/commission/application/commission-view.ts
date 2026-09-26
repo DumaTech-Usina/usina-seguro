@@ -16,9 +16,6 @@ export interface CommissionBasisView {
   readonly insurerAmount: string;
   readonly intermediaryId: string | null;
   readonly intermediaryRate: string | null;
-  readonly brokerBase: string;
-  readonly brokerBaseAmount: string;
-  readonly brokerRate: string;
 }
 
 export interface CommissionView {
@@ -28,17 +25,14 @@ export interface CommissionView {
   readonly calculatedAt: string;
   /** Calculated from the agreement, before any override (REQ-075). */
   readonly agreedReceivable: string;
-  readonly agreedPayable: string;
-  /** Agreed values actually in use, override included (REQ-066). */
+  /** Agreed value actually in use, override included (REQ-066). */
   readonly effectiveReceivable: string;
-  readonly effectivePayable: string;
   /** Apurada na conciliacao (REQ-075); null until a report matches. */
   readonly realReceivable: string | null;
   readonly divergent: boolean;
   readonly reconciledCompetence: string | null;
   readonly override: {
-    readonly receivable: string | null;
-    readonly payable: string | null;
+    readonly receivable: string;
     readonly justification: string;
     readonly userId: string;
     readonly at: string;
@@ -60,9 +54,7 @@ export function toCommissionView(commission: Commission): CommissionView {
     status: commission.status,
     calculatedAt: commission.calculatedAt.toISOString(),
     agreedReceivable: commission.agreedReceivable.toString(),
-    agreedPayable: commission.agreedPayable.toString(),
     effectiveReceivable: commission.effectiveReceivable.toString(),
-    effectivePayable: commission.effectivePayable.toString(),
     realReceivable: commission.realReceivable?.toString() ?? null,
     divergent: commission.isDivergent,
     reconciledCompetence: commission.reconciledCompetence,
@@ -70,8 +62,7 @@ export function toCommissionView(commission: Commission): CommissionView {
       override === null
         ? null
         : {
-            receivable: override.receivable?.toString() ?? null,
-            payable: override.payable?.toString() ?? null,
+            receivable: override.receivable.toString(),
             justification: override.justification,
             userId: override.userId,
             at: override.at.toISOString(),
@@ -90,9 +81,6 @@ export function toCommissionView(commission: Commission): CommissionView {
       insurerAmount: basis.insurerAmount.toString(),
       intermediaryId: basis.intermediaryId,
       intermediaryRate: basis.intermediaryRate?.toString() ?? null,
-      brokerBase: basis.brokerBase,
-      brokerBaseAmount: basis.brokerBaseAmount.toString(),
-      brokerRate: basis.brokerRate.toString(),
     },
   };
 }
@@ -127,9 +115,8 @@ export interface CommissionListItemView {
   readonly calculatedAt: string;
   /** Calculated from the agreement, before any override (REQ-075). */
   readonly agreedReceivable: string;
-  /** Agreed values actually in use, override included (REQ-066). */
+  /** Agreed value actually in use, override included (REQ-066). */
   readonly effectiveReceivable: string;
-  readonly effectivePayable: string;
   /** Apurada na conciliacao (REQ-075); null until a report matches. */
   readonly realReceivable: string | null;
   readonly divergent: boolean;
@@ -156,7 +143,6 @@ export function toCommissionListItemView(
     calculatedAt: commission.calculatedAt.toISOString(),
     agreedReceivable: commission.agreedReceivable.toString(),
     effectiveReceivable: commission.effectiveReceivable.toString(),
-    effectivePayable: commission.effectivePayable.toString(),
     realReceivable: commission.realReceivable?.toString() ?? null,
     divergent: commission.isDivergent,
     reconciledCompetence: commission.reconciledCompetence,

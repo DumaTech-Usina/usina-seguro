@@ -116,16 +116,6 @@ export const api = {
     request(
       status === undefined ? '/commissions' : `/commissions?status=${encodeURIComponent(status)}`,
     ),
-  /**
-   * FP-01 passo 7 sob demanda (REQ-075): calcula a comissão acordada de uma
-   * apólice que ainda não tem uma.
-   *
-   * Sem corpo — tudo o que o cálculo lê já está gravado. Existe para a apólice
-   * registrada antes dos cadastros: nada mais cria uma comissão, e REQ-124
-   * impede apagar o registro para começar de novo.
-   */
-  calculatePolicyCommission: (policyId) =>
-    request(`/policies/${encodeURIComponent(policyId)}/commission`, { method: 'POST' }),
   overrideCommission: (policyId, input) =>
     request(`/policies/${encodeURIComponent(policyId)}/commission/override`, {
       method: 'POST',
@@ -137,50 +127,37 @@ export const api = {
       body: input,
     }),
 
-  // FP-03 — the broker transfer of this policy.
-  getSettlement: (policyId) => request(`/policies/${encodeURIComponent(policyId)}/settlement`),
-  openSettlement: (policyId) =>
-    request(`/policies/${encodeURIComponent(policyId)}/settlement`, { method: 'POST' }),
-  releaseSettlement: (policyId) =>
-    request(`/policies/${encodeURIComponent(policyId)}/settlement/release`, { method: 'POST' }),
-  /**
-   * REQ-095, CA-028: the payment, with the proof attached.
-   *
-   * `input.proof.content` is the document base64-encoded. It travels in the
-   * JSON body like everything else — there is no multipart parser and no
-   * build step here — and the server decodes it back to bytes at its own
-   * boundary.
-   */
-  registerSettlementPayment: (policyId, input) =>
-    request(`/policies/${encodeURIComponent(policyId)}/settlement/payment`, {
-      method: 'POST',
-      body: input,
-    }),
-  /**
-   * Where the attached proof is served from (REQ-095).
-   *
-   * A URL and not a request: the document is opened by the browser through an
-   * `href`, and this is still the only place that knows the address.
-   */
   /** REQ-219: the PDF a proposal was imported from; a file, not JSON. */
   proposalSourceDocumentUrl: (proposalId) =>
     `/proposals/${encodeURIComponent(proposalId)}/source-document`,
-  settlementPaymentProofUrl: (policyId) =>
-    `/policies/${encodeURIComponent(policyId)}/settlement/payment/proof`,
-
+  // FP-02 of V2 (section 9A) — the CR of a policy, its recalculation and the
+  // eligibility. Every act is signed: `userId` (REQ-216). The system pays
+  // nothing (REQ-280).
+  /** REQ-285: the situation of the policy, its Usina value and its commission. */
+  getPolicyPayout: (policyId) => request(`/policies/${encodeURIComponent(policyId)}/payout`),
+  informPayoutRate: (policyId, input) =>
+    request(`/policies/${encodeURIComponent(policyId)}/payout`, { method: 'POST', body: input }),
+  revisePayoutRate: (policyId, input) =>
+    request(`/policies/${encodeURIComponent(policyId)}/payout/revision`, {
+      method: 'POST',
+      body: input,
+    }),
+  declarePayoutEligibility: (policyId, userId) =>
+    request(`/policies/${encodeURIComponent(policyId)}/payout/eligibility`, {
+      method: 'POST',
+      body: { userId },
+    }),
   /**
-   * OUT-07: the commission statement of a broker — forecast, held, released
-   * and paid. Nothing asks for every broker at once.
-   *
-   * This is not the report and the receipt of REQ-094/REQ-096: those need the
-   * period of DEC-008 and the registries of IN-01, and neither exists.
+   * REQ-284: the eligible commissions. `filters` holds only what was informed:
+   * `policyNumber`, `broker`, `client`, `eligibleFrom`/`eligibleBefore`
+   * (instants) and `renewalFrom`/`renewalUntil` (YYYY-MM).
    */
-  getBrokerStatement: (brokerId) =>
-    request(
-      brokerId === undefined
-        ? '/broker-commission-statements'
-        : `/broker-commission-statements?brokerId=${encodeURIComponent(brokerId)}`,
-    ),
+  listEligiblePayouts: (filters = {}) => {
+    const query = new URLSearchParams(filters).toString();
+    return request(query === '' ? '/payouts/eligible' : `/payouts/eligible?${query}`);
+  },
+  /** REQ-286: the policies that still need a CR. */
+  listPoliciesWithoutPayoutRate: () => request('/payouts/policies-without-rate'),
 
   // FP-02 — the commission report the Financeiro imports.
   //
@@ -192,21 +169,6 @@ export const api = {
     request('/commission-reconciliations', { method: 'POST', body: input }),
   /** OUT-06: the lines with no matching policy, waiting for a human. */
   listReconciliationPendencies: () => request('/commission-reconciliations/pendencies'),
-
-  // Registries the Administrator maintains (IN-05, IN-06).
-  //
-  // Parameters the calculation reads, written and read back through the same
-  // shape: what a registration answers is one line of what the listing
-  // answers. The Usina side of a commission is not here: it is the CT of each
-  // proposal (REQ-236).
-  registerBrokerRate: (input) =>
-    request('/broker-commission-rates', { method: 'POST', body: input }),
-  /** IN-05: the broker commission table (REQ-093). */
-  listBrokerRates: () => request('/broker-commission-rates'),
-  registerReleaseRule: (input) =>
-    request('/payment-method-release-rules', { method: 'POST', body: input }),
-  /** IN-06: the release rule of each payment method (REQ-090, CA-024). */
-  listReleaseRules: () => request('/payment-method-release-rules'),
 
   /**
    * OUT-10, REQ-102, REQ-105: the notifications of effectuated emission —

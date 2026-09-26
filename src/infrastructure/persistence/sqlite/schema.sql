@@ -96,16 +96,14 @@ CREATE TABLE IF NOT EXISTS policy (
 CREATE TABLE IF NOT EXISTS installment (
   id          TEXT    PRIMARY KEY,
   policy_id   TEXT    NOT NULL REFERENCES policy (id),
-  -- Position in the schedule, starting at 1: REQ-091 releases the broker
-  -- transfer against the first installment, so it has to be identifiable.
+  -- Position in the schedule, starting at 1, in the proposal's order (REQ-241).
   number      INTEGER NOT NULL CHECK (number >= 1),
   amount      TEXT    NOT NULL,
   -- Optional, inherited from the proposal (REQ-204, REQ-241).
   due_date    TEXT,
   status      TEXT    NOT NULL,
-  -- REQ-123: the manual confirmation of receipt (IN-13, REQ-092) is one of the
-  -- operations that must record who and when; it is what releases the transfer
-  -- of REQ-091.
+  -- REQ-123: the manual confirmation of receipt (IN-13) is one of the
+  -- operations that must record who and when.
   confirmed_at   TEXT,
   confirmed_by   TEXT,
   UNIQUE (policy_id, number)
@@ -127,13 +125,6 @@ CREATE TABLE IF NOT EXISTS reference (
   PRIMARY KEY (kind, id)
 );
 
--- Broker commission table (IN-05, REQ-093).
-CREATE TABLE IF NOT EXISTS broker_commission_rate (
-  broker_id      TEXT PRIMARY KEY,
-  rate           TEXT NOT NULL,
-  registered_at  TEXT NOT NULL
-);
-
 -- Commission of a policy, agreed and real side by side (REQ-075, CA-016).
 CREATE TABLE IF NOT EXISTS commission (
   id                      TEXT PRIMARY KEY,
@@ -149,15 +140,11 @@ CREATE TABLE IF NOT EXISTS commission (
   insurer_amount          TEXT NOT NULL,
   intermediary_id         TEXT,
   intermediary_rate       TEXT,
-  broker_base             TEXT NOT NULL CHECK (broker_base IN ('USINA', 'INTERMEDIARY')),
-  broker_base_amount      TEXT NOT NULL,
-  broker_rate             TEXT NOT NULL,
   agreed_receivable       TEXT NOT NULL,
-  agreed_payable          TEXT NOT NULL,
-  -- Override per policy (REQ-066). The calculated values above are kept
-  -- untouched next to it (REQ-124).
+  -- Override per policy (REQ-066), receivable side only: the broker's part is
+  -- the CR of FP-02 (REQ-270). The calculated value above is kept untouched
+  -- next to it (REQ-124).
   override_receivable     TEXT,
-  override_payable        TEXT,
   override_justification  TEXT,
   override_user_id        TEXT,
   override_at             TEXT,
@@ -170,6 +157,49 @@ CREATE TABLE IF NOT EXISTS commission (
   resolution_justification TEXT,
   resolution_user_id      TEXT,
   resolved_at             TEXT
+);
+
+-- Payout commission of a policy (V2 section 9A). At most one per policy
+-- (REQ-271, REJ-217): the UNIQUE is the storage-level guarantee.
+--
+-- The statement columns are the eligibility statement of REQ-283, written
+-- once when the commission becomes ELIGIBLE and never recalculated. They are
+-- all NULL while the commission is CALCULATED.
+CREATE TABLE IF NOT EXISTS payout_commission (
+  id                   TEXT PRIMARY KEY,
+  policy_id            TEXT NOT NULL UNIQUE REFERENCES policy (id),
+  status               TEXT NOT NULL CHECK (status IN ('CALCULATED', 'ELIGIBLE')),
+  statement_policy_number     TEXT,
+  statement_broker            TEXT,
+  statement_client            TEXT,
+  statement_net_premium       TEXT,
+  statement_worked_commission TEXT,
+  statement_payout_rate       TEXT,
+  statement_ctu               TEXT,
+  statement_usina_value       TEXT,
+  statement_retained          TEXT,
+  statement_payout            TEXT,
+  -- REQ-281: who signed the eligibility and when; the eligibility date.
+  eligible_by          TEXT,
+  eligible_at          TEXT,
+  CHECK ((status = 'ELIGIBLE') = (eligible_at IS NOT NULL))
+);
+
+-- REQ-279: every CR informed or changed, with the calculation as it was.
+-- Append-only: the one in force is the highest sequence (REQ-124).
+CREATE TABLE IF NOT EXISTS payout_rate_entry (
+  payout_commission_id  TEXT    NOT NULL REFERENCES payout_commission (id),
+  sequence              INTEGER NOT NULL CHECK (sequence >= 1),
+  -- Percentages as exact decimal text, amounts as exact decimal text.
+  rate                  TEXT    NOT NULL,
+  previous_rate         TEXT,
+  reason                TEXT,
+  base                  TEXT    NOT NULL,
+  payout                TEXT    NOT NULL,
+  retained              TEXT    NOT NULL,
+  informed_by           TEXT    NOT NULL,
+  informed_at           TEXT    NOT NULL,
+  PRIMARY KEY (payout_commission_id, sequence)
 );
 
 -- Report line with no matching policy (REQ-083, EX-01, OUT-06). It carries no
@@ -187,54 +217,19 @@ CREATE TABLE IF NOT EXISTS reconciliation_pendency (
   UNIQUE (competence, proposal_number)
 );
 
--- Release rule per payment method (IN-06, REQ-090). Data, not code, so
--- CA-024 changes behaviour without a deploy (REQ-125).
-CREATE TABLE IF NOT EXISTS payment_method_release_rule (
-  payment_method_id  TEXT PRIMARY KEY,
-  release_rule       TEXT NOT NULL
-    CHECK (release_rule IN ('IMMEDIATE', 'REQUIRES_RECEIPT_CONFIRMATION')),
-  registered_at      TEXT NOT NULL
-);
-
--- Attached document (REQ-095, CA-028, IN-15). The only attachment the whole
--- specification asks for is the proof of a broker payment, so there is one
+-- Attached document: the PDF a proposal was imported from (REQ-219). One
 -- table and no notion of "owner": whoever attaches a document keeps its id.
 --
 -- The bytes are a BLOB and not a path: the database is one file, a backup is
 -- a copy of it, and there is no second place for the row and the file to get
 -- out of step. PostgreSQL would use `bytea` -- see SQLITE-NOTES.md.
 --
--- No delete: REQ-124 forbids erasing a financial record, and the proof is
--- part of one.
+-- No delete: nothing of a proposal is erased (REQ-124).
 CREATE TABLE IF NOT EXISTS document (
   id            TEXT NOT NULL PRIMARY KEY,
   file_name     TEXT NOT NULL,
   content_type  TEXT NOT NULL,
   content       BLOB NOT NULL
-);
-
--- Broker transfer (REQ-090 to REQ-095). One per policy: REQ-094 mentions a
--- period, but the window is DEC-008 and undecided.
-CREATE TABLE IF NOT EXISTS settlement (
-  id               TEXT PRIMARY KEY,
-  policy_id        TEXT NOT NULL UNIQUE REFERENCES policy (id),
-  broker_id        TEXT NOT NULL,
-  amount           TEXT NOT NULL,
-  release_rule     TEXT NOT NULL,
-  status           TEXT NOT NULL,
-  opened_at        TEXT NOT NULL,
-  released_at      TEXT,
-  -- Payment sent to the broker (REQ-095, IN-15, CA-028).
-  paid_at          TEXT,
-  paid_amount      TEXT,
-  -- The attached proof (REQ-095: "comprovante anexo"). Only the metadata
-  -- lives here; the bytes are a row in `document`, because a settlement is
-  -- read on every statement and the file is read only when asked for.
-  proof_document_id   TEXT REFERENCES document (id),
-  proof_file_name     TEXT,
-  proof_content_type  TEXT,
-  proof_byte_size     INTEGER,
-  payment_user_id  TEXT
 );
 
 -- Notification of an effectuated emission (REQ-100, REQ-105, OUT-10). It is
