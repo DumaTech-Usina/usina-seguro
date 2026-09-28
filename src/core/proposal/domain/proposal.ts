@@ -52,8 +52,6 @@ export interface ProposalRegistrationData {
   readonly insurerId: string;
   readonly productId: string;
   readonly paymentMethodId: string;
-  /** REQ-040, REQ-201: the customer's acceptance precedes the proposal. */
-  readonly customerAccepted: boolean;
   /** REQ-202, REQ-206: issued by the insurer and already known at registration. */
   readonly proposalNumber: string;
   readonly netPremium: Money;
@@ -97,7 +95,6 @@ export class Proposal {
   readonly insurerId: string;
   readonly productId: string;
   readonly paymentMethodId: string;
-  readonly customerAccepted: boolean;
   readonly proposalNumber: string;
   readonly netPremium: Money;
   readonly coverageStart: CalendarDate;
@@ -120,7 +117,6 @@ export class Proposal {
     this.insurerId = data.insurerId;
     this.productId = data.productId;
     this.paymentMethodId = data.paymentMethodId;
-    this.customerAccepted = data.customerAccepted;
     this.proposalNumber = data.proposalNumber;
     this.netPremium = data.netPremium;
     this.coverageStart = data.coverageStart;
@@ -144,10 +140,6 @@ export class Proposal {
    * not checked for uniqueness: `DEC-207` leaves it unrestricted for now.
    */
   static register(input: ProposalRegistration): Proposal {
-    if (!input.customerAccepted) {
-      throw new BusinessRuleViolation('REQ-040', PROPOSAL_MESSAGES.CUSTOMER_ACCEPTANCE_REQUIRED);
-    }
-
     if (input.paymentMethodId.trim() === '') {
       throw new BusinessRuleViolation('REQ-040', PROPOSAL_MESSAGES.PAYMENT_METHOD_REQUIRED);
     }

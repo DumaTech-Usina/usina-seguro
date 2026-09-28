@@ -20,7 +20,9 @@ import { ListNotifications } from './core/notification/application/list-notifica
 import type { NotificationChannel } from './core/notification/application/notification-channel.ts';
 import type { NotificationRepository } from './core/notification/application/notification-repository.ts';
 import { NotifyPolicyIssued } from './core/notification/application/notify-policy-issued.ts';
+import { AttachPolicyDocument } from './core/policy/application/attach-policy-document.ts';
 import { GetPolicyByProposal } from './core/policy/application/get-policy-by-proposal.ts';
+import { GetPolicyDocument } from './core/policy/application/get-policy-document.ts';
 import { GetPolicy } from './core/policy/application/get-policy.ts';
 import { ListPolicies } from './core/policy/application/list-policies.ts';
 import { PayInstallment } from './core/policy/application/pay-installment.ts';
@@ -85,6 +87,9 @@ export interface UseCases {
   readonly registerPolicy: RegisterPolicy;
   readonly getPolicy: GetPolicy;
   readonly getPolicyByProposal: GetPolicyByProposal;
+  /** REQ-247: the PDF of a policy, sent after it exists, and read back. */
+  readonly attachPolicyDocument: AttachPolicyDocument;
+  readonly getPolicyDocument: GetPolicyDocument;
   readonly listPolicies: ListPolicies;
   readonly payInstallment: PayInstallment;
   readonly getCommission: GetCommission;
@@ -174,6 +179,7 @@ export function composeApplication(config: Config): Application {
       registerPolicy: new RegisterPolicy({
         proposals,
         policies,
+        documents,
         transaction,
         agreedCommission,
         notifier,
@@ -182,6 +188,14 @@ export function composeApplication(config: Config): Application {
       }),
       getPolicy: new GetPolicy({ proposals, policies }),
       getPolicyByProposal: new GetPolicyByProposal({ proposals, policies }),
+      attachPolicyDocument: new AttachPolicyDocument({
+        proposals,
+        policies,
+        documents,
+        newId,
+        now,
+      }),
+      getPolicyDocument: new GetPolicyDocument({ policies, documents }),
       listPolicies: new ListPolicies({ policies, proposals, references }),
       payInstallment: new PayInstallment({ proposals, policies, now }),
       getCommission: new GetCommission({ commissions }),

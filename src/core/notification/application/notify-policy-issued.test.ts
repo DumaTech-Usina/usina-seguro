@@ -58,7 +58,6 @@ function transmitted(): Proposal {
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'bank-slip',
-    customerAccepted: true,
     proposalNumber: 'PRP-9001',
     netPremium: Money.fromString('1200.00'),
     coverageStart: CalendarDate.fromString('2026-10-01'),

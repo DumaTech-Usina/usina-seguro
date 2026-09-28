@@ -37,7 +37,6 @@ export const DEFAULT_LOCALE: Locale = 'pt-BR';
  */
 const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
   'pt-BR': {
-    'proposal.customer_acceptance_required': 'Proposta exige aceite do cliente registrado.',
     'proposal.payment_method_required': 'Proposta exige forma de pagamento definida.',
     'proposal.field_required': 'Proposta exige o campo {field}.',
     'proposal.net_premium_must_be_positive': 'Prêmio líquido da proposta deve ser positivo.',
@@ -71,6 +70,7 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'policy.not_found': "Apólice não encontrada: '{id}'.",
     'policy.not_found_for_proposal': "Proposta '{proposalId}' ainda não possui apólice registrada.",
     'calendar_date.invalid_format': "Data inválida: '{value}'. Use o formato AAAA-MM-DD.",
+    'policy.document_not_found': 'A apólice {id} não tem PDF guardado.',
     'policy.installment_not_found': "Parcela {number} não encontrada na apólice '{policyNumber}'.",
     'policy.only_pending_can_be_paid':
       'Somente parcela pendente pode ser confirmada como paga. Parcela {number} está {status}.',

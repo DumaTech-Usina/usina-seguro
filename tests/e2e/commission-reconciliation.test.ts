@@ -123,7 +123,6 @@ async function sellPolicy(options: {
       insurerId: 'insurer-1',
       productId: 'auto',
       paymentMethodId: options.paymentMethodId,
-      customerAccepted: true,
       proposalNumber: options.proposalNumber,
       netPremium: '100.00',
       coverageStart: '2026-10-01',

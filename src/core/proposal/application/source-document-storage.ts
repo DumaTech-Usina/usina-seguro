@@ -13,12 +13,13 @@ export interface SourceDocument {
 }
 
 /**
- * Where the source document of a proposal is kept (REQ-219).
+ * Where the source document of a proposal is kept (REQ-219). The policy
+ * module keeps the PDF of a policy here too (REQ-247).
  *
  * Declared here, by its consumer: the proposal module depends on no other.
  *
  * No `delete`: the document is the origin of the proposal's data, and nothing
- * of a proposal is erased (REQ-124).
+ * is erased (REQ-124).
  */
 export interface SourceDocumentStorage {
   save(document: SourceDocument): Promise<void>;

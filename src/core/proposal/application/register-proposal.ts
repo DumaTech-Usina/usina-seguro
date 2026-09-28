@@ -32,7 +32,6 @@ export interface RegisterProposalInput {
   readonly insurerId: string;
   readonly productId: string;
   readonly paymentMethodId: string;
-  readonly customerAccepted: boolean;
   readonly proposalNumber: string;
   readonly netPremium: string;
   readonly coverageStart: string;
@@ -91,7 +90,6 @@ export class RegisterProposal {
       insurerId: input.insurerId,
       productId: input.productId,
       paymentMethodId: input.paymentMethodId,
-      customerAccepted: input.customerAccepted,
       proposalNumber: input.proposalNumber,
       netPremium: Money.fromString(input.netPremium),
       coverageStart: CalendarDate.fromString(input.coverageStart),

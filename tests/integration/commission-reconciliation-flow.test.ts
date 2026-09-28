@@ -50,7 +50,6 @@ async function registerPolicy(options: PolicyOptions = {}) {
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: options.paymentMethodId ?? 'credit',
-    customerAccepted: true,
     proposalNumber: options.proposalNumber ?? 'PRP-9001',
     netPremium: premium,
     coverageStart: '2026-10-01',

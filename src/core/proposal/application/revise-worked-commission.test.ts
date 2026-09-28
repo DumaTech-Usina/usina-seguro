@@ -22,7 +22,6 @@ async function scenario() {
     insurerId: 'insurer-1',
     productId: 'product-1',
     paymentMethodId: 'bank-slip',
-    customerAccepted: true,
     proposalNumber: 'PRP-9001',
     netPremium: '100.00',
     coverageStart: '2026-10-01',

@@ -1,3 +1,4 @@
+import type { Authorship } from '../../proposal/domain/authorship.ts';
 import type { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/errors.ts';
 import type { Money } from '../../proposal/domain/money.ts';
@@ -18,6 +19,20 @@ import type { Installment, InstallmentPaymentConfirmation } from './installment.
  * `SUSPENDED` is deliberately absent — DEC-012.
  */
 export type PolicyStatus = 'ACTIVE' | 'RENEWED' | 'CANCELLED' | 'EXPIRED';
+
+/**
+ * REQ-247: the PDF of the policy. The bytes live in a document store; the
+ * policy keeps which document it is, its name and who sent it, and when.
+ *
+ * Nothing about its content is checked: what a policy PDF must hold is
+ * `DEC-213`.
+ */
+export interface PolicyDocument {
+  readonly documentId: string;
+  readonly fileName: string;
+  /** REQ-216, REQ-247: every sending is signed at the moment it is recorded. */
+  readonly attached: Authorship;
+}
 
 /**
  * Data required to register a policy (REQ-020, IN-10).
@@ -41,6 +56,8 @@ export interface PolicyRegistrationData {
   /** REQ-020, REQ-055: the date the renewal is controlled against. */
   readonly renewalDate: CalendarDate;
   readonly installments: readonly Installment[];
+  /** REQ-247: absent until a PDF is sent. */
+  readonly document?: PolicyDocument | null;
   readonly registeredAt: Date;
 }
 
@@ -53,6 +70,7 @@ export class Policy {
   readonly coverageEnd: CalendarDate;
   readonly renewalDate: CalendarDate;
   readonly installments: readonly Installment[];
+  readonly document: PolicyDocument | null;
   readonly registeredAt: Date;
   readonly status: PolicyStatus;
 
@@ -65,6 +83,7 @@ export class Policy {
     this.coverageEnd = data.coverageEnd;
     this.renewalDate = data.renewalDate;
     this.installments = data.installments;
+    this.document = data.document ?? null;
     this.registeredAt = data.registeredAt;
     this.status = status;
   }
@@ -123,6 +142,15 @@ export class Policy {
   /** Rebuilds a persisted policy without re-applying the rules (REQ-124). */
   static restore(data: PolicyRegistrationData, status: PolicyStatus): Policy {
     return new Policy(data, status);
+  }
+
+  /**
+   * REQ-247, CA-244: the policy keeps one PDF, the last one sent. The earlier
+   * one is no longer the policy's document, but its bytes stay in the store:
+   * nothing is erased (REQ-124).
+   */
+  attachDocument(document: PolicyDocument): Policy {
+    return new Policy({ ...this, document }, this.status);
   }
 
   /**

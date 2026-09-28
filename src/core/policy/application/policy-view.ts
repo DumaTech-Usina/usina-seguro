@@ -33,6 +33,14 @@ export interface PolicyView {
   readonly renewalDate: string;
   readonly registeredAt: string;
   readonly installments: readonly InstallmentView[];
+  /** REQ-247: the PDF in force — the last one sent — and who sent it, when. */
+  readonly document: PolicyDocumentView | null;
+}
+
+export interface PolicyDocumentView {
+  readonly fileName: string;
+  readonly attachedBy: string;
+  readonly attachedAt: string;
 }
 
 export function toPolicyView(policy: Policy, proposal: Proposal): PolicyView {
@@ -56,6 +64,14 @@ export function toPolicyView(policy: Policy, proposal: Proposal): PolicyView {
       confirmedBy: installment.confirmation?.userId ?? null,
       confirmedAt: installment.confirmation?.at.toISOString() ?? null,
     })),
+    document:
+      policy.document === null
+        ? null
+        : {
+            fileName: policy.document.fileName,
+            attachedBy: policy.document.attached.author,
+            attachedAt: policy.document.attached.at.toISOString(),
+          },
   };
 }
 

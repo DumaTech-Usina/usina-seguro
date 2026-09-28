@@ -94,7 +94,7 @@ const MAPS = {
  *   (`REQ-030`, `FA-01`) — não está implementado, então a etapa aparece como
  *   não registrada em vez de sumir da tira. Dizer que ela existe seria mentir;
  *   escondê-la faria a progressão parecer começar na proposta;
- * - **Proposta** é o registro que existe desde o aceite do cliente, com os
+ * - **Proposta** é o registro que existe desde o seu cadastro, com os
  *   estados de `REQ-250`: aguardando emissão → emitida | recusada;
  * - **Apólice** é a proposta emitida (`REQ-240`, `REQ-251`).
  *

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ImmediateTransaction } from '../../../infrastructure/persistence/in-memory/immediate-transaction.ts';
+import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
@@ -45,6 +46,7 @@ class RecordingNotifier implements PolicyIssuedNotifier {
 function scenario() {
   const proposals = new InMemoryProposalRepository();
   const policies = new InMemoryPolicyRepository();
+  const documents = new InMemoryDocumentStorage();
   const agreedCommission = new RecordingCommissionCalculator();
   const notifier = new RecordingNotifier();
   let sequence = 0;
@@ -52,6 +54,7 @@ function scenario() {
   const useCase = new RegisterPolicy({
     proposals,
     policies,
+    documents,
     transaction: new ImmediateTransaction(),
     agreedCommission,
     notifier,
@@ -59,7 +62,7 @@ function scenario() {
     now: () => NOW,
   });
 
-  return { proposals, policies, agreedCommission, notifier, useCase };
+  return { proposals, policies, documents, agreedCommission, notifier, useCase };
 }
 
 function awaiting(overrides: Partial<ProposalRegistration> = {}): Proposal {
@@ -70,7 +73,6 @@ function awaiting(overrides: Partial<ProposalRegistration> = {}): Proposal {
     insurerId: 'insurer-1',
     productId: 'product-1',
     paymentMethodId: 'bank-slip',
-    customerAccepted: true,
     proposalNumber: 'PRP-9001',
     netPremium: Money.fromString('1200.00'),
     coverageStart: CalendarDate.fromString('2026-10-01'),
@@ -121,6 +123,8 @@ describe('RegisterPolicy — the recognition of issuance (FP-01 steps 8 and 9)',
       // REQ-203, CA-206: the renewal is the end of coverage.
       renewalDate: '2027-10-01',
       registeredAt: NOW.toISOString(),
+      // REQ-247: no PDF was sent with the recognition.
+      document: null,
     });
     expect(output.installments).toEqual([
       {
@@ -252,5 +256,39 @@ describe('RegisterPolicy — the recognition of issuance (FP-01 steps 8 and 9)',
       // REQ-105, REQ-209: the moment the issuance was recognised.
       issuedAt: NOW,
     });
+  });
+
+  it('keeps the PDF sent with the recognition, signed by who recognised it (REQ-247, CA-243)', async () => {
+    const { proposals, policies, documents, useCase } = scenario();
+    await proposals.save(awaiting());
+    const content = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+
+    const output = await useCase.execute(input({ document: { fileName: 'apolice.pdf', content } }));
+
+    expect(output.document).toEqual({
+      fileName: 'apolice.pdf',
+      attachedBy: 'carla.dias',
+      attachedAt: NOW.toISOString(),
+    });
+    const stored = await policies.findById(output.id);
+    expect(await documents.findById(stored?.document?.documentId ?? '')).toEqual({
+      id: stored?.document?.documentId,
+      fileName: 'apolice.pdf',
+      // REQ-247: treated as a PDF; the content is not read (DEC-213).
+      contentType: 'application/pdf',
+      content,
+    });
+  });
+
+  it('keeps no PDF when the recognition is refused (REQ-247, REQ-216)', async () => {
+    const { proposals, documents, useCase } = scenario();
+    await proposals.save(awaiting());
+    const content = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+
+    await expect(
+      useCase.execute(input({ userId: '  ', document: { fileName: 'apolice.pdf', content } })),
+    ).rejects.toThrow(BusinessRuleViolation);
+
+    expect(await documents.findById('id-2')).toBeNull();
   });
 });

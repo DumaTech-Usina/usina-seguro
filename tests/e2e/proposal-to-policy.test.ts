@@ -58,7 +58,6 @@ function proposalBody(overrides: Record<string, unknown> = {}): Record<string, u
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'bank-slip',
-    customerAccepted: true,
     proposalNumber: 'PRP-9001',
     netPremium: '1200.00',
     coverageStart: '2026-10-01',

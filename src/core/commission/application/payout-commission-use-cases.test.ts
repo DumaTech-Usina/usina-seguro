@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ImmediateTransaction } from '../../../infrastructure/persistence/in-memory/immediate-transaction.ts';
+import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryPayoutCommissionRepository } from '../../../infrastructure/persistence/in-memory/in-memory-payout-commission-repository.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
@@ -43,6 +44,7 @@ function scenario() {
   const registerPolicy = new RegisterPolicy({
     proposals,
     policies,
+    documents: new InMemoryDocumentStorage(),
     transaction: new ImmediateTransaction(),
     agreedCommission: { calculateFor: async () => {} },
     notifier: { notify: async () => {} },
@@ -66,7 +68,6 @@ function scenario() {
           insurerId: 'ALLIANZ',
           productId: 'Auto',
           paymentMethodId: 'credit',
-          customerAccepted: true,
           proposalNumber: options.proposalNumber ?? `PRP-${options.proposalId}`,
           netPremium: Money.fromString(options.netPremium ?? '1000.00'),
           coverageStart: CalendarDate.fromString('2026-10-01'),

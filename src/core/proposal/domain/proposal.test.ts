@@ -24,7 +24,6 @@ function registration(overrides: Partial<ProposalRegistration> = {}): ProposalRe
     insurerId: 'insurer-1',
     productId: 'product-1',
     paymentMethodId: 'bank-slip',
-    customerAccepted: true,
     proposalNumber: 'PRP-9001',
     netPremium: Money.fromString('100.00'),
     coverageStart: CalendarDate.fromString('2026-10-01'),
@@ -107,10 +106,6 @@ describe('Proposal.register', () => {
     expect(declaration?.declared.at).toEqual(REGISTERED_AT);
   });
 
-  it('rejects registration without the customer acceptance (REQ-040, REQ-201)', () => {
-    expect(ruleOf(() => registered({ customerAccepted: false }))).toBe('REQ-040');
-  });
-
   it('rejects registration without a payment method (REQ-040, REQ-201)', () => {
     expect(ruleOf(() => registered({ paymentMethodId: '  ' }))).toBe('REQ-040');
   });
@@ -169,7 +164,7 @@ describe('Proposal.register', () => {
 
   it('restores a persisted record without re-applying the creation rules (REQ-124)', () => {
     const informed = Authorship.of('ana.souza', REGISTERED_AT);
-    const proposal = Proposal.restore(registration({ customerAccepted: false }), {
+    const proposal = Proposal.restore(registration({ paymentMethodId: ' ' }), {
       status: 'REJECTED',
       workedCommissionHistory: [{ rate: Percentage.fromString('20'), mode: 'INTEGRAL', informed }],
       receiptHistory: [{ receipt: { kind: 'DIRECT' }, declared: informed }],

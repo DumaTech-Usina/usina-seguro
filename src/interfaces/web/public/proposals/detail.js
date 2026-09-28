@@ -13,6 +13,7 @@
  */
 
 import { ApiError, api } from '/app/shared/api.js';
+import { base64Of } from '/app/shared/file.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
 import {
   bindReceiptFields,
@@ -422,13 +423,21 @@ receiptForm.addEventListener('submit', (event) => {
 });
 
 // FP-01 step 8 (REQ-209): signed by who identified it; the policy is created
-// from the proposal (REQ-240, REQ-241) — nothing else is sent (REQ-242).
+// from the proposal (REQ-240, REQ-241) — no datum is sent again (REQ-242).
+// The PDF of the policy may go with it (REQ-247): a document, not a datum.
 issuanceForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const input = values(issuanceForm);
+  const [file] = issuanceForm.querySelector('[name="policyPdf"]').files ?? [];
 
   submitting(issuanceForm, async () => {
-    const policy = await api.registerPolicy({ proposalId, userId: input.userId });
+    const pdf =
+      file === undefined ? undefined : { fileName: file.name, content: await base64Of(file) };
+    const policy = await api.registerPolicy({
+      proposalId,
+      userId: input.userId,
+      ...(pdf === undefined ? {} : { document: pdf }),
+    });
 
     showSnackbar(`Emissão reconhecida. Apólice ${policy.policyNumber} criada.`, {
       tone: 'success',

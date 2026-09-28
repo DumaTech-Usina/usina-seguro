@@ -148,7 +148,6 @@ function proposalBody(overrides: Record<string, unknown> = {}): Record<string, u
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'bank-slip',
-    customerAccepted: true,
     proposalNumber: 'PRP-API',
     netPremium: '100.00',
     coverageStart: '2026-10-01',
@@ -173,7 +172,6 @@ function fillRegistration(): void {
   field('#form-proposal', 'insurerId').value = 'insurer-1';
   field('#form-proposal', 'productId').value = 'auto';
   field('#form-proposal', 'paymentMethodId').value = 'bank-slip';
-  field('#form-proposal', 'customerAccepted').checked = true;
   field('#form-proposal', 'proposalNumber').value = 'PRP-WEB-1';
   field('#form-proposal', 'netPremium').value = '100.00';
   field('#form-proposal', 'coverageStart').value = '2026-10-01';
@@ -280,19 +278,12 @@ describe('FP-01 through the web interface', () => {
     expect(hidden('[data-panel="done"]')).toBe(true);
   });
 
-  it('shows the refusal the server rendered without the customer acceptance (REQ-040)', async () => {
+  it('does not ask for the customer acceptance, which the proposal no longer holds (REQ-201)', async () => {
     openPage('proposals/new.html');
     await import('/app/proposals/new.js');
 
-    fillRegistration();
-    field('#form-proposal', 'customerAccepted').checked = false;
-    submit('#form-proposal');
-
-    await vi.waitFor(() => {
-      expect(snackbars().length).toBeGreaterThan(0);
-    });
-    expect(snackbars()[0]).toContain('Proposta exige aceite do cliente registrado.');
-    expect(snackbars()[0]).toContain('REQ-040');
+    expect(document.querySelector('#form-proposal [name="customerAccepted"]')).toBeNull();
+    expect(text('#form-proposal')).not.toContain('Aceite do cliente');
   });
 
   it('shows the refusal the server rendered for a coverage that ends before it starts (REJ-214)', async () => {
@@ -535,6 +526,26 @@ describe('FP-01 through the web interface', () => {
     ]);
   });
 
+  it('sends the PDF of the policy with the recognition, signed by who recognised it (REQ-247, CA-243)', async () => {
+    const PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x41]);
+    const proposalId = await awaitingProposal({ proposalNumber: 'PRP-ACCEPT-PDF' });
+    await openProposal(proposalId);
+
+    const input = field('#form-issuance', 'policyPdf');
+    const file = new window.File([PDF], 'apolice.pdf', { type: 'application/pdf' });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    field('#form-issuance', 'userId').value = 'carla.dias';
+    submit('#form-issuance');
+
+    await vi.waitFor(() => {
+      expect(text('#page')).toContain('Apólice registrada');
+    });
+    const policy = await callApi('GET', `/proposals/${proposalId}/policy`);
+    expect(policy.document).toMatchObject({ fileName: 'apolice.pdf', attachedBy: 'carla.dias' });
+    const download = await fetch(`${baseUrl}/policies/${policy.id}/document`);
+    expect(new Uint8Array(await download.arrayBuffer())).toEqual(PDF);
+  });
+
   it('refuses an unsigned recognition with the sentence the server rendered (REJ-205)', async () => {
     const proposalId = await awaitingProposal({ proposalNumber: 'PRP-ACCEPT-2' });
     await openProposal(proposalId);
@@ -707,7 +718,6 @@ describe('filling the proposal from its PDF (REQ-218)', () => {
       expect(text('#pdf-result')).toContain('comissão trabalhada');
 
       // The user reviews, completes what the PDF does not carry, and registers.
-      field('#form-proposal', 'customerAccepted').checked = true;
       field('#form-proposal', 'workedCommission').value = '20';
       field('#form-proposal', 'userId').value = 'ana.souza';
       submit('#form-proposal');

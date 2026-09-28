@@ -1,4 +1,5 @@
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
+import type { SourceDocumentStorage } from '../../proposal/application/source-document-storage.ts';
 import { Authorship } from '../../proposal/domain/authorship.ts';
 import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Installment } from '../domain/installment.ts';
@@ -10,19 +11,36 @@ import { type PolicyView, toPolicyView } from './policy-view.ts';
 import type { Transaction } from './transaction.ts';
 
 /**
+ * REQ-247: the PDF of a policy, as uploaded. Nothing reads or checks its
+ * content: what it must hold is `DEC-213`.
+ */
+export interface PolicyDocumentInput {
+  readonly fileName: string;
+  readonly content: Uint8Array;
+}
+
+/** REQ-247: the file is kept and served as a PDF, whatever was uploaded. */
+export const POLICY_DOCUMENT_CONTENT_TYPE = 'application/pdf';
+
+/**
  * The recognition of issuance carries nothing but who recognised it: every
  * datum of the policy comes from the proposal (REQ-241) and nothing is typed
- * again (REQ-242, REJ-204).
+ * again (REQ-242, REJ-204). The PDF of the policy may travel with it
+ * (REQ-247): a document, not a datum.
  */
 export interface RegisterPolicyInput {
   readonly proposalId: string;
   /** REQ-209, REQ-216: who identified the issuance, typed in the act. */
   readonly userId: string;
+  /** REQ-247: optional; signed by the same user, at the same moment. */
+  readonly document?: PolicyDocumentInput | null;
 }
 
 export interface RegisterPolicyDependencies {
   readonly proposals: ProposalRepository;
   readonly policies: PolicyRepository;
+  /** REQ-247: where the PDF of the policy is kept. */
+  readonly documents: SourceDocumentStorage;
   readonly transaction: Transaction;
   /** FP-01 step 7: the agreed commission follows the policy being created. */
   readonly agreedCommission: AgreedCommissionCalculator;
@@ -59,8 +77,11 @@ export class RegisterPolicy {
     }
 
     const recognizedAt = this.deps.now();
-    const issued = proposal.recognizeIssuance(Authorship.of(input.userId, recognizedAt));
+    const recognition = Authorship.of(input.userId, recognizedAt);
+    const issued = proposal.recognizeIssuance(recognition);
     const policyId = this.deps.newId();
+    const source = input.document ?? null;
+    const documentId = source === null ? null : this.deps.newId();
 
     const policy = Policy.register({
       id: policyId,
@@ -80,6 +101,10 @@ export class RegisterPolicy {
           dueDate: installment.dueDate,
         }),
       ),
+      document:
+        source === null || documentId === null
+          ? null
+          : { documentId, fileName: source.fileName, attached: recognition },
     });
 
     // One business fact, four writes: see `Transaction`. The agreed commission
@@ -93,6 +118,14 @@ export class RegisterPolicy {
     // admit asynchronous delivery precisely so an outbound adapter hands the
     // payload to a queue and returns.
     await this.deps.transaction.run(async () => {
+      if (source !== null && documentId !== null) {
+        await this.deps.documents.save({
+          id: documentId,
+          fileName: source.fileName,
+          contentType: POLICY_DOCUMENT_CONTENT_TYPE,
+          content: source.content,
+        });
+      }
       await this.deps.policies.save(policy);
       await this.deps.proposals.save(issued);
       await this.deps.agreedCommission.calculateFor({

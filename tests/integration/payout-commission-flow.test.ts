@@ -39,7 +39,6 @@ async function policy(proposalNumber: string, mode: 'INTEGRAL' | 'PARCELLED' = '
     insurerId: 'ALLIANZ',
     productId: 'Auto',
     paymentMethodId: 'credit',
-    customerAccepted: true,
     proposalNumber,
     netPremium: '1000.00',
     coverageStart: '2026-10-01',

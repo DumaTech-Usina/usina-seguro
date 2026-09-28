@@ -57,6 +57,30 @@
       </form>
     </dialog>
 
+    <!-- PDF da apólice (REQ-247): o último enviado é o da apólice; o envio é assinado. -->
+    <dialog class="dialog" id="dialog-policy-document">
+      <form method="dialog">
+        <div class="dialog__header">
+          <h2 class="text-title">Enviar PDF da apólice</h2>
+          <p class="text-muted">Se a apólice já tiver um PDF, o novo passa a ser o dela.</p>
+        </div>
+        <div class="dialog__body">
+          <label class="stack">
+            <span class="text-label">Arquivo PDF</span>
+            <input type="file" name="pdf" accept="application/pdf" required />
+          </label>
+          <div class="field">
+            <input class="field__input" name="userId" placeholder=" " required />
+            <label class="field__label">Quem envia</label>
+          </div>
+        </div>
+        <div class="dialog__footer">
+          <button class="btn" value="cancel" type="submit">Cancelar</button>
+          <button class="btn btn--filled" value="confirm" type="submit">Enviar</button>
+        </div>
+      </form>
+    </dialog>
+
     <!-- Ajuste de comissão por apólice (REQ-066, REQ-067). -->
     <dialog class="dialog" id="dialog-override">
       <form method="dialog">

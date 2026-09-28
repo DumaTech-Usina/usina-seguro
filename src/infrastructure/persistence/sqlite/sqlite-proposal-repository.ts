@@ -22,7 +22,6 @@ interface ProposalRow {
   insurer_id: string;
   product_id: string;
   payment_method_id: string;
-  customer_accepted: number;
   proposal_number: string;
   net_premium: string;
   coverage_start: string;
@@ -74,11 +73,11 @@ export class SqliteProposalRepository implements ProposalRepository {
         .prepare(
           `INSERT INTO proposal (
              id, client_id, broker_id, insurer_id, product_id, payment_method_id,
-             customer_accepted, proposal_number, net_premium, coverage_start,
+             proposal_number, net_premium, coverage_start,
              coverage_end, registered_at, status, rejection_reason,
              issuance_recognized_by, issuance_recognized_at,
              source_document_id, source_document_file_name
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
              status                 = excluded.status,
              rejection_reason       = excluded.rejection_reason,
@@ -92,7 +91,6 @@ export class SqliteProposalRepository implements ProposalRepository {
           proposal.insurerId,
           proposal.productId,
           proposal.paymentMethodId,
-          proposal.customerAccepted ? 1 : 0,
           proposal.proposalNumber,
           // Exact decimal string; see the column comment in schema.sql.
           proposal.netPremium.toString(),
@@ -210,7 +208,6 @@ export class SqliteProposalRepository implements ProposalRepository {
         insurerId: row.insurer_id,
         productId: row.product_id,
         paymentMethodId: row.payment_method_id,
-        customerAccepted: row.customer_accepted === 1,
         proposalNumber: row.proposal_number,
         netPremium: Money.fromString(row.net_premium),
         coverageStart: CalendarDate.fromString(row.coverage_start),

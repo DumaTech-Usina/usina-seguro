@@ -259,7 +259,6 @@ async function registeredPolicy(proposalNumber: string, policyNumber: string): P
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'credit',
-    customerAccepted: true,
     proposalNumber: proposalNumber,
     netPremium: '100.00',
     coverageStart: '2026-10-01',

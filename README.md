@@ -38,8 +38,8 @@ O domínio nunca produz frase pronta — ele emite uma **chave estável** mais p
 ```
 domínio                              i18n                        HTTP
 BusinessRuleViolation(               translate(key, params)      422
-  'REQ-040',                    →    "Proposta exige aceite  →   { "rule": "REQ-040",
-  'proposal.customer_...' )           do cliente registrado."       "message": "Proposta …" }
+  'REQ-040',                    →    "Proposta exige forma   →   { "rule": "REQ-040",
+  'proposal.payment_...' )            de pagamento definida."       "message": "Proposta …" }
 ```
 
 Duas garantias automáticas:
@@ -95,7 +95,7 @@ Fluxo `FP-01` completo:
 # 1. Registrar a proposta (REQ-040)
 curl -X POST http://127.0.0.1:3000/proposals -H 'content-type: application/json' -d '{
   "clientId":"client-1","brokerId":"broker-1","insurerId":"insurer-1","productId":"auto",
-  "paymentMethodId":"bank-slip","customerAccepted":true,"netPremium":"1200.00"
+  "paymentMethodId":"bank-slip","netPremium":"1200.00"
 }'
 # 201 {"id":"<proposta>","status":"DRAFT","netPremium":"1200.00","registeredAt":"..."}
 
@@ -231,10 +231,10 @@ curl http://127.0.0.1:3000/payouts/policies-without-rate
 Rejeições, com a regra e o texto traduzido na resposta:
 
 ```bash
-# Sem aceite do cliente (CA-001)
+# Sem forma de pagamento (REQ-040)
 # 422 {"error":"business_rule_violation","rule":"REQ-040",
-#      "messageKey":"proposal.customer_acceptance_required",
-#      "message":"Proposta exige aceite do cliente registrado."}
+#      "messageKey":"proposal.payment_method_required",
+#      "message":"Proposta exige forma de pagamento definida."}
 
 # Segunda apólice para a mesma proposta (CA-007)
 # 422 {"rule":"REQ-049","message":"Proposta já possui apólice registrada."}

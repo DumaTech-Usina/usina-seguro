@@ -13,6 +13,7 @@
  */
 
 import { ApiError, api } from '/app/shared/api.js';
+import { base64Of } from '/app/shared/file.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
 import { stageStrip, statusChip } from '/app/shared/status.js';
@@ -162,9 +163,61 @@ function policyCard(policy) {
     definition('Registro', formatInstant(policy.registeredAt)),
   );
 
-  body.append(head, details);
+  body.append(head, details, documentBlock(policy));
   section.append(body);
   return section;
+}
+
+/* ------------------------------------------------------------ the PDF -- */
+
+/** REQ-247: the PDF in force — the last one sent — who sent it, and when. */
+function documentBlock(policy) {
+  const wrapper = element('div', 'definition');
+  wrapper.id = 'policy-document';
+  wrapper.append(element('span', 'text-label', 'PDF da apólice'));
+
+  if (policy.document === null) {
+    wrapper.append(element('span', 'definition__value', 'Nenhum PDF enviado.'));
+  } else {
+    const file = element('a', 'definition__value');
+    file.href = api.policyDocumentUrl(policy.id);
+    file.append(icon('attach_file'), ` ${policy.document.fileName}`);
+    wrapper.append(
+      file,
+      element(
+        'span',
+        'text-muted',
+        `Enviado por ${policy.document.attachedBy} · ${formatInstant(policy.document.attachedAt)}`,
+      ),
+    );
+  }
+
+  wrapper.append(
+    button('Enviar PDF', { iconName: 'upload_file', onClick: () => sendDocument(policy) }),
+  );
+  return wrapper;
+}
+
+async function sendDocument(policy) {
+  const answer = await ask('#dialog-policy-document');
+  if (answer === null) {
+    return;
+  }
+
+  const [file] = document.querySelector('#dialog-policy-document [name="pdf"]').files ?? [];
+  if (file === undefined) {
+    return;
+  }
+
+  await perform(
+    async () =>
+      api.attachPolicyDocument(policy.id, {
+        fileName: file.name,
+        content: await base64Of(file),
+        userId: answer.userId,
+      }),
+    'PDF da apólice enviado.',
+  );
 }
 
 /* ----------------------------------------------------------- schedule -- */

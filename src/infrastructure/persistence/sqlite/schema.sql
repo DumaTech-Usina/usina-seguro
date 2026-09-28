@@ -9,7 +9,6 @@ CREATE TABLE IF NOT EXISTS proposal (
   insurer_id         TEXT    NOT NULL,
   product_id         TEXT    NOT NULL,
   payment_method_id  TEXT    NOT NULL,
-  customer_accepted  INTEGER NOT NULL CHECK (customer_accepted IN (0, 1)),
   -- Known at registration (REQ-206). Not UNIQUE: DEC-207 leaves the number
   -- unrestricted for now.
   proposal_number    TEXT    NOT NULL,
@@ -90,7 +89,18 @@ CREATE TABLE IF NOT EXISTS policy (
   coverage_end    TEXT    NOT NULL,
   renewal_date    TEXT    NOT NULL,
   registered_at   TEXT    NOT NULL,
-  status          TEXT    NOT NULL
+  status          TEXT    NOT NULL,
+  -- REQ-247: the PDF in force -- the last one sent -- and who sent it, when.
+  -- The bytes are a row in `document`; an earlier PDF keeps its row there.
+  document_id           TEXT REFERENCES document (id),
+  document_file_name    TEXT,
+  document_attached_by  TEXT,
+  document_attached_at  TEXT,
+  CHECK (
+    (document_id IS NULL) = (document_file_name IS NULL)
+    AND (document_id IS NULL) = (document_attached_by IS NULL)
+    AND (document_id IS NULL) = (document_attached_at IS NULL)
+  )
 );
 
 CREATE TABLE IF NOT EXISTS installment (
@@ -217,14 +227,15 @@ CREATE TABLE IF NOT EXISTS reconciliation_pendency (
   UNIQUE (competence, proposal_number)
 );
 
--- Attached document: the PDF a proposal was imported from (REQ-219). One
--- table and no notion of "owner": whoever attaches a document keeps its id.
+-- Attached document: the PDF a proposal was imported from (REQ-219) or the
+-- PDF of a policy (REQ-247). One table and no notion of "owner": whoever
+-- attaches a document keeps its id.
 --
 -- The bytes are a BLOB and not a path: the database is one file, a backup is
 -- a copy of it, and there is no second place for the row and the file to get
 -- out of step. PostgreSQL would use `bytea` -- see SQLITE-NOTES.md.
 --
--- No delete: nothing of a proposal is erased (REQ-124).
+-- No delete: nothing is erased (REQ-124).
 CREATE TABLE IF NOT EXISTS document (
   id            TEXT NOT NULL PRIMARY KEY,
   file_name     TEXT NOT NULL,

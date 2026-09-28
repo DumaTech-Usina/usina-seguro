@@ -8,7 +8,6 @@
  * `Record<MessageKey, string>` over the union of every module's keys.
  */
 export const PROPOSAL_MESSAGES = {
-  CUSTOMER_ACCEPTANCE_REQUIRED: 'proposal.customer_acceptance_required',
   PAYMENT_METHOD_REQUIRED: 'proposal.payment_method_required',
   FIELD_REQUIRED: 'proposal.field_required',
   NET_PREMIUM_MUST_BE_POSITIVE: 'proposal.net_premium_must_be_positive',

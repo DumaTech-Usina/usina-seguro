@@ -83,8 +83,21 @@ export const api = {
 
   // The recognition of issuance (REQ-209): creates the policy from the
   // proposal (REQ-240, REQ-241). Then the policy worked on afterwards.
+  // `input.document` is the PDF of the policy, optional (REQ-247).
   registerPolicy: (input) => request('/policies', { method: 'POST', body: input }),
   getPolicy: (id) => request(`/policies/${encodeURIComponent(id)}`),
+  /**
+   * REQ-247: sends the PDF of a policy that exists, signed. The last one sent
+   * is the policy's. `input` is `{ fileName, content, userId }`, `content`
+   * base64-encoded.
+   */
+  attachPolicyDocument: (policyId, input) =>
+    request(`/policies/${encodeURIComponent(policyId)}/document`, {
+      method: 'POST',
+      body: input,
+    }),
+  /** REQ-247: the PDF of a policy; a file, not JSON. */
+  policyDocumentUrl: (policyId) => `/policies/${encodeURIComponent(policyId)}/document`,
   /**
    * OUT-03: the policies the Usina sold, nearest renewal first. With a day,
    * it is the a-vencer listing of OUT-04 (REQ-055, CA-032) — only the policies

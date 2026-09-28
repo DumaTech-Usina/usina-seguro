@@ -5,6 +5,7 @@ import type {
 } from '../../../core/policy/application/policy-repository.ts';
 import { Installment, type InstallmentStatus } from '../../../core/policy/domain/installment.ts';
 import { Policy, type PolicyStatus } from '../../../core/policy/domain/policy.ts';
+import { Authorship } from '../../../core/proposal/domain/authorship.ts';
 import { CalendarDate } from '../../../core/proposal/domain/calendar-date.ts';
 import { Money } from '../../../core/proposal/domain/money.ts';
 import { withSavepoint } from './sqlite-transaction.ts';
@@ -19,6 +20,10 @@ interface PolicyRow {
   renewal_date: string;
   registered_at: string;
   status: string;
+  document_id: string | null;
+  document_file_name: string | null;
+  document_attached_by: string | null;
+  document_attached_at: string | null;
 }
 
 interface InstallmentRow {
@@ -50,9 +55,15 @@ export class SqlitePolicyRepository implements PolicyRepository {
         .prepare(
           `INSERT INTO policy (
              id, proposal_id, policy_number, premium,
-             coverage_start, coverage_end, renewal_date, registered_at, status
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET status = excluded.status`,
+             coverage_start, coverage_end, renewal_date, registered_at, status,
+             document_id, document_file_name, document_attached_by, document_attached_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             status               = excluded.status,
+             document_id          = excluded.document_id,
+             document_file_name   = excluded.document_file_name,
+             document_attached_by = excluded.document_attached_by,
+             document_attached_at = excluded.document_attached_at`,
         )
         .run(
           policy.id,
@@ -64,6 +75,11 @@ export class SqlitePolicyRepository implements PolicyRepository {
           policy.renewalDate.toString(),
           policy.registeredAt.toISOString(),
           policy.status,
+          // REQ-247: the PDF in force and its signature.
+          policy.document?.documentId ?? null,
+          policy.document?.fileName ?? null,
+          policy.document?.attached.author ?? null,
+          policy.document?.attached.at.toISOString() ?? null,
         );
 
       const installment = this.db.prepare(
@@ -157,6 +173,17 @@ export class SqlitePolicyRepository implements PolicyRepository {
         coverageEnd: CalendarDate.fromString(row.coverage_end),
         renewalDate: CalendarDate.fromString(row.renewal_date),
         registeredAt: new Date(row.registered_at),
+        document:
+          row.document_id === null
+            ? null
+            : {
+                documentId: row.document_id,
+                fileName: row.document_file_name ?? '',
+                attached: Authorship.restore(
+                  row.document_attached_by ?? '',
+                  new Date(row.document_attached_at ?? ''),
+                ),
+              },
         installments: installments.map((item) =>
           Installment.restore(
             {

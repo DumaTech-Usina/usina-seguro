@@ -213,7 +213,6 @@ async function registeredPolicy(numbers: {
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'credit',
-    customerAccepted: true,
     proposalNumber: numbers.proposalNumber,
     netPremium: '100.00',
     coverageStart: '2026-10-01',
@@ -398,5 +397,83 @@ describe('the policy screen', () => {
     expect(text()).toContain('Apólice não encontrada');
     // The sentence is the one src/i18n rendered for the 404.
     expect(text()).toContain('does-not-exist');
+  });
+});
+
+describe('the PDF of the policy (REQ-247)', () => {
+  const FIRST = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]);
+  const SECOND = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x32]);
+
+  /** Opens the sending dialog from the policy card. */
+  function openSending(): void {
+    const button = [...document.querySelectorAll('#policy-document button')].find((node: Untyped) =>
+      node.textContent?.includes('Enviar PDF'),
+    );
+    button.click();
+  }
+
+  /** Puts a file in the dialog's input the way the browser does. */
+  function choosePdf(bytes: Uint8Array, name: string): void {
+    const input = document.querySelector('#dialog-policy-document [name="pdf"]');
+    const file = new window.File([bytes], name, { type: 'application/pdf' });
+    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  }
+
+  async function download(policyId: string): Promise<Response> {
+    return fetch(`${baseUrl}/policies/${policyId}/document`);
+  }
+
+  it('sends the PDF from the policy page, signed, and keeps only the last one (CA-243, CA-244)', async () => {
+    const policyId = await registeredPolicy({
+      proposalNumber: 'PRP-DOC-1',
+      policyNumber: 'PRP-DOC-1',
+    });
+    await openPolicy(policyId);
+    expect(text('#policy-document')).toContain('Nenhum PDF enviado.');
+
+    openSending();
+    choosePdf(FIRST, 'apolice.pdf');
+    answerDialog('#dialog-policy-document', { userId: 'ana.souza' });
+
+    await vi.waitFor(() => {
+      expect(text('#policy-document')).toContain('apolice.pdf');
+    });
+    expect(requests).toContain(`POST /policies/${policyId}/document`);
+    expect(text('#policy-document')).toContain('Enviado por ana.souza');
+    const link = document.querySelector('#policy-document a');
+    expect(link.getAttribute('href')).toBe(`/policies/${policyId}/document`);
+    const first = await download(policyId);
+    // Treated as a PDF; its content is not read (DEC-213).
+    expect(first.headers.get('content-type')).toBe('application/pdf');
+    expect(new Uint8Array(await first.arrayBuffer())).toEqual(FIRST);
+
+    openSending();
+    choosePdf(SECOND, 'apolice-corrigida.pdf');
+    answerDialog('#dialog-policy-document', { userId: 'bruno.lima' });
+
+    await vi.waitFor(() => {
+      expect(text('#policy-document')).toContain('apolice-corrigida.pdf');
+    });
+    expect(text('#policy-document')).toContain('Enviado por bruno.lima');
+    expect(text('#policy-document')).not.toContain('apolice.pdf');
+    expect(new Uint8Array(await (await download(policyId)).arrayBuffer())).toEqual(SECOND);
+  });
+
+  it('refuses a sending nobody signed with the sentence the server rendered (REQ-216)', async () => {
+    const policyId = await registeredPolicy({
+      proposalNumber: 'PRP-DOC-2',
+      policyNumber: 'PRP-DOC-2',
+    });
+    await openPolicy(policyId);
+
+    openSending();
+    choosePdf(FIRST, 'apolice.pdf');
+    answerDialog('#dialog-policy-document', { userId: '  ' });
+
+    await vi.waitFor(() => {
+      expect(lastSnackbar()).toContain('Informe quem está registrando esta informação.');
+    });
+    expect((await callApi('GET', `/policies/${policyId}`)).document).toBeNull();
+    expect((await download(policyId)).status).toBe(404);
   });
 });

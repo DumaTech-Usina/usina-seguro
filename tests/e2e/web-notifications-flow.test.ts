@@ -195,7 +195,6 @@ async function issuePolicy(
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'credit',
-    customerAccepted: true,
     proposalNumber: proposalNumber,
     netPremium: '1200.00',
     coverageStart: '2026-10-01',

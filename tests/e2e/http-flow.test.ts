@@ -48,7 +48,6 @@ const validProposal = {
   insurerId: 'insurer-1',
   productId: 'product-1',
   paymentMethodId: 'bank-slip',
-  customerAccepted: true,
   proposalNumber: 'PRP-1',
   netPremium: '1234.56',
   coverageStart: '2026-10-01',
@@ -96,22 +95,22 @@ describe('HTTP application', () => {
     });
   });
 
-  it('rejects a proposal without the customer acceptance with 422 (CA-001)', async () => {
-    const response = await post({ ...validProposal, customerAccepted: false });
+  it('rejects a proposal without a payment method with 422 (REQ-040)', async () => {
+    const response = await post({ ...validProposal, paymentMethodId: '  ' });
 
     expect(response.status).toBe(422);
     expect(await response.json()).toMatchObject({
       error: 'business_rule_violation',
       rule: 'REQ-040',
-      messageKey: 'proposal.customer_acceptance_required',
+      messageKey: 'proposal.payment_method_required',
     });
   });
 
   it('renders the message in Portuguese through the i18n dictionary', async () => {
-    const response = await post({ ...validProposal, customerAccepted: false });
+    const response = await post({ ...validProposal, paymentMethodId: '  ' });
 
     const body = (await response.json()) as ErrorBody;
-    expect(body.message).toBe('Proposta exige aceite do cliente registrado.');
+    expect(body.message).toBe('Proposta exige forma de pagamento definida.');
   });
 
   it('interpolates message parameters in the rendered text', async () => {

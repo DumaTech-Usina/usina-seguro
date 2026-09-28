@@ -7,8 +7,8 @@ import { translate } from './messages.ts';
 
 describe('translate', () => {
   it('renders the Portuguese text for a domain key', () => {
-    expect(translate(PROPOSAL_MESSAGES.CUSTOMER_ACCEPTANCE_REQUIRED)).toBe(
-      'Proposta exige aceite do cliente registrado.',
+    expect(translate(PROPOSAL_MESSAGES.PAYMENT_METHOD_REQUIRED)).toBe(
+      'Proposta exige forma de pagamento definida.',
     );
   });
 

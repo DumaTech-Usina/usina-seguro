@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { Authorship } from '../../proposal/domain/authorship.ts';
 import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
@@ -140,5 +141,47 @@ describe('Policy.payInstallment', () => {
 
   it('reports an installment that is not in the schedule', () => {
     expect(() => scheduled().payInstallment(99, confirmation)).toThrow(RecordNotFound);
+  });
+});
+
+describe('Policy.attachDocument — the PDF of the policy (REQ-247)', () => {
+  const first = {
+    documentId: 'document-1',
+    fileName: 'apolice.pdf',
+    attached: Authorship.of('ana.souza', new Date('2026-09-21T10:00:00.000Z')),
+  };
+  const second = {
+    documentId: 'document-2',
+    fileName: 'apolice-corrigida.pdf',
+    attached: Authorship.of('bruno.lima', new Date('2026-09-22T10:00:00.000Z')),
+  };
+
+  it('starts without a document', () => {
+    expect(Policy.register(validData()).document).toBeNull();
+  });
+
+  it('keeps the document with who sent it and when, as a new instance', () => {
+    const policy = Policy.register(validData());
+    const attached = policy.attachDocument(first);
+
+    expect(attached.document).toEqual(first);
+    expect(policy.document).toBeNull();
+  });
+
+  it('keeps only the last document sent (CA-244)', () => {
+    const policy = Policy.register(validData()).attachDocument(first).attachDocument(second);
+
+    expect(policy.document).toEqual(second);
+  });
+
+  it('keeps the document when an installment is paid', () => {
+    const policy = Policy.register(validData()).attachDocument(first);
+
+    const paid = policy.payInstallment(1, {
+      userId: 'carla.dias',
+      at: new Date('2026-10-11T10:00:00.000Z'),
+    });
+
+    expect(paid.document).toEqual(first);
   });
 });

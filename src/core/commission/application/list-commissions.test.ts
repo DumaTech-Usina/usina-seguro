@@ -50,7 +50,6 @@ async function business(
       insurerId: 'insurer-1',
       productId: 'auto',
       paymentMethodId: 'credit',
-      customerAccepted: true,
       proposalNumber: `PRP-${suffix}`,
       netPremium: Money.fromString('100.00'),
       coverageStart: CalendarDate.fromString('2026-10-01'),

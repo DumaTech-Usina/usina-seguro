@@ -11,10 +11,9 @@ import { SIGNATURE_PROPERTIES, SIGNATURE_REQUIRED, authorOf } from '../author.ts
 /**
  * Request shape validation (Fastify JSON Schema).
  *
- * It only covers type and presence — never business rules. If
- * `customerAccepted` is `false` the schema accepts it and the domain rejects it
- * (REQ-040); an intermediary without CTU passes here and is refused by the
- * domain (REQ-221). Money and percentages are strings, never numbers (REQ-120,
+ * It only covers type and presence — never business rules. An empty payment
+ * method passes here and the domain rejects it (REQ-040); an intermediary
+ * without CTU passes here and is refused by the domain (REQ-221). Money and percentages are strings, never numbers (REQ-120,
  * REQ-121).
  */
 const workedCommissionProperties = {
@@ -48,7 +47,6 @@ const registerProposalSchema: FastifySchema = {
       'insurerId',
       'productId',
       'paymentMethodId',
-      'customerAccepted',
       'proposalNumber',
       'netPremium',
       'coverageStart',
@@ -65,7 +63,6 @@ const registerProposalSchema: FastifySchema = {
       insurerId: { type: 'string' },
       productId: { type: 'string' },
       paymentMethodId: { type: 'string' },
-      customerAccepted: { type: 'boolean' },
       proposalNumber: { type: 'string' },
       netPremium: { type: 'string' },
       coverageStart: { type: 'string' },
@@ -165,8 +162,8 @@ const readProposalPdfSchema: FastifySchema = {
   },
 };
 
-/** A proposal PDF is small; base64 costs four bytes per three. */
-const PDF_BODY_LIMIT = 12 * 1024 * 1024;
+/** A proposal PDF is small; base64 costs four bytes per three. Also the policy PDF's (REQ-247). */
+export const PDF_BODY_LIMIT = 12 * 1024 * 1024;
 
 interface ProposalIdParams {
   id: string;
@@ -178,7 +175,6 @@ interface RegisterProposalBody {
   insurerId: string;
   productId: string;
   paymentMethodId: string;
-  customerAccepted: boolean;
   proposalNumber: string;
   netPremium: string;
   coverageStart: string;
@@ -238,7 +234,6 @@ export function registerProposalRoutes(app: FastifyInstance, useCases: UseCases)
         insurerId: body.insurerId,
         productId: body.productId,
         paymentMethodId: body.paymentMethodId,
-        customerAccepted: body.customerAccepted,
         proposalNumber: body.proposalNumber,
         netPremium: body.netPremium,
         coverageStart: body.coverageStart,
@@ -337,7 +332,7 @@ export function registerProposalRoutes(app: FastifyInstance, useCases: UseCases)
  * RFC 6266: the plain `filename` carries an ASCII fallback for old clients,
  * and `filename*` carries the real name percent-encoded as UTF-8.
  */
-function contentDisposition(fileName: string): string {
+export function contentDisposition(fileName: string): string {
   const ascii = fileName.replace(/[^\x20-\x7E]/g, '_').replace(/["\\]/g, '_');
 
   return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(fileName)}`;

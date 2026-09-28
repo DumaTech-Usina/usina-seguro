@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ImmediateTransaction } from '../../../infrastructure/persistence/in-memory/immediate-transaction.ts';
+import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
@@ -20,6 +21,7 @@ function scenario() {
     registerPolicy: new RegisterPolicy({
       proposals,
       policies,
+      documents: new InMemoryDocumentStorage(),
       transaction: new ImmediateTransaction(),
       // FP-01 step 7 belongs to the commission and notification modules; this
       // test is about reaching the policy from the proposal.
@@ -41,7 +43,6 @@ async function transmittedProposal(proposals: InMemoryProposalRepository): Promi
       insurerId: 'insurer-1',
       productId: 'auto',
       paymentMethodId: 'bank-slip',
-      customerAccepted: true,
       proposalNumber: 'PRP-9001',
       netPremium: Money.fromString('1200.00'),
       coverageStart: CalendarDate.fromString('2026-10-01'),

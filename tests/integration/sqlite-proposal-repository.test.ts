@@ -43,7 +43,6 @@ function proposal(
     insurerId: 'insurer-1',
     productId: 'product-1',
     paymentMethodId: 'bank-slip',
-    customerAccepted: true,
     proposalNumber,
     netPremium: Money.fromString('1500.75'),
     coverageStart: CalendarDate.fromString('2026-10-01'),
@@ -80,7 +79,6 @@ describe('SqliteProposalRepository', () => {
     expect(read?.status).toBe('AWAITING_ISSUANCE');
     expect(read?.clientId).toBe('client-1');
     expect(read?.paymentMethodId).toBe('bank-slip');
-    expect(read?.customerAccepted).toBe(true);
     expect(read?.proposalNumber).toBe('PRP-proposal-1');
     expect(read?.netPremium.toString()).toBe('1500.75');
     expect(read?.coverageStart.toString()).toBe('2026-10-01');

@@ -42,7 +42,6 @@ function transmittedProposal(id = 'proposal-1', proposalNumber = 'PRP-9001'): Pr
     insurerId: 'insurer-1',
     productId: 'product-1',
     paymentMethodId: 'bank-slip',
-    customerAccepted: true,
     proposalNumber,
     netPremium: Money.fromString('1200.00'),
     coverageStart: CalendarDate.fromString('2026-10-01'),

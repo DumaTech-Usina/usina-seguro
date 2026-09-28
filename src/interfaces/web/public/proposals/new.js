@@ -1,14 +1,15 @@
 /**
  * FP-01 steps 1 to 6: registers the proposal with everything it holds.
  *
- * One form, one call. Every rule — the customer's acceptance (REQ-040), the
- * CTU an intermediary requires (REQ-221), the signature (REQ-216) — belongs to
+ * One form, one call. Every rule — the payment method (REQ-040), the CTU an
+ * intermediary requires (REQ-221), the signature (REQ-216) — belongs to
  * the domain, and this file learns the answer by being refused. The expected
  * value (REQ-232) is the server's answer too: this page shows it after the
  * registration and never computes it.
  */
 
 import { ApiError, api } from '/app/shared/api.js';
+import { base64Of } from '/app/shared/file.js';
 import { formatDate, formatMoney } from '/app/shared/money.js';
 import {
   bindReceiptFields,
@@ -159,16 +160,6 @@ const PDF_FAILURE = {
 const pdfForm = document.querySelector('#form-pdf');
 const pdfResult = document.querySelector('#pdf-result');
 
-/** The file as base64, without the `data:` prefix the reader adds. */
-function base64Of(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
 /**
  * Fills the fields the reading found. What the PDF brings overwrites what was
  * typed (REQ-218); what it did not find is left exactly as it was.
@@ -224,7 +215,7 @@ function showReading(reading) {
       text.append('Dados não encontrados:', labelList('pdf-missing', '!', reading.missing));
     }
     text.append(
-      'Não vêm do PDF: aceite do cliente, comissão trabalhada e seu modo, recebimento (intermediária e CTU). Revise os dados antes de salvar.',
+      'Não vêm do PDF: comissão trabalhada e seu modo, recebimento (intermediária e CTU). Revise os dados antes de salvar.',
     );
   }
 
@@ -314,9 +305,6 @@ form.addEventListener('submit', (event) => {
       insurerId: value('insurerId'),
       productId: value('productId'),
       paymentMethodId: value('paymentMethodId'),
-      // The domain is what refuses a missing acceptance (REQ-040), so it
-      // travels as the boolean it is.
-      customerAccepted: form.querySelector('[name="customerAccepted"]').checked,
       proposalNumber: value('proposalNumber'),
       netPremium: value('netPremium'),
       coverageStart: value('coverageStart'),

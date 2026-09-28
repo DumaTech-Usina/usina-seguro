@@ -15,7 +15,6 @@ function proposal(id = 'proposal-1', registeredAt = '2026-09-22T12:00:00.000Z'):
     insurerId: 'insurer-1',
     productId: 'product-1',
     paymentMethodId: 'bank-slip',
-    customerAccepted: true,
     proposalNumber: `PRP-${id}`,
     netPremium: Money.fromString('100.00'),
     coverageStart: CalendarDate.fromString('2026-10-01'),
