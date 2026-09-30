@@ -459,6 +459,106 @@ describe('the PDF of the policy (REQ-247)', () => {
     expect(new Uint8Array(await (await download(policyId)).arrayBuffer())).toEqual(SECOND);
   });
 
+  it('opens the PDF in the viewer on click, and downloads it from its actions menu', async () => {
+    const blobs: Untyped[] = [];
+    const revoked: string[] = [];
+    window.URL.createObjectURL = (blob: Untyped) => {
+      blobs.push(blob);
+      return `blob:pdf-${blobs.length}`;
+    };
+    window.URL.revokeObjectURL = (url: string) => {
+      revoked.push(url);
+    };
+    const policyId = await registeredPolicy({
+      proposalNumber: 'PRP-DOC-VIEW',
+      policyNumber: 'PRP-DOC-VIEW',
+    });
+    await callApi('POST', `/policies/${policyId}/document`, {
+      fileName: 'apolice.pdf',
+      content: Buffer.from(FIRST).toString('base64'),
+      userId: 'ana.souza',
+    });
+    await openPolicy(policyId);
+
+    const link = document.querySelector('#policy-document a');
+    // The link still points at the download, for a new tab or "save as".
+    expect(link.getAttribute('href')).toBe(`/policies/${policyId}/document`);
+    link.click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('dialog.pdf-viewer')?.open).toBe(true);
+    });
+    const viewer = document.querySelector('dialog.pdf-viewer');
+    expect(viewer.textContent).toContain('apolice.pdf');
+    expect(viewer.querySelector('iframe').getAttribute('src')).toBe('blob:pdf-1');
+    // Always shown as a PDF, whatever type the upload carried.
+    expect(blobs[0].type).toBe('application/pdf');
+    expect(new Uint8Array(await blobs[0].arrayBuffer())).toEqual(FIRST);
+
+    const download = viewer.querySelector('.pdf-actions [data-action="download"]');
+    expect(download.textContent).toContain('Baixar PDF');
+    expect(download.getAttribute('href')).toBe(`/policies/${policyId}/document`);
+    expect(download.getAttribute('download')).toBe('apolice.pdf');
+
+    [...viewer.querySelectorAll('button')]
+      .find((node: Untyped) => node.textContent === 'Fechar')
+      .click();
+    expect(document.querySelector('dialog.pdf-viewer')).toBeNull();
+    expect(revoked).toEqual(['blob:pdf-1']);
+  });
+
+  it('closes the modal on a backdrop click, with the fields still empty, and sends nothing', async () => {
+    const policyId = await registeredPolicy({
+      proposalNumber: 'PRP-DOC-BACKDROP',
+      policyNumber: 'PRP-DOC-BACKDROP',
+    });
+    await openPolicy(policyId);
+    const dialog = document.querySelector('#dialog-policy-document');
+
+    openSending();
+    expect(dialog.open).toBe(true);
+
+    // A click on the content keeps it open.
+    dialog.querySelector('[name="userId"]').click();
+    expect(dialog.open).toBe(true);
+
+    // The backdrop is the dialog itself as the target.
+    dialog.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(dialog.open).toBe(false);
+    expect(dialog.returnValue).toBe('cancel');
+
+    // Dismissed, not confirmed: nothing was sent.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(requests).not.toContain(`POST /policies/${policyId}/document`);
+  });
+
+  it('closes the PDF viewer on a backdrop click', async () => {
+    window.URL.createObjectURL = () => 'blob:pdf-backdrop';
+    window.URL.revokeObjectURL = () => {};
+    const policyId = await registeredPolicy({
+      proposalNumber: 'PRP-DOC-VIEW-BACKDROP',
+      policyNumber: 'PRP-DOC-VIEW-BACKDROP',
+    });
+    await callApi('POST', `/policies/${policyId}/document`, {
+      fileName: 'apolice.pdf',
+      content: Buffer.from(FIRST).toString('base64'),
+      userId: 'ana.souza',
+    });
+    await openPolicy(policyId);
+
+    document.querySelector('#policy-document a').click();
+    await vi.waitFor(() => {
+      expect(document.querySelector('dialog.pdf-viewer')?.open).toBe(true);
+    });
+    const viewer = document.querySelector('dialog.pdf-viewer');
+
+    viewer.querySelector('.pdf-viewer__title').click();
+    expect(viewer.open).toBe(true);
+
+    viewer.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(document.querySelector('dialog.pdf-viewer')).toBeNull();
+  });
+
   it('refuses a sending nobody signed with the sentence the server rendered (REQ-216)', async () => {
     const policyId = await registeredPolicy({
       proposalNumber: 'PRP-DOC-2',

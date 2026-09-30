@@ -13,8 +13,10 @@
  */
 
 import { ApiError, api } from '/app/shared/api.js';
+import { closeOnBackdropClick } from '/app/shared/dialog.js';
 import { base64Of } from '/app/shared/file.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
+import { viewPdfOnClick } from '/app/shared/pdf-viewer.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
 import { stageStrip, statusChip } from '/app/shared/status.js';
 
@@ -79,6 +81,10 @@ function button(label, { variant = 'outlined', iconName, onClick }) {
   node.append(document.createTextNode(label));
   node.addEventListener('click', onClick);
   return node;
+}
+
+for (const dialog of document.querySelectorAll('dialog.dialog')) {
+  closeOnBackdropClick(dialog);
 }
 
 /** Opens a dialog and resolves with its fields, or null when dismissed. */
@@ -182,6 +188,7 @@ function documentBlock(policy) {
     const file = element('a', 'definition__value');
     file.href = api.policyDocumentUrl(policy.id);
     file.append(icon('attach_file'), ` ${policy.document.fileName}`);
+    viewPdfOnClick(file, { url: file.getAttribute('href'), fileName: policy.document.fileName });
     wrapper.append(
       file,
       element(

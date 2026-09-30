@@ -15,6 +15,7 @@
 import { ApiError, api } from '/app/shared/api.js';
 import { base64Of } from '/app/shared/file.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
+import { viewPdfOnClick } from '/app/shared/pdf-viewer.js';
 import {
   bindReceiptFields,
   intermediaryOf,
@@ -167,6 +168,10 @@ function summaryCard(proposal) {
     source.id = 'source-document';
     source.href = api.proposalSourceDocumentUrl(proposal.id);
     source.append(icon('attach_file'), ` ${proposal.sourceDocument.fileName}`);
+    viewPdfOnClick(source, {
+      url: source.getAttribute('href'),
+      fileName: proposal.sourceDocument.fileName,
+    });
 
     const wrapper = element('div', 'definition');
     wrapper.append(element('span', 'text-label', 'Documento de origem'), source);

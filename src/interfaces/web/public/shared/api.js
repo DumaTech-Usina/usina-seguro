@@ -48,7 +48,20 @@ async function request(path, { method = 'GET', body } = {}) {
   return payload;
 }
 
+/** The bytes of a file the API serves, e.g. a PDF; a refusal as `ApiError`. */
+async function readFile(path) {
+  const response = await fetch(path);
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new ApiError(response.status, text === '' ? null : JSON.parse(text));
+  }
+
+  return response.arrayBuffer();
+}
+
 export const api = {
+  readFile,
   // FP-01 — the proposal, its corrections while it awaits issuance, and the
   // refusal. Every correction is signed: `input.userId` (REQ-216).
   registerProposal: (input) => request('/proposals', { method: 'POST', body: input }),

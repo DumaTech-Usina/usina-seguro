@@ -625,6 +625,42 @@ describe('keeping the imported PDF with the proposal (REQ-219)', () => {
     expect(link.getAttribute('href')).toBe(`/proposals/${stored.id}/source-document`);
   });
 
+  it('opens the proposal PDF in the viewer on click, with the download in its actions menu', async () => {
+    const blobs: Untyped[] = [];
+    window.URL.createObjectURL = (blob: Untyped) => {
+      blobs.push(blob);
+      return 'blob:proposal-pdf';
+    };
+    window.URL.revokeObjectURL = () => {};
+    // jsdom has the element but not the modal behaviour.
+    window.HTMLDialogElement.prototype.showModal = function showModal(this: Untyped) {
+      this.open = true;
+    };
+    const proposalId = await awaitingProposal({
+      proposalNumber: 'PRP-SRC-VIEW',
+      sourceDocument: {
+        fileName: 'proposta.pdf',
+        // Whatever type was informed, the viewer shows a PDF.
+        contentType: 'text/html',
+        content: Buffer.from(PDF_BYTES).toString('base64'),
+      },
+    });
+    await openProposal(proposalId);
+
+    (document.querySelector('#source-document') as Untyped).click();
+
+    await vi.waitFor(() => {
+      expect(document.querySelector('dialog.pdf-viewer')?.open).toBe(true);
+    });
+    const viewer: Untyped = document.querySelector('dialog.pdf-viewer');
+    expect(viewer.querySelector('iframe').getAttribute('src')).toBe('blob:proposal-pdf');
+    expect(blobs[0].type).toBe('application/pdf');
+    expect(new Uint8Array(await blobs[0].arrayBuffer())).toEqual(PDF_BYTES);
+    const download = viewer.querySelector('.pdf-actions [data-action="download"]');
+    expect(download.textContent).toContain('Baixar PDF');
+    expect(download.getAttribute('href')).toBe(`/proposals/${proposalId}/source-document`);
+  });
+
   it('keeps the file even when the reading failed (CA-223)', async () => {
     openPage('proposals/new.html');
     await import('/app/proposals/new.js');

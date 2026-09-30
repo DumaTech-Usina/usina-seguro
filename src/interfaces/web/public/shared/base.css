@@ -822,6 +822,39 @@ select.field__input {
   background: var(--surface-variant);
 }
 
+/* ---------------------------------------------------------- pdf viewer -- */
+
+.pdf-viewer {
+  width: min(960px, calc(100vw - 32px));
+}
+
+.pdf-viewer__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+}
+
+.pdf-viewer__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.pdf-viewer__frame {
+  display: block;
+  width: 100%;
+  height: min(75vh, 900px);
+  border: none;
+}
+
 /* ------------------------------------------------------------ snackbar -- */
 
 .snackbar-host {
