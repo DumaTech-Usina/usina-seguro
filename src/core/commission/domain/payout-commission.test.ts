@@ -62,11 +62,11 @@ describe('payout calculation (REQ-274, REQ-275)', () => {
     expect(result.retained.toString()).toBe('48.00');
   });
 
-  it('floors the payout and the Usina keeps the difference (CA-227)', () => {
+  it('rounds the payout by ABNT NBR 5891 and the Usina keeps the difference (CA-227, REQ-298)', () => {
     const result = calculatePayout(Money.fromString('10.00'), Percentage.fromString('70.55'));
 
-    expect(result.payout.toString()).toBe('7.05');
-    expect(result.retained.toString()).toBe('2.95');
+    expect(result.payout.toString()).toBe('7.06');
+    expect(result.retained.toString()).toBe('2.94');
   });
 
   it('CR 0: nothing to pay, everything stays with the Usina (CA-228, FA-211)', () => {

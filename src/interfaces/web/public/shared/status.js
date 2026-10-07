@@ -75,6 +75,14 @@ const PAYOUT = {
   ELIGIBLE: { label: 'Elegível', tone: 'success' },
 };
 
+/** REQ-268: as quatro situações de uma apólice com CT parcelada quanto ao repasse. */
+const PARCELLED_PAYOUT = {
+  WITHOUT_CR: { label: 'Sem CR', tone: 'warning' },
+  NONE_ELIGIBLE: { label: 'Nenhuma parcela elegida', tone: 'info' },
+  PARTIALLY_ELIGIBLE: { label: 'Parcialmente elegida', tone: 'info' },
+  FULLY_ELIGIBLE: { label: 'Totalmente elegida', tone: 'success' },
+};
+
 const MAPS = {
   proposal: PROPOSAL,
   policy: POLICY,
@@ -82,6 +90,7 @@ const MAPS = {
   commission: COMMISSION,
   reconciliation: RECONCILIATION,
   payout: PAYOUT,
+  parcelledPayout: PARCELLED_PAYOUT,
 };
 
 /**

@@ -23,6 +23,7 @@ interface NotificationRow {
   product_id: string;
   product_name: string | null;
   worked_commission: string | null;
+  subsequent_worked_commission: string | null;
   net_premium: string;
   occurred_at: string;
 }
@@ -42,8 +43,9 @@ export class SqliteNotificationRepository implements NotificationRepository {
         `INSERT INTO notification (
            id, event, recipient_id, policy_id, policy_number,
            client_id, client_name, broker_id, broker_name,
-           product_id, product_name, worked_commission, net_premium, occurred_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           product_id, product_name, worked_commission, subsequent_worked_commission,
+           net_premium, occurred_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         notification.id,
@@ -58,6 +60,7 @@ export class SqliteNotificationRepository implements NotificationRepository {
         content.product.id,
         content.product.name,
         content.workedCommission?.toString() ?? null,
+        content.subsequentWorkedCommission?.toString() ?? null,
         content.netPremium.toString(),
         notification.occurredAt.toISOString(),
       );
@@ -94,8 +97,15 @@ function restore(row: NotificationRow): Notification {
       client: { id: row.client_id, name: row.client_name },
       broker: { id: row.broker_id, name: row.broker_name },
       product: { id: row.product_id, name: row.product_name },
+      // Stored as notified, not re-checked: a parcelled CT may be above 100% (REQ-295).
       workedCommission:
-        row.worked_commission === null ? null : Percentage.fromString(row.worked_commission),
+        row.worked_commission === null
+          ? null
+          : Percentage.fromStringWithoutCeiling(row.worked_commission),
+      subsequentWorkedCommission:
+        row.subsequent_worked_commission === null
+          ? null
+          : Percentage.fromStringWithoutCeiling(row.subsequent_worked_commission),
       netPremium: Money.fromString(row.net_premium),
     },
     occurredAt: new Date(row.occurred_at),

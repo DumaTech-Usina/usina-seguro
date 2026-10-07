@@ -167,6 +167,7 @@ describe('Proposal.register', () => {
     const proposal = Proposal.restore(registration({ paymentMethodId: ' ' }), {
       status: 'REJECTED',
       workedCommissionHistory: [{ rate: Percentage.fromString('20'), mode: 'INTEGRAL', informed }],
+      installmentHistory: [{ installments: [], informed }],
       receiptHistory: [{ receipt: { kind: 'DIRECT' }, declared: informed }],
       rejectionReason: 'perfil de risco',
     });
@@ -190,16 +191,6 @@ describe('Proposal.expectedReceipt', () => {
     expect(expected.intermediary?.toString()).toBe('20.00');
     expect(expected.usina.toString()).toBe('10.00');
   });
-
-  it('uses the net premium as the base for a parcelled CT too (REQ-235, CA-215)', () => {
-    const expected = registered({
-      workedCommissionMode: 'PARCELLED',
-      receipt: THROUGH_INTERMEDIARY,
-    }).expectedReceipt();
-
-    expect(expected.intermediary?.toString()).toBe('20.00');
-    expect(expected.usina.toString()).toBe('10.00');
-  });
 });
 
 describe('Proposal.reviseWorkedCommission', () => {
@@ -207,12 +198,17 @@ describe('Proposal.reviseWorkedCommission', () => {
     const revised = registered().reviseWorkedCommission({
       rate: Percentage.fromString('25'),
       mode: 'PARCELLED',
+      subsequentRate: Percentage.fromString('10'),
       informed: Authorship.of('bruno.lima', REVISED_AT),
     });
 
     expect(revised.workedCommission.toString()).toBe('25');
+    expect(revised.subsequentWorkedCommission?.toString()).toBe('10');
     expect(revised.workedCommissionMode).toBe('PARCELLED');
-    expect(revised.expectedReceipt().usina.toString()).toBe('25.00');
+    expect(revised.expectedInstallmentReceipts()?.map((r) => r.usina.toString())).toEqual([
+      '12.50',
+      '5.00',
+    ]);
   });
 
   it('keeps every earlier entry with its author: nothing is erased (REQ-215, REQ-124, CA-204)', () => {
@@ -363,5 +359,298 @@ describe('Proposal.recognizeIssuance', () => {
       ruleOf(() => issued.reviseReceipt({ receipt: { kind: 'DIRECT' }, declared: informed })),
     ).toBe('REQ-260');
     expect(ruleOf(() => issued.reject('motivo'))).toBe('REQ-260');
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/* CT parcelada — V2 section 6A                                        */
+/* ------------------------------------------------------------------ */
+
+const ONE_HUNDRED_EACH = [
+  { amount: Money.fromString('100.00'), dueDate: null },
+  { amount: Money.fromString('100.00'), dueDate: null },
+  { amount: Money.fromString('100.00'), dueDate: null },
+];
+
+function parcelled(overrides: Partial<ProposalRegistration> = {}): Proposal {
+  return registered({
+    workedCommissionMode: 'PARCELLED',
+    workedCommission: Percentage.fromString('100'),
+    subsequentWorkedCommission: Percentage.fromString('30'),
+    installments: ONE_HUNDRED_EACH,
+    ...overrides,
+  });
+}
+
+function messageOf(work: () => unknown): string {
+  try {
+    work();
+  } catch (error) {
+    return (error as BusinessRuleViolation).messageKey;
+  }
+  throw new Error('should have thrown');
+}
+
+describe('Proposal.register with parcelled CT', () => {
+  it('keeps the CT of the first and the CT of the subsequent installments (REQ-291, CA-245)', () => {
+    const proposal = parcelled();
+
+    expect(proposal.workedCommissionMode).toBe('PARCELLED');
+    expect(proposal.workedCommission.toString()).toBe('100');
+    expect(proposal.subsequentWorkedCommission?.toString()).toBe('30');
+  });
+
+  it('signs both CTs in the same history entry (REQ-215, REQ-297)', () => {
+    const [entry] = parcelled().workedCommissionHistory;
+
+    expect(entry?.rate.toString()).toBe('100');
+    expect(entry?.subsequentRate?.toString()).toBe('30');
+    expect(entry?.informed.author).toBe('ana.souza');
+  });
+
+  it('has no CT of the subsequent installments with integral CT (REQ-291)', () => {
+    expect(registered().subsequentWorkedCommission).toBeNull();
+  });
+
+  it('refuses a parcelled CT without the CT of the subsequent installments (REQ-291, EX-209, REJ-233)', () => {
+    expect(ruleOf(() => parcelled({ subsequentWorkedCommission: null }))).toBe('REQ-291');
+    expect(messageOf(() => parcelled({ subsequentWorkedCommission: null }))).toBe(
+      'proposal.parcelled_requires_subsequent_ct',
+    );
+  });
+
+  it('refuses a second CT with integral CT: one field only (REQ-291)', () => {
+    expect(
+      messageOf(() => registered({ subsequentWorkedCommission: Percentage.fromString('30') })),
+    ).toBe('proposal.integral_has_single_ct');
+  });
+
+  it('refuses a parcelled CT with fewer than two installments (REQ-292, CA-268, EX-208)', () => {
+    expect(ruleOf(() => parcelled({ installments: [] }))).toBe('REQ-292');
+    expect(
+      messageOf(() =>
+        parcelled({ installments: [{ amount: Money.fromString('100.00'), dueDate: null }] }),
+      ),
+    ).toBe('proposal.parcelled_requires_two_installments');
+    expect(parcelled({ installments: ONE_HUNDRED_EACH.slice(0, 2) }).installments).toHaveLength(2);
+  });
+
+  it('refuses a parcelled CT received through an intermediary (REQ-296, REJ-230)', () => {
+    expect(ruleOf(() => parcelled({ receipt: THROUGH_INTERMEDIARY }))).toBe('REQ-296');
+    expect(messageOf(() => parcelled({ receipt: THROUGH_INTERMEDIARY }))).toBe(
+      'proposal.parcelled_cannot_have_intermediary',
+    );
+  });
+
+  it('accepts CTs above 100% on a parcelled proposal (REQ-295, CA-249)', () => {
+    const proposal = parcelled({
+      workedCommission: Percentage.fromStringWithoutCeiling('150'),
+      subsequentWorkedCommission: Percentage.fromStringWithoutCeiling('120'),
+    });
+
+    expect(proposal.workedCommission.toString()).toBe('150');
+  });
+
+  it('keeps the integral CT within 100%, as before (REQ-290, CA-251)', () => {
+    expect(
+      messageOf(() => registered({ workedCommission: Percentage.fromStringWithoutCeiling('101') })),
+    ).toBe('percentage.out_of_range');
+  });
+});
+
+describe('Proposal expected value with parcelled CT', () => {
+  it('is one value per installment, the first with its own CT (REQ-293, CA-246)', () => {
+    const receipts = parcelled().expectedInstallmentReceipts();
+
+    expect(receipts?.map((receipt) => [receipt.number, receipt.usina.toString()])).toEqual([
+      [1, '100.00'],
+      [2, '30.00'],
+      [3, '30.00'],
+    ]);
+  });
+
+  it('has no total expected value: nothing is accumulated (REQ-293, REJ-232)', () => {
+    expect(() => parcelled().expectedReceipt()).toThrow();
+  });
+
+  it('has no value per installment with integral CT (REQ-235)', () => {
+    expect(registered().expectedInstallmentReceipts()).toBeNull();
+  });
+});
+
+describe('Proposal.reviseWorkedCommission and the mode (REQ-297, REQ-299)', () => {
+  const informed = () => Authorship.of('bruno.lima', REVISED_AT);
+
+  it('corrects both CTs of a parcelled proposal before issuance (REQ-297)', () => {
+    const revised = parcelled().reviseWorkedCommission({
+      rate: Percentage.fromString('90'),
+      mode: 'PARCELLED',
+      subsequentRate: Percentage.fromString('25'),
+      informed: informed(),
+    });
+
+    expect(revised.workedCommission.toString()).toBe('90');
+    expect(revised.subsequentWorkedCommission?.toString()).toBe('25');
+    expect(revised.workedCommissionHistory).toHaveLength(2);
+  });
+
+  it('switches integral to parcelled when the receipt is direct and there are two installments (FA-219, CA-252)', () => {
+    const revised = registered().reviseWorkedCommission({
+      rate: Percentage.fromString('100'),
+      mode: 'PARCELLED',
+      subsequentRate: Percentage.fromString('30'),
+      informed: informed(),
+    });
+
+    expect(revised.workedCommissionMode).toBe('PARCELLED');
+  });
+
+  it('refuses the switch to parcelled while an intermediary is declared (REQ-299, REQ-296, EX-210)', () => {
+    expect(
+      messageOf(() =>
+        registered({ receipt: THROUGH_INTERMEDIARY }).reviseWorkedCommission({
+          rate: Percentage.fromString('100'),
+          mode: 'PARCELLED',
+          subsequentRate: Percentage.fromString('30'),
+          informed: informed(),
+        }),
+      ),
+    ).toBe('proposal.parcelled_cannot_have_intermediary');
+  });
+
+  it('refuses the switch to parcelled with fewer than two installments (REQ-299, REQ-292, REJ-235)', () => {
+    expect(
+      messageOf(() =>
+        registered({ installments: [] }).reviseWorkedCommission({
+          rate: Percentage.fromString('100'),
+          mode: 'PARCELLED',
+          subsequentRate: Percentage.fromString('30'),
+          informed: informed(),
+        }),
+      ),
+    ).toBe('proposal.parcelled_requires_two_installments');
+  });
+
+  it('switches parcelled to integral with one CT on the net premium (FA-220, CA-253)', () => {
+    const revised = parcelled().reviseWorkedCommission({
+      rate: Percentage.fromString('20'),
+      mode: 'INTEGRAL',
+      informed: informed(),
+    });
+
+    expect(revised.workedCommissionMode).toBe('INTEGRAL');
+    expect(revised.subsequentWorkedCommission).toBeNull();
+    expect(revised.expectedReceipt().usina.toString()).toBe('20.00');
+  });
+});
+
+describe('Proposal.reviseReceipt with parcelled CT', () => {
+  it('refuses to declare an intermediary on a parcelled proposal (REQ-296, EX-207)', () => {
+    expect(
+      messageOf(() =>
+        parcelled().reviseReceipt({
+          receipt: THROUGH_INTERMEDIARY,
+          declared: Authorship.of('bruno.lima', REVISED_AT),
+        }),
+      ),
+    ).toBe('proposal.parcelled_cannot_have_intermediary');
+  });
+});
+
+describe('Proposal.reviseInstallments (REQ-254)', () => {
+  const informed = () => Authorship.of('bruno.lima', REVISED_AT);
+  const three = [
+    { amount: Money.fromString('40.00'), dueDate: null },
+    { amount: Money.fromString('30.00'), dueDate: CalendarDate.fromString('2026-11-10') },
+    { amount: Money.fromString('30.00'), dueDate: null },
+  ];
+
+  it('the installments of the registration are the first entry, signed by who registered (REQ-254)', () => {
+    const [entry] = registered().installmentHistory;
+
+    expect(entry?.installments).toHaveLength(2);
+    expect(entry?.informed.author).toBe('ana.souza');
+    expect(entry?.informed.at).toEqual(REGISTERED_AT);
+  });
+
+  it('includes, alters and removes installments of an integral proposal before issuance (FA-224, CA-261)', () => {
+    const revised = registered().reviseInstallments({ installments: three, informed: informed() });
+
+    expect(revised.installments.map((installment) => installment.amount.toString())).toEqual([
+      '40.00',
+      '30.00',
+      '30.00',
+    ]);
+    expect(
+      revised.reviseInstallments({ installments: [], informed: informed() }).installments,
+    ).toEqual([]);
+  });
+
+  it('keeps every earlier list with who changed it and when: nothing is erased (REQ-254, REQ-124)', () => {
+    const history = registered().reviseInstallments({
+      installments: three,
+      informed: informed(),
+    }).installmentHistory;
+
+    expect(history.map((entry) => entry.installments.length)).toEqual([2, 3]);
+    expect(history.map((entry) => entry.informed.author)).toEqual(['ana.souza', 'bruno.lima']);
+    expect(history[1]?.informed.at).toEqual(REVISED_AT);
+  });
+
+  it('keeps every installment worth something (REQ-204, REJ-215)', () => {
+    expect(
+      ruleOf(() =>
+        registered().reviseInstallments({
+          installments: [{ amount: Money.fromString('0.00'), dueDate: null }],
+          informed: informed(),
+        }),
+      ),
+    ).toBe('REQ-204');
+  });
+
+  it('refuses a removal that leaves a parcelled proposal with fewer than two (REQ-292, CA-268)', () => {
+    expect(
+      messageOf(() =>
+        parcelled().reviseInstallments({
+          installments: [{ amount: Money.fromString('100.00'), dueDate: null }],
+          informed: informed(),
+        }),
+      ),
+    ).toBe('proposal.parcelled_requires_two_installments');
+  });
+
+  it('recalculates the expected value of each installment of a parcelled proposal (REQ-293)', () => {
+    const revised = parcelled().reviseInstallments({ installments: three, informed: informed() });
+
+    expect(revised.expectedInstallmentReceipts()?.map((r) => r.usina.toString())).toEqual([
+      '40.00',
+      '9.00',
+      '9.00',
+    ]);
+  });
+
+  it('lets an integral proposal without installments gain them and switch to parcelled (REQ-254, REQ-299)', () => {
+    const switched = registered({ installments: [] })
+      .reviseInstallments({ installments: three, informed: informed() })
+      .reviseWorkedCommission({
+        rate: Percentage.fromString('100'),
+        mode: 'PARCELLED',
+        subsequentRate: Percentage.fromString('30'),
+        informed: informed(),
+      });
+
+    expect(switched.workedCommissionMode).toBe('PARCELLED');
+  });
+
+  it('changes nothing once issued or refused (REQ-260, REQ-253)', () => {
+    const issued = registered().recognizeIssuance(Authorship.of('carla', REVISED_AT));
+    const refused = registered().reject('motivo');
+
+    expect(
+      ruleOf(() => issued.reviseInstallments({ installments: three, informed: informed() })),
+    ).toBe('REQ-260');
+    expect(
+      ruleOf(() => refused.reviseInstallments({ installments: three, informed: informed() })),
+    ).toBe('REQ-253');
   });
 });

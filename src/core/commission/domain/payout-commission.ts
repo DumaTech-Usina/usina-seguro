@@ -32,7 +32,7 @@ export interface PayoutCalculation {
   readonly base: Money;
   /** The CR (REQ-270). */
   readonly rate: Percentage;
-  /** To be paid to the broker: base x CR, floored on the cent (REQ-275). */
+  /** To be paid to the broker: base x CR, rounded by ABNT NBR 5891 (REQ-275, REQ-298). */
   readonly payout: Money;
   /** What stays with the Usina: the difference (REQ-275). */
   readonly retained: Money;
@@ -112,9 +112,9 @@ export function payoutBase(expected: ExpectedReceipt): Money {
   return expected.usina;
 }
 
-/** REQ-274, REQ-275: payout floored on the cent; the Usina keeps the rest. */
+/** REQ-274, REQ-275: payout rounded by ABNT NBR 5891 (REQ-298); the Usina keeps the rest. */
 export function calculatePayout(base: Money, rate: Percentage): PayoutCalculation {
-  const payout = base.applyRate(rate, 'FLOOR');
+  const payout = base.applyRate(rate);
 
   return { base, rate, payout, retained: base.minus(payout) };
 }

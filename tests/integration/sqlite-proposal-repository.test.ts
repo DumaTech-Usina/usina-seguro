@@ -67,6 +67,7 @@ function history(from: Proposal) {
   return {
     workedCommissionHistory: from.workedCommissionHistory,
     receiptHistory: from.receiptHistory,
+    installmentHistory: from.installmentHistory,
   };
 }
 
@@ -109,15 +110,17 @@ describe('SqliteProposalRepository', () => {
     const registered = proposal('proposal-1');
     await repository.save(registered);
 
+    // REQ-296: the intermediary goes before the CT becomes parcelled.
     const revised = registered
-      .reviseWorkedCommission({
-        rate: Percentage.fromString('25'),
-        mode: 'PARCELLED',
-        informed: Authorship.of('bruno.lima', REVISED_AT),
-      })
       .reviseReceipt({
         receipt: { kind: 'DIRECT' },
         declared: Authorship.of('bruno.lima', REVISED_AT),
+      })
+      .reviseWorkedCommission({
+        rate: Percentage.fromString('25'),
+        mode: 'PARCELLED',
+        subsequentRate: Percentage.fromString('10'),
+        informed: Authorship.of('bruno.lima', REVISED_AT),
       });
     await repository.save(revised);
 
@@ -126,13 +129,14 @@ describe('SqliteProposalRepository', () => {
     expect(
       read?.workedCommissionHistory.map((entry) => [
         entry.rate.toString(),
+        entry.subsequentRate?.toString() ?? null,
         entry.mode,
         entry.informed.author,
         entry.informed.at.toISOString(),
       ]),
     ).toEqual([
-      ['32.5', 'INTEGRAL', 'ana.souza', '2026-09-22T12:00:00.000Z'],
-      ['25', 'PARCELLED', 'bruno.lima', REVISED_AT.toISOString()],
+      ['32.5', null, 'INTEGRAL', 'ana.souza', '2026-09-22T12:00:00.000Z'],
+      ['25', '10', 'PARCELLED', 'bruno.lima', REVISED_AT.toISOString()],
     ]);
     expect(
       read?.receiptHistory.map((declaration) => [
@@ -143,7 +147,57 @@ describe('SqliteProposalRepository', () => {
       ['INTERMEDIARY', 'ana.souza'],
       ['DIRECT', 'bruno.lima'],
     ]);
-    expect(read?.expectedReceipt().usina.toString()).toBe('375.19');
+    expect(read?.expectedInstallmentReceipts()?.map((r) => r.usina.toString())).toEqual([
+      '187.60',
+      '75.04',
+    ]);
+  });
+
+  it('keeps every signed list of installments across saves (REQ-254, REQ-124)', async () => {
+    const registered = proposal('proposal-1');
+    await repository.save(registered);
+
+    const revised = registered
+      .reviseInstallments({
+        installments: [{ amount: Money.fromString('1500.75'), dueDate: null }],
+        informed: Authorship.of('bruno.lima', REVISED_AT),
+      })
+      .reviseInstallments({ installments: [], informed: Authorship.of('carla', REVISED_AT) });
+    await repository.save(revised);
+
+    const read = await repository.findById('proposal-1');
+
+    expect(
+      read?.installmentHistory.map((entry) => [
+        entry.installments.map((installment) => installment.amount.toString()),
+        entry.informed.author,
+      ]),
+    ).toEqual([
+      [['750.38', '750.37'], 'ana.souza'],
+      [['1500.75'], 'bruno.lima'],
+      [[], 'carla'],
+    ]);
+    expect(read?.installments).toEqual([]);
+  });
+
+  it('restores the CTs of a parcelled proposal above 100% (REQ-295)', async () => {
+    const registered = proposal('proposal-1')
+      .reviseReceipt({
+        receipt: { kind: 'DIRECT' },
+        declared: Authorship.of('bruno.lima', REVISED_AT),
+      })
+      .reviseWorkedCommission({
+        rate: Percentage.fromStringWithoutCeiling('150'),
+        mode: 'PARCELLED',
+        subsequentRate: Percentage.fromStringWithoutCeiling('120'),
+        informed: Authorship.of('bruno.lima', REVISED_AT),
+      });
+    await repository.save(registered);
+
+    const read = await repository.findById('proposal-1');
+
+    expect(read?.workedCommission.toString()).toBe('150');
+    expect(read?.subsequentWorkedCommission?.toString()).toBe('120');
   });
 
   it('stores the refusal and its reason (REQ-253)', async () => {

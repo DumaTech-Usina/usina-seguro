@@ -28,6 +28,8 @@ export interface NotificationView {
   readonly broker: NotificationPartyView;
   readonly product: NotificationPartyView;
   readonly workedCommission: string | null;
+  /** REQ-228: the CT of the subsequent installments; `null` with an integral CT. */
+  readonly subsequentWorkedCommission: string | null;
   readonly netPremium: string;
   readonly occurredAt: string;
 }
@@ -45,6 +47,7 @@ export function toNotificationView(notification: Notification): NotificationView
     broker: { id: content.broker.id, name: content.broker.name },
     product: { id: content.product.id, name: content.product.name },
     workedCommission: content.workedCommission?.toString() ?? null,
+    subsequentWorkedCommission: content.subsequentWorkedCommission?.toString() ?? null,
     netPremium: content.netPremium.toString(),
     occurredAt: notification.occurredAt.toISOString(),
   };

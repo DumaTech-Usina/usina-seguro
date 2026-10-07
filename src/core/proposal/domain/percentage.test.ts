@@ -41,4 +41,27 @@ describe('Percentage', () => {
       expect((error as BusinessRuleViolation).params).toEqual({ value: '32,5' });
     }
   });
+
+  describe('without the 100% ceiling (REQ-295, REQ-263)', () => {
+    it('accepts a CT of a parcelled proposal above 100%, with no upper limit for now (CA-249)', () => {
+      expect(Percentage.fromStringWithoutCeiling('150').toString()).toBe('150');
+      expect(Percentage.fromStringWithoutCeiling('100.01').toString()).toBe('100.01');
+      expect(Percentage.fromStringWithoutCeiling('1000').toString()).toBe('1000');
+    });
+
+    it('still refuses text that is not a decimal number', () => {
+      for (const invalid of ['', '32,5', '-1', 'abc']) {
+        expect(() => Percentage.fromStringWithoutCeiling(invalid)).toThrow(BusinessRuleViolation);
+      }
+    });
+  });
+
+  it('compares two rates exactly, whatever their informed scales (REQ-263)', () => {
+    const thirty = Percentage.fromString('30');
+
+    expect(Percentage.fromString('30.01').isGreaterThan(thirty)).toBe(true);
+    expect(Percentage.fromString('30.00').isGreaterThan(thirty)).toBe(false);
+    expect(Percentage.fromString('29.999').isGreaterThan(thirty)).toBe(false);
+    expect(Percentage.fromStringWithoutCeiling('150').isGreaterThan(thirty)).toBe(true);
+  });
 });

@@ -16,13 +16,6 @@ import type { Percentage } from './percentage.ts';
 const DECIMAL_PLACES = 2;
 const DECIMAL_STRING = /^-?\d+(\.\d{1,2})?$/;
 
-/**
- * How a rate applied to an amount lands on the cent. V2 states two modes:
- * the Usina value rounds half up at each step (REQ-237), and the broker's
- * amount from the CR is floored (REQ-275).
- */
-export type Rounding = 'HALF_UP' | 'FLOOR';
-
 export class Money {
   private readonly cents: bigint;
 
@@ -63,19 +56,17 @@ export class Money {
    * floating point (REQ-120) and the informed precision of the rate is used in
    * full (REQ-121).
    *
-   * The result has to land on a cent. By default it rounds half away from
-   * zero, which is half up for the Usina value (REQ-237); the broker's amount
-   * from the CR is floored instead (REQ-275). The mode is stated here, in one
-   * place, rather than reappearing in each step of a chain.
+   * The result has to land on a cent, and it does by ABNT NBR 5891 — the one
+   * rounding of every requirement (REQ-298): the Usina value at each step
+   * (REQ-237), the broker's amount (REQ-275) and each installment of a
+   * parcelled CT (REQ-294, REQ-264). It is stated here, in one place, rather
+   * than reappearing in each step of a chain.
    */
-  applyRate(rate: Percentage, rounding: Rounding = 'HALF_UP'): Money {
+  applyRate(rate: Percentage): Money {
     const { numerator, scale } = rate.asFraction();
-    const product = this.cents * numerator;
     const denominator = 100n * 10n ** BigInt(scale);
 
-    return new Money(
-      rounding === 'FLOOR' ? divideFloor(product, denominator) : divideHalfUp(product, denominator),
-    );
+    return new Money(divideAbnt5891(this.cents * numerator, denominator));
   }
 
   /**
@@ -117,17 +108,18 @@ export class Money {
   }
 }
 
-/** Integer division rounding halves away from zero. */
-function divideHalfUp(numerator: bigint, denominator: bigint): bigint {
+/**
+ * Integer division rounded by ABNT NBR 5891 (REQ-298): less than half of the
+ * last place discarded keeps it, more than half raises it, and exactly half
+ * leaves it even. Symmetric around zero.
+ */
+function divideAbnt5891(numerator: bigint, denominator: bigint): bigint {
   const negative = numerator < 0n;
   const absolute = negative ? -numerator : numerator;
   const quotient = absolute / denominator;
-  const rounded = (absolute % denominator) * 2n >= denominator ? quotient + 1n : quotient;
+  const twiceRemainder = (absolute % denominator) * 2n;
+  const raise =
+    twiceRemainder > denominator || (twiceRemainder === denominator && quotient % 2n === 1n);
+  const rounded = raise ? quotient + 1n : quotient;
   return negative ? -rounded : rounded;
-}
-
-/** Integer division rounding towards negative infinity. */
-function divideFloor(numerator: bigint, denominator: bigint): bigint {
-  const quotient = numerator / denominator;
-  return numerator % denominator < 0n ? quotient - 1n : quotient;
 }

@@ -35,6 +35,18 @@
 > ABNT NBR 5891, parcelas obrigatórias e nenhuma intermediária (seção 6A). Foram respondidas
 > `DEC-203` e `DEC-209`, e `DEC-210` em parte — CR em dois campos e elegibilidade por parcela
 > (seção 9B), com o restante em aberto. Foi aberta `DEC-216` (faixa dos CTs da parcelada).
+> Na mesma data, numa segunda rodada, respondeu `Q-205`–`Q-214`: troca de modo, os dois CRs
+> sobre o valor da parcela, auditoria, elegibilidade por parcela, extrato e consulta; e
+> padronizou o arredondamento do valor da Usina pela **ABNT NBR 5891** também na CT
+> integral — a única mudança naquele fluxo (`REQ-298`). Abriu `DEC-217` e `Q-215`–`Q-221`.
+> Em **2026-10-07** respondeu `Q-215`–`Q-221`: as parcelas passam a ser editáveis antes da
+> emissão (`REQ-254`); cada CR da parcelada é limitada pelo CT correspondente (`REQ-263`); a
+> ABNT NBR 5891 vale para **todo** arredondamento, inclusive o valor do corretor da integral
+> (`REQ-275`, que deixa de ser piso); não há elegibilidade de parcela sem CR; existe a lista
+> de apólices parceladas sem CR (`REQ-268`). Abriu `Q-222` e `Q-223`. Na mesma data respondeu
+> as duas: a parcelada tem **lista própria**, com quatro situações (`REQ-268`); a edição de
+> parcelas vale **também na integral** e é **auditada** (`REQ-254`); e a CT parcelada passa a
+> exigir **ao menos duas parcelas** (`REQ-292`).
 > A V1 (`requisitos_refinados.md`) é preservada como registro do entendimento anterior e
 > **não é fonte da verdade** para o que está escrito aqui. Onde as duas divergem, **vale a
 > V2** — o mapa da seção 12 diz o que foi mantido, alterado ou descartado.
@@ -96,6 +108,7 @@ própria proposta**, por quem a registra, e traz consigo um segundo percentual (
 | **CT integral**                        | Modo em que a comissão é recebida em um valor total. Um único CT, sobre o prêmio líquido. Fluxo **validado** (seções 4 a 9A)                                                        |
 | **CT parcelada**                       | Modo em que a comissão é recebida **por parcela**. Dois CTs, sobre o valor de cada parcela, sem intermediária. Fluxo **em definição** (seções 6A e 9B)                               |
 | **CT da primeira / das subsequentes**  | Na CT parcelada: o percentual aplicado à **parcela de número 1** e o aplicado a **cada uma das demais**                                                                              |
+| **CR da primeira / das subsequentes**  | Na CT parcelada: a CR aplicada ao **valor** da parcela de número 1 e a aplicada ao de cada uma das demais (`REQ-287`, `REQ-264`) |
 
 ---
 
@@ -127,7 +140,7 @@ usuário da Usina não tem essa informação, e nenhuma regra o consome.
 | **Parcelas**                 | Ver `REQ-204`                                     |
 
 **Todos esses dados são obrigatórios no registro, exceto as parcelas**, que podem não ser
-informadas **com CT integral** — com CT parcelada, ao menos uma é obrigatória (`REQ-292`). O mesmo vale para o **modo da CT** (`REQ-213`). Como nada disso é alterável
+informadas **com CT integral** — com CT parcelada, ao menos duas são obrigatórias (`REQ-292`). O mesmo vale para o **modo da CT** (`REQ-213`). Como nada disso é alterável
 depois (`REQ-261`), um dado obrigatório ausente no registro não teria como ser preenchido.
 
 `REQ-203` A **data de renovação é igual à data de fim da vigência**. Não é um dado
@@ -243,7 +256,7 @@ estavam na proposta desde o registro (`REQ-206`).
 | **CTU**                               | Informada pela Usina, quando há intermediária | **Entra no cálculo** — determina quanto a Usina recebe da intermediária | **Sim, até a emissão** (`REQ-225`) |
 | **Intermediária**                     | Declarada pela Usina                          | **Muda a regra de cálculo**                                             | **Sim, até a emissão** (`REQ-225`) |
 | **Modo da CT** (integral / parcelada) | Levantamento interno da Usina                 | Declara como a comissão é recebida                                      | **Sim, até a emissão** (`REQ-214`) |
-| **Parcelas**                          | Documento da seguradora                       | Informativo com CT integral; **base do cálculo** com CT parcelada (`REQ-293`) | **Não**                      |
+| **Parcelas**                          | Documento da seguradora                       | Informativo com CT integral; **base do cálculo** com CT parcelada (`REQ-293`) | **Sim, até a emissão** (`REQ-254`) |
 | **Dados do produto**                  | Documento da seguradora                       | Informativo                                                             | **Não**                            |
 
 `REQ-211` O **prêmio líquido da proposta e o da apólice são o mesmo valor**. Não há
@@ -273,7 +286,7 @@ com o mesmo registro de autoria (`REQ-215`).
 interna. Toda informação e toda alteração de CT registra **quem informou e quando**.
 
 `REQ-216` **Identificação de quem assina uma ação.** Enquanto não houver login, o autor de
-uma ação auditada (`REQ-209`, `REQ-215`, `REQ-223`, `REQ-247`, `REQ-279`, `REQ-281`) é um **identificador digitado pelo usuário** no
+uma ação auditada (`REQ-209`, `REQ-215`, `REQ-223`, `REQ-247`, `REQ-254`, `REQ-279`, `REQ-281`, `REQ-265`, `REQ-288`) é um **identificador digitado pelo usuário** no
 próprio ato. No futuro haverá login e o nome de usuário passará a ser o autor. Por isso a
 forma de "assinar" uma ação deve ser **desacoplada** das regras que exigem a assinatura:
 trocar o identificador digitado pelo login, ou acrescentar outra forma de assinar, não
@@ -361,20 +374,40 @@ a **tabela do corretor** (`IN-05` da V1) também **deixa de existir**; a parte d
 é a **CR**, informada na apólice (`REQ-270`).
 
 `REQ-237` **Arredondamento do valor da Usina.** Cada etapa do cálculo é **arredondada no
-centavo, metade para cima** (0,5 centavo ou mais sobe), **antes** da etapa seguinte —
-porque cada etapa é um valor efetivamente pago: a intermediária recebe um valor em
-centavos, e a CTU incide sobre esse valor, não sobre uma fração.
+centavo pela ABNT NBR 5891** (`REQ-298`), **antes** da etapa seguinte — porque cada etapa
+é um valor efetivamente pago: a intermediária recebe um valor em centavos, e a CTU incide
+sobre esse valor, não sobre uma fração.
 
 ```
 sem intermediária:  100,05 × CT 15%   = 15,0075 → 15,01   (valor da Usina)
 
 com intermediária:  100,05 × CT 15%   = 15,0075 → 15,01   (intermediária)
-                     15,01 × CTU 50%  =  7,505  →  7,51   (valor da Usina)
+                     15,01 × CTU 50%  =  7,505  →  7,50   (valor da Usina — meio centavo, 0 é par)
 ```
 
-Não se arredonda só no final (100,05 × 15% × 50% = 7,50375 → 7,50 é **recusado**): o valor
-da intermediária exibido precisa fechar com o da Usina. A parte do corretor tem regra
-própria — piso (`REQ-275`).
+Não se arredonda só no final: 100,07 × 15% = 15,0105 → 15,01, e 15,01 × 50% = 7,505 →
+**7,50**; arredondar só no final (100,07 × 15% × 50% = 7,50525 → 7,51) é **recusado**. O
+valor da intermediária exibido precisa fechar com o da Usina. A parte do corretor segue o
+mesmo padrão (`REQ-275`).
+
+> Até 2026-10-05 o arredondamento era **metade para cima** (7,505 → 7,51). O negócio o
+> padronizou pela ABNT NBR 5891 em **todo** arredondamento — valor da Usina e valor do
+> corretor (`REQ-275`, 2026-10-07). No fluxo da CT integral, as **únicas** mudanças são este
+> arredondamento (`REQ-298`) e a edição de parcelas antes da emissão (`REQ-254`).
+
+`REQ-298` **Padrão de arredondamento: ABNT NBR 5891.** **Todo** arredondamento de valor
+vale por esta norma, em qualquer requisito: o valor da Usina na CT integral (`REQ-237`) e em
+cada parcela da CT parcelada (`REQ-294`), e o valor do corretor na integral (`REQ-275`) e
+em cada parcela (`REQ-264`). Arredonda-se no centavo: se a parte descartada é **menor** que meio centavo, mantém; se é **maior**,
+sobe; se é **exatamente** meio centavo, o centavo fica **par**. A regra de arredondamento é
+**desacoplada** do cálculo: é um padrão normativo único, aplicado onde o cálculo pede.
+
+```
+100,05 × 15%  =  15,0075  →  15,01   (mais que meio centavo: sobe)
+ 10,05 × 50%  =   5,025   →   5,02   (exatamente meio: 2 é par, mantém)
+ 10,15 × 50%  =   5,075   →   5,08   (exatamente meio: 7 é ímpar, sobe para 8)
+```
+
 
 `REQ-233` **O valor a pagar ao corretor não faz parte do FP-01.** Este fluxo determina
 apenas **o que a Usina recebe**. A parte do corretor é calculada depois de a apólice
@@ -389,10 +422,13 @@ possa ser acrescentado sem reescrever o fluxo.
 
 ## 6A. CT parcelada — fluxo em definição
 
-> Definido em **2026-10-05**. A CT parcelada é um **fluxo principal distinto e paralelo** ao
-> da CT integral. As regras desta seção são **aditivas**: não substituem, não alteram e não
-> invalidam nada do fluxo da CT integral (seções 4 a 9A), que está **validado**. O que é
-> comum aos dois só é compartilhado quando isso não muda o comportamento da integral.
+> Definido em **2026-10-05**, em duas rodadas. A CT parcelada é um **fluxo principal
+> distinto e paralelo** ao da CT integral. As regras desta seção são **aditivas**: não
+> substituem, não alteram e não invalidam o fluxo da CT integral (seções 4 a 9A), que está
+> **validado**. O que é comum aos dois só é compartilhado quando isso não muda o
+> comportamento da integral. As **únicas** mudanças na integral são o arredondamento,
+> padronizado pela ABNT NBR 5891 (`REQ-298`), e a edição de parcelas antes da emissão
+> (`REQ-254`).
 
 `REQ-290` **Dois fluxos.** O modo da CT (`REQ-213`) separa a proposta em dois fluxos:
 
@@ -400,14 +436,15 @@ possa ser acrescentado sem reescrever o fluxo.
 | --- | --- | --- |
 | CT | **Um** campo | **Dois** campos: CT da primeira e CT das subsequentes (`REQ-291`) |
 | Base | Prêmio líquido (`REQ-235`) | Valor de cada parcela (`REQ-293`) |
-| Parcelas | Opcionais (`REQ-202`) | **Ao menos uma**, obrigatória (`REQ-292`) |
+| Parcelas | Opcionais (`REQ-202`); editáveis antes da emissão (`REQ-254`) | **Ao menos duas**, obrigatórias (`REQ-292`); editáveis antes da emissão (`REQ-254`) |
 | Intermediária | Nenhuma ou uma, com CTU (`REQ-220`) | **Nunca** (`REQ-296`) |
 | Valor esperado | Um valor (`REQ-232`) | **Um por parcela**, sem total (`REQ-293`) |
-| Arredondamento | Metade para cima, a cada etapa (`REQ-237`) | ABNT NBR 5891, por parcela (`REQ-294`) |
-| Repasse e elegibilidade | Seção 9A | Seção 9B |
+| Arredondamento | ABNT NBR 5891, a cada etapa (`REQ-237`, `REQ-298`) | ABNT NBR 5891, por parcela (`REQ-294`, `REQ-298`) |
+| CR | Uma, sobre o valor da Usina (seção 9A) | Duas, sobre o valor da parcela, cada uma **≤ o seu CT** (seção 9B) |
+| Elegibilidade | Da comissão da apólice (`REQ-281`) | **De cada parcela** (`REQ-288`) |
 
 `REQ-291` **Dois CTs.** Com CT parcelada, a proposta tem **dois** percentuais, ambos
-**obrigatórios** no registro — também quando há uma só parcela:
+**obrigatórios** no registro:
 
 - **CT da primeira parcela** — aplicado à parcela de **número 1**, a primeira da tabela de
   parcelas (não a de vencimento mais próximo: o vencimento é opcional);
@@ -416,8 +453,9 @@ possa ser acrescentado sem reescrever o fluxo.
 Os dois são levantados internamente pela Usina e informados por um usuário, como a CT
 integral (`REQ-208`). Com CT integral continua existindo **um único** campo de CT.
 
-`REQ-292` **Parcelas obrigatórias.** Com CT parcelada, a proposta exige **ao menos uma
-parcela**; sem parcelas, o registro é recusado. As parcelas são a base do cálculo
+`REQ-292` **Parcelas obrigatórias.** Com CT parcelada, a proposta exige **ao menos duas
+parcelas** (2026-10-07; antes, uma); com menos, o registro é recusado — e também a remoção
+de parcela que deixaria uma parcelada com menos de duas (`REQ-254`). As parcelas são a base do cálculo
 (`REQ-293`) e servem a controles posteriores (seção 9B).
 
 `REQ-293` **Cálculo por parcela.** Cada CT incide sobre o **valor da parcela como foi
@@ -440,16 +478,7 @@ parcela 3:  100,00 ×  30%  =   30,00
   (`REQ-245`, aplicado por parcela).
 
 `REQ-294` **Arredondamento da CT parcelada.** O valor esperado de **cada parcela** é
-arredondado no centavo segundo a **ABNT NBR 5891**: se a parte descartada é menor que meio
-centavo, mantém; se é maior, sobe; se é **exatamente** meio centavo, o centavo fica **par**.
-A regra de arredondamento é **desacoplada** do cálculo. O arredondamento da CT integral
-(`REQ-237`) **não muda**.
-
-```
-100,05 × 15%  =  15,0075  →  15,01   (mais que meio centavo: sobe)
- 10,05 × 50%  =   5,025   →   5,02   (exatamente meio: 2 é par, mantém)
- 10,15 × 50%  =   5,075   →   5,08   (exatamente meio: 7 é ímpar, sobe para 8)
-```
+arredondado no centavo pela ABNT NBR 5891 (`REQ-298`).
 
 `REQ-295` **Faixa dos CTs da parcelada — provisória.** Os CTs da parcelada **podem passar de
 100%**. **Por ora, explicitamente de forma temporária, não há limite superior.** A faixa real
@@ -460,13 +489,21 @@ intermediária** ("terceiros" = a intermediária de `REQ-220`), e havendo interm
 **só pode ser integral**. Declarar intermediária numa proposta com CT parcelada é
 **recusado**, com mensagem de erro para o usuário. Sem intermediária não existe CTU.
 
-`REQ-297` **Herança.** A apólice herda os dois CTs e as parcelas, como herda todos os dados
-da proposta (`REQ-241`).
+`REQ-297` **Herança e edição.** A apólice herda os dois CTs e as parcelas, como herda todos
+os dados da proposta (`REQ-241`). Antes da emissão, **os dois CTs são editáveis**, como a CT
+integral, com o mesmo registro de autoria (`REQ-214`, `REQ-215`, `REQ-252`).
 
-**⚠ CONFIRMAR (`Q-205`)**: antes da emissão, os dois CTs seriam editáveis como a CT
-integral, com o mesmo registro de autoria (`REQ-214`, `REQ-215`, `REQ-252`); trocar o modo
-para parcelado com intermediária declarada, ou numa proposta sem parcelas, seria recusado
-(`REQ-292`, `REQ-296`).
+`REQ-299` **Troca de modo antes da emissão.** O modo é editável junto com a CT (`REQ-214`),
+com estas condições:
+
+| Troca | Condição | Efeito |
+| --- | --- | --- |
+| **Integral → parcelada** | **Somente se** o recebimento for **direto** (sem intermediária) **e** a proposta tiver **ao menos duas parcelas** (`REQ-292`). Caso contrário, é **recusada**: é preciso antes retirar a intermediária (`REQ-225`, `FA-209`) e incluir as parcelas que faltam (`REQ-254`) | Passam a valer os dois CTs (`REQ-291`) e o cálculo por parcela (`REQ-293`) |
+| **Parcelada → integral** | Nenhuma | A CT passa a ser **única**, com base no **prêmio líquido** (`REQ-230`, `REQ-235`) |
+
+**Toda recusa é do backend.** As recusas desta seção (`REQ-291`, `REQ-292`, `REQ-296`,
+`REQ-299`) são decididas pelo servidor; a tela **só traduz e exibe** o que o servidor
+responde, sem decidir por conta própria.
 
 ---
 
@@ -530,7 +567,7 @@ estado intermediário entre registrar a proposta e reconhecer a emissão.
 
 | Estado               | O que pode ser alterado                                                                     |
 | -------------------- | ------------------------------------------------------------------------------------------- |
-| `AGUARDANDO_EMISSÃO` | **CT** e **modo da CT**; **se há ou não intermediária** e **qual**; e a **CTU**, quando houver |
+| `AGUARDANDO_EMISSÃO` | **CT** e **modo da CT**; **se há ou não intermediária** e **qual**; a **CTU**, quando houver; e as **parcelas** (`REQ-254`) |
 | `EMITIDA`            | **Nada**                                                                                    |
 | `RECUSADA`           | **Nada** — a recusa é definitiva (`REQ-253`)                                                |
 
@@ -552,8 +589,26 @@ estado intermediário entre registrar a proposta e reconhecer a emissão.
 `REQ-260` Depois da emissão, **nenhum dado da proposta pode ser alterado**.
 
 `REQ-261` Antes da emissão, os dados alteráveis são exatamente os da tabela de `REQ-252`:
-a CT e seu modo, a existência e a identidade da intermediária, e a CTU. Todo o resto — prêmio líquido,
-número, vigência, parcelas, dados do produto — é imutável desde o registro.
+a CT e seu modo, a existência e a identidade da intermediária, a CTU e as parcelas
+(`REQ-254`). Todo o resto — prêmio líquido, número, vigência, dados do produto — é imutável
+desde o registro.
+
+`REQ-254` **Parcelas editáveis antes da emissão** (2026-10-07). Enquanto a proposta aguarda
+emissão, as parcelas podem ser **incluídas, alteradas e removidas** — o que permite, por
+exemplo, a troca de integral para parcelada numa proposta registrada sem parcelas
+(`REQ-299`). Vale para os **dois modos**, integral e parcelado.
+
+- Cada parcela continua com valor maior que zero e vencimento opcional (`REQ-204`).
+- Toda inclusão, alteração e remoção de parcela é **auditada**: registra **quem** fez e
+  **quando**, como a CT (`REQ-215`, `REQ-216`).
+- Numa proposta com CT parcelada, a remoção que deixaria **menos de duas** parcelas é
+  **recusada** (`REQ-292`).
+- Depois da emissão, as parcelas não mudam (`REQ-260`).
+- **Como se edita** (2026-10-07): um ato **"Corrigir parcelas"** na proposta, como "Corrigir
+  CT". O usuário edita a lista — inclui, altera, remove — e salva, assinando. Cada correção é
+  uma entrada do histórico com a **lista resultante**, quem e quando; as anteriores ficam,
+  como no histórico da CT. As parcelas informadas no registro são a primeira entrada,
+  assinada por quem registrou.
 
 `REQ-262` A **correção de um registro informado errado** — o caso concreto sendo o número
 da proposta digitado incorretamente — **ainda não tem regra definida** (`DEC-205`). O
@@ -607,7 +662,7 @@ recebe** da apólice — o valor de `REQ-230` (recebimento direto) ou de `REQ-23
 só muda o valor da Usina sobre o qual ela incide.
 
 ```
-valor a repassar ao corretor = valor da Usina × CR          (piso no centavo — REQ-275)
+valor a repassar ao corretor = valor da Usina × CR          (ABNT NBR 5891 — REQ-275)
 valor que fica na Usina      = valor da Usina − valor a repassar
 ```
 
@@ -631,11 +686,14 @@ prêmio líquido 1.000,00 × CT 20%   =  200,00   (intermediária)
 A **escolha da base é uma regra própria, desacoplada do cálculo** (`REQ-234`): um caso
 extraordinário ainda não levantado deve poder ser acrescentado sem reescrever o fluxo.
 
-`REQ-275` **Arredondamento e soma.** O valor a repassar é **arredondado para baixo (piso)
-no centavo**. O valor que fica na Usina é a **diferença**, de modo que as duas partes
-**somam exatamente o valor da Usina** (ex.: valor da Usina 10,00 × CR 70,55% = 7,055 → a
-repassar **7,05**; fica na Usina **2,95**). Os valores seguem a precisão decimal exata da
+`REQ-275` **Arredondamento e soma.** O valor a repassar é **arredondado no centavo pela ABNT
+NBR 5891** (`REQ-298`). O valor que fica na Usina é a **diferença**, de modo que as duas
+partes **somam exatamente o valor da Usina** (ex.: valor da Usina 10,00 × CR 70,55% =
+7,055 → exatamente meio centavo, 5 é ímpar → a repassar **7,06**; fica na Usina **2,94**). Os valores seguem a precisão decimal exata da
 V1 (`REQ-120`, `REQ-121`, mantidas) — nunca ponto flutuante.
+
+> Até 2026-10-07 o valor a repassar era arredondado **para baixo (piso)**: 7,055 → 7,05 e
+> fica na Usina 2,95. Mudou com a padronização pela ABNT NBR 5891 (`REQ-298`).
 
 ### 9A.3 Estados da comissão
 
@@ -654,7 +712,7 @@ V1 (`REQ-120`, `REQ-121`, mantidas) — nunca ponto flutuante.
 
 `REQ-285` **Situações da apólice quanto ao repasse.** Toda apólice **com CT integral** está
 em **exatamente uma** destas situações, e elas fecham o ciclo neste momento. Apólice com CT
-**parcelada** fica **fora das três** (`REQ-271`); as situações dela estão em aberto (`Q-212`).
+**parcelada** fica **fora das três** (`REQ-271`); a dela é a de `REQ-268`.
 
 | Situação                   | Significado                                          |
 | -------------------------- | ---------------------------------------------------- |
@@ -758,27 +816,131 @@ Da comissão elegível se chega à **apólice**, e da apólice se chega à **sua
 `REQ-286` **Apólices sem CR.** O sistema lista as **apólices sem CR** (`REQ-285`) — as que
 ainda precisam de uma CR para ter o repasse calculado (`REQ-273`). `Q-204` respondida.
 A lista mostra **só as apólices que podem receber CR hoje**: apólice com CT parcelada
-**não aparece** nela (`REQ-271`); se terá lista própria está em aberto (`Q-212`).
+**não aparece** nela (`REQ-271`); as parceladas sem CR são as de `REQ-268`.
 
 ---
 
 ## 9B. Repasse e elegibilidade com CT parcelada — em definição
 
-> Definido **em parte** em **2026-10-05** (`DEC-210` respondida em parte). Fluxo paralelo ao
-> da seção 9A, que vale para a CT integral e **não muda**. O que não está escrito aqui como
-> regra está nas perguntas `Q-206` a `Q-213` e **não deve ser implementado**.
+> Definido em **2026-10-05** e **2026-10-07** (`DEC-210` respondida em parte). Fluxo
+> paralelo ao da seção 9A, que vale para a CT integral e **não muda**. O que não está
+> escrito aqui como regra está em `DEC-216` e `DEC-217`, e **não deve ser
+> implementado**.
 
-`REQ-287` **Dois CRs.** Numa apólice com CT parcelada, a CR passa a ser **dois campos**: a
-**CR da primeira parcela** e a **CR das demais** (⚠ CONFIRMAR — `Q-206`: "CR da segunda"
-como CR de cada parcela a partir da segunda).
+### 9B.1 Os CRs
+
+`REQ-287` **Dois CRs.** Numa apólice com CT parcelada, a CR passa a ser **dois campos**,
+como a CT (`REQ-291`):
+
+- **CR da primeira parcela** — aplicada à parcela de número 1;
+- **CR das parcelas subsequentes** — aplicada a cada parcela a partir da de número 2.
+
+São informadas por um usuário da Usina **na apólice**. As duas **andam sempre juntas**: são
+**obrigatórias** e informadas — e alteradas — **no mesmo ato**. Uma apólice parcelada **pode
+existir sem CR** (`REQ-268`).
+
+`REQ-263` **Cada CR é limitada pelo seu CT.** A **CR da primeira** é **igual ou menor** que o
+**CT da primeira**, e a **CR das subsequentes** é **igual ou menor** que o **CT das
+subsequentes**. Uma CR maior que o seu CT é **recusada** pelo backend, e a tela exibe o erro.
+A **CR zero** é válida, desde que **informada deliberadamente** (como `REQ-272`). Não há outro
+limite. A faixa da CR integral (`REQ-272`) não muda.
+
+`REQ-264` **Cálculo do repasse por parcela.** O valor do corretor de uma parcela é o **valor
+da parcela** × a CR correspondente — a CR incide sobre o **valor da parcela**, como a CT
+(`REQ-293`), **não** sobre o valor da Usina daquela parcela:
+
+```
+parcela   valor     CT        Usina (CT)   CR        corretor (CR)
+1         100,00    100%      100,00       100%      100,00
+2         100,00     30%       30,00        15%       15,00
+```
+
+O que **fica na Usina** por parcela é a **diferença** entre o valor da Usina da parcela e o
+valor do corretor (na parcela 2: 30,00 − 15,00 = 15,00). Como cada CR é no máximo o seu CT
+(`REQ-263`), o valor do corretor nunca passa do valor da Usina da parcela. O valor do
+corretor é arredondado no centavo pela ABNT NBR 5891 (`REQ-298`).
+
+`REQ-265` **Recálculo e auditoria.** Enquanto nenhuma parcela for elegível, os CRs podem
+ser alterados, **com motivo e auditoria como na integral** (`REQ-277`, `REQ-279`). A única
+diferença é que na parcelada **dois CRs** podem mudar, e o histórico de auditoria apresenta
+os **dois** — o anterior e o novo de cada um. Os **dados do cálculo** de cada registro de
+auditoria são guardados **por parcela** — valor da parcela, valor da Usina, CR, valor do
+corretor e o que fica na Usina —, como estavam naquele momento.
+
+### 9B.2 Elegibilidade da parcela
 
 `REQ-288` **Elegibilidade por parcela.** A elegibilidade **não é da apólice nem do prêmio
-líquido**: é **de cada parcela**. A confirmação de recebimento de uma parcela é a
-**elegibilidade daquela parcela** (o recebimento da seguradora → Usina, `DEC-209`
-respondida).
+líquido**: é **de cada parcela**. Confirmar o recebimento de uma parcela é a
+**elegibilidade daquela parcela** (o recebimento seguradora → Usina, `DEC-209` respondida).
+"Parcela **reconhecida**" e "parcela **elegível**" são a mesma coisa.
 
-`REQ-289` **CRs congelados.** Os CRs **não podem mudar** depois de uma parcela ser dada como
-"reconhecida" (⚠ CONFIRMAR — `Q-209`: se "reconhecida" é a parcela elegível de `REQ-288`).
+- É um ato **assinado** por um usuário (`REQ-216`), com a data e a hora do momento em que é
+  registrado, como `REQ-281`.
+- **Não segue ordem**: qualquer parcela pode ser tornada elegível antes das anteriores.
+- O ato **exibe** a CT e a CR que valem para aquela parcela. Alterar a CT ou a CR de uma
+  parcela **no momento** da elegibilidade não foi levantado (`DEC-217`).
+- É **definitiva**: depois de elegível, a parcela só é consultada e auditada.
+- **Exige os CRs informados**: sem CR, a elegibilidade da parcela é **recusada**. A CR pode
+  ser zero (`REQ-263`), mas tem de existir — o extrato mostra todos os dados (`REQ-266`).
+
+`REQ-289` **CRs congelados.** A partir da **primeira parcela elegível**, os dois CRs **não
+mudam mais** — para **todas** as parcelas da apólice.
+
+`REQ-266` **Extrato da parcela.** Cada parcela elegível gera **automaticamente** um extrato,
+como `REQ-283`, com:
+
+| Dado |
+| --- |
+| Número da apólice |
+| Corretor |
+| Seguradora |
+| Cliente |
+| Número da parcela |
+| Valor da parcela |
+| CT da parcela |
+| CR da parcela |
+| Quanto fica para a Usina |
+| Quanto repassar ao corretor |
+| Data da elegibilidade |
+| Quem assinou a elegibilidade |
+
+`REQ-267` **Consulta.** A consulta das comissões elegíveis (`REQ-284`) **não lista
+parcelas**. As parcelas só são vistas — e operadas, como assinar a elegibilidade — **na tela
+da sua apólice**.
+
+`REQ-268` **Situações e lista da apólice parcelada.** Uma apólice parcelada sem os dois CRs
+é **válida**, mas **ainda não foi repassada**: não existe repasse sem CR, e nenhuma parcela
+pode se tornar elegível (`REQ-288`). As apólices parceladas têm **lista própria**, separada
+da lista de `REQ-286` (que continua só com integrais), e cada uma está numa destas
+situações:
+
+| Situação | Significado |
+| --- | --- |
+| **Sem CR** | Ainda precisa dos dois CRs, válidos (`REQ-263`) |
+| **Nenhuma parcela elegida** | Tem CRs; nenhuma parcela é elegível |
+| **Parcialmente elegida** | Ao menos uma parcela é elegível, mas não todas |
+| **Totalmente elegida** | Todas as parcelas são elegíveis |
+
+A lista fica na tela de repasses, num card **"Apólices parceladas"**, com **todas** as
+apólices parceladas e as colunas: apólice, cliente, corretor, renovação, **situação** e o
+link para a apólice. Não há "valor da Usina": a parcelada não tem total (`REJ-232`)
+(2026-10-07).
+
+`REQ-269` **"Confirmar recebimento" da parcela.** Na apólice com CT **integral**, a
+confirmação de pagamento de parcela que já existe **continua como está**. Na apólice com CT
+**parcelada**, a ação sobre a parcela é a **elegibilidade** (`REQ-288`): a situação
+Pendente/Paga e a confirmação de pagamento **não aparecem**, e o backend **recusa** essa
+confirmação. A parcela mostra a sua elegibilidade, e a ação chama-se **"Assinar
+elegibilidade"**, como na integral (2026-10-07).
+
+`REQ-227` **Comissão acordada × real (V1) e CT parcelada** (2026-10-07). A comissão acordada
+da apólice (`REQ-236`) é um valor único, e a parcelada não tem total (`REJ-232`). Por isso, na
+apólice parcelada, a comissão acordada **não é criada**: a apólice mostra que ela não se
+aplica a CT parcelada, e a tela de comissões e a conciliação não a incluem.
+
+`REQ-228` **Notificação de emissão (V1) e CT parcelada** (2026-10-07). A notificação da
+emissão leva a comissão trabalhada; na apólice parcelada, leva **os dois CTs** — da primeira
+e das subsequentes.
 
 ---
 
@@ -833,22 +995,26 @@ respondida).
 
 ### FP-01 e FP-02 com CT parcelada — em definição
 
-1. O usuário registra a proposta como no FP-01, passos 1, 2 e 5, informando **ao menos uma
-   parcela** (`REQ-292`).
+1. O usuário registra a proposta como no FP-01, passos 1, 2 e 5, informando **ao menos duas
+   parcelas** (`REQ-292`).
 2. Informa o modo **parcelado** e os **dois CTs** — da primeira e das subsequentes
    (`REQ-291`, `REQ-295`). Fica registrado quem informou (`REQ-215`).
 3. O recebimento é **direto**: não há intermediária nem CTU (`REQ-296`).
 4. A proposta fica **`AGUARDANDO_EMISSÃO`**, exibindo **o valor esperado de cada parcela**,
    sem total (`REQ-293`, `REQ-294`).
-5. Reconhecimento da emissão ou recusa, como no FP-01, passo 8.
-6. A apólice é criada, herdando os dois CTs e as parcelas, e **fixa o valor esperado de cada
-   parcela** (`REQ-293`, `REQ-297`).
-7. Um usuário informa os **dois CRs** (`REQ-287`).
-8. Cada parcela tem o seu recebimento confirmado, que é a **sua elegibilidade** (`REQ-288`).
-   Depois disso, os CRs não mudam (`REQ-289`).
-
-O restante deste fluxo (cálculo do repasse por parcela, auditoria, extrato, consulta,
-situações) está nas perguntas `Q-207` a `Q-213`.
+5. Enquanto aguarda, os dois CTs e as parcelas podem ser corrigidos e o modo pode ser
+   trocado, nas condições de `REQ-254`, `REQ-297` e `REQ-299`.
+6. Reconhecimento da emissão ou recusa, como no FP-01, passo 8.
+7. A apólice é criada, herdando os dois CTs e as parcelas, e **fixa o valor esperado de cada
+   parcela** (`REQ-293`, `REQ-297`). Ainda **sem CR** (`REQ-287`).
+8. Um usuário informa os **dois CRs**, juntos, cada uma no máximo o seu CT; o valor do
+   corretor de cada parcela é calculado sobre o valor da parcela (`REQ-287`, `REQ-263`,
+   `REQ-264`). Até lá, a apólice aparece na lista das parceladas sem CR (`REQ-268`).
+9. Enquanto nenhuma parcela for elegível, os CRs podem ser alterados, com motivo e
+   auditoria (`REQ-265`).
+10. Na tela da apólice, um usuário **assina a elegibilidade** de uma parcela, em qualquer
+    ordem, desde que os CRs estejam informados (`REQ-288`). A parcela fica elegível de forma definitiva, gera o seu extrato
+    (`REQ-266`) e, a partir da primeira, os CRs congelam (`REQ-289`).
 
 ---
 
@@ -873,8 +1039,14 @@ situações) está nas perguntas `Q-207` a `Q-213`.
 | `FA-213` | Apólice recebida através de intermediária | A CR incide sobre o valor da Usina pela CTU (`REQ-274`)                              |
 | `FA-214` | Apólice com CT parcelada                 | Sem a CR única da seção 9A; fora das situações e da lista de apólices sem CR de `REQ-285`/`REQ-286`. Segue a seção 9B (`REQ-271`) |
 | `FA-216` | PDF da apólice não enviado no reconhecimento | Permitido; o PDF pode ser enviado depois, na apólice (`REQ-247`)              |
-| `FA-217` | Proposta com CT parcelada                | Dois CTs, ao menos uma parcela, sem intermediária; valor esperado por parcela (`REQ-290`–`REQ-296`) |
-| `FA-218` | CT parcelada com uma só parcela          | Permitido; os dois CTs continuam obrigatórios; só o CT da primeira é aplicado (`REQ-291`) |
+| `FA-217` | Proposta com CT parcelada                | Dois CTs, ao menos duas parcelas, sem intermediária; valor esperado por parcela (`REQ-290`–`REQ-296`) |
+| `FA-219` | Troca de integral para parcelada antes da emissão | Permitida só com recebimento direto e ao menos duas parcelas (`REQ-299`) |
+| `FA-220` | Troca de parcelada para integral antes da emissão | Permitida; a CT passa a ser única, sobre o prêmio líquido (`REQ-299`) |
+| `FA-221` | Apólice parcelada sem CR                 | Válida (`REQ-287`) |
+| `FA-222` | Parcela tornada elegível fora de ordem   | Permitido (`REQ-288`) |
+| `FA-223` | CRs da parcelada alterados antes de qualquer parcela elegível | Permitido, com motivo e auditoria dos dois CRs (`REQ-265`) |
+| `FA-224` | Parcelas incluídas, alteradas ou removidas antes da emissão, em qualquer modo | Permitido, com autoria (`REQ-254`) |
+| `FA-225` | CRs da parcelada iguais a zero, informados deliberadamente | Permitido; nada a repassar nas parcelas (`REQ-263`) |
 
 ### 11.2 Exceções
 
@@ -887,8 +1059,14 @@ situações) está nas perguntas `Q-207` a `Q-213`.
 | `EX-205` | Elegibilidade de apólice sem CR          | Recusada (`REQ-273`, `REQ-281`) |
 | `EX-206` | Tentativa de alterar comissão elegível   | Recusada (`REQ-282`) |
 | `EX-207` | Intermediária declarada em proposta com CT parcelada | Recusada, com mensagem de erro (`REQ-296`) |
-| `EX-208` | CT parcelada sem parcelas                | Recusada (`REQ-292`) |
+| `EX-208` | CT parcelada com menos de duas parcelas, no registro ou por remoção | Recusada (`REQ-292`, `REQ-254`) |
 | `EX-209` | CT parcelada sem um dos dois CTs         | Recusada (`REQ-291`) |
+| `EX-210` | Troca para parcelada com intermediária declarada ou com menos de duas parcelas | Recusada pelo backend; a tela exibe a mensagem (`REQ-299`) |
+| `EX-211` | Alteração dos CRs depois de uma parcela elegível | Recusada (`REQ-289`) |
+| `EX-212` | Tentativa de alterar parcela elegível    | Recusada (`REQ-288`) |
+| `EX-213` | CR da parcelada maior que o seu CT       | Recusada pelo backend; a tela exibe o erro (`REQ-263`) |
+| `EX-214` | Elegibilidade de parcela sem CR          | Recusada (`REQ-288`) |
+| `EX-215` | Só uma das duas CRs da parcelada informada | Recusada (`REQ-287`) |
 
 ### 11.3 Critérios de aceitação
 
@@ -919,7 +1097,7 @@ situações) está nas perguntas `Q-207` a `Q-213`.
 | `CA-224` | Enviados dois PDFs antes do registro, a proposta guarda só o último                                                                 | `REQ-219`            |
 | `CA-225` | Recebimento direto: prêmio 1.000,00, CT 30% e CR 60% — valor da Usina 300,00, a repassar 180,00, fica na Usina 120,00              | `REQ-274`            |
 | `CA-226` | Com intermediária: prêmio 1.000,00, CT 20%, CTU 80% e CR 70% — valor da Usina 160,00, a repassar 112,00, fica na Usina 48,00       | `REQ-274`            |
-| `CA-227` | Valor da Usina 10,00 e CR 70,55%: a repassar 7,05 (piso), fica na Usina 2,95                                                        | `REQ-275`            |
+| `CA-227` | Valor da Usina 10,00 e CR 70,55%: a repassar **7,06** (ABNT NBR 5891 — era 7,05 com piso até 2026-10-07), fica na Usina 2,94 | `REQ-275`, `REQ-298` |
 | `CA-228` | CR 0 informada: a repassar 0,00, todo o valor fica na Usina                                                                         | `REQ-272`            |
 | `CA-229` | CR 0, 70,55 e 100 são aceitas                                                                                                        | `REQ-272`            |
 | `CA-230` | Informar a CR registra autor, data e hora e os dados do cálculo; alterá-la registra ainda CR anterior, CR nova e motivo              | `REQ-279`            |
@@ -933,16 +1111,33 @@ situações) está nas perguntas `Q-207` a `Q-213`.
 | `CA-238` | Uma apólice sem CR aparece na lista de apólices sem CR; informada a CR, deixa de aparecer                                            | `REQ-286`            |
 | `CA-239` | Toda apólice com CT integral está em exatamente uma situação: sem CR, com CR calculada ou com CR elegível                            | `REQ-285`            |
 | `CA-240` | Uma apólice com CT parcelada não aparece na lista de apólices sem CR                                                                 | `REQ-286`            |
-| `CA-241` | Prêmio 100,05 e CT 15%: valor da Usina 15,01. Com CTU 50%: intermediária 15,01 e valor da Usina 7,51 (não 7,50)                     | `REQ-237`            |
+| `CA-241` | Prêmio 100,05 e CT 15%: valor da Usina 15,01. Com CTU 50%: intermediária 15,01 e valor da Usina **7,50** (ABNT NBR 5891 — era 7,51 até 2026-10-05) | `REQ-237`, `REQ-298` |
 | `CA-243` | O PDF da apólice, enviado no reconhecimento ou depois, fica guardado e pode ser aberto na apólice, com quem o enviou e quando       | `REQ-247`            |
 | `CA-244` | Enviados dois PDFs para a mesma apólice, o da apólice é o último                                                                     | `REQ-247`            |
 | `CA-245` | CT integral exibe um campo de CT; CT parcelada exibe dois — da primeira e das subsequentes                                           | `REQ-291`            |
 | `CA-246` | Parcelas de 100,00 e CT 100/30: parcela 1 espera 100,00; cada uma das demais espera 30,00; nenhum total é exibido                    | `REQ-293`            |
 | `CA-247` | A base da CT parcelada é o valor da parcela, não o prêmio líquido                                                                    | `REQ-293`            |
-| `CA-248` | Arredondamento por parcela pela ABNT NBR 5891: 15,0075 → 15,01; 5,025 → 5,02; 5,075 → 5,08                                          | `REQ-294`            |
+| `CA-248` | Arredondamento pela ABNT NBR 5891: 15,0075 → 15,01; 5,025 → 5,02; 5,075 → 5,08 | `REQ-298` |
 | `CA-249` | CTs da parcelada acima de 100% são aceitos (provisório, `DEC-216`)                                                                   | `REQ-295`            |
 | `CA-250` | A apólice com CT parcelada guarda o valor esperado de cada parcela                                                                   | `REQ-293`            |
-| `CA-251` | O fluxo da CT integral é o mesmo de antes: um CT, base no prêmio líquido, intermediária permitida, `REQ-237`                         | `REQ-290`            |
+| `CA-251` | O fluxo da CT integral é o mesmo de antes — um CT, base no prêmio líquido, intermediária permitida — exceto o arredondamento, agora pela ABNT NBR 5891 | `REQ-290`, `REQ-298` |
+| `CA-252` | Com intermediária declarada, ou com menos de duas parcelas, trocar para parcelada é recusado; sem intermediária e com duas parcelas, é aceito | `REQ-299` |
+| `CA-253` | Trocar de parcelada para integral deixa uma CT única, e o valor esperado volta a ser prêmio líquido × CT | `REQ-299` |
+| `CA-254` | Parcela 2 de 100,00 com CT 30% e CR 15%: Usina 30,00, corretor 15,00 | `REQ-264` |
+| `CA-255` | Alterar os CRs exige motivo e o histórico mostra os dois CRs, anterior e novo | `REQ-265` |
+| `CA-256` | A elegibilidade da parcela registra quem assinou e quando, exibe a CT e a CR da parcela e pode ser feita fora de ordem | `REQ-288` |
+| `CA-257` | Depois da primeira parcela elegível, os dois CRs não podem ser alterados | `REQ-289` |
+| `CA-258` | Cada parcela elegível gera um extrato com todos os dados de `REQ-266` | `REQ-266` |
+| `CA-259` | A consulta das comissões elegíveis não lista parcelas; as parcelas aparecem só na tela da apólice | `REQ-267` |
+| `CA-260` | Na apólice integral, a confirmação de pagamento de parcela continua como está | `REQ-269` |
+| `CA-261` | Antes da emissão, em qualquer modo, uma parcela pode ser incluída, alterada e removida, com autor e momento registrados; depois, não | `REQ-254` |
+| `CA-262` | CT 30% e CR 30% é aceita; CT 30% e CR 30,01% é recusada — para a primeira e para as subsequentes | `REQ-263` |
+| `CA-263` | Parcela 2 de 100,00, CT 30%, CR 15%: fica na Usina 15,00 | `REQ-264` |
+| `CA-264` | Sem CR, a elegibilidade da parcela é recusada; com CR zero, é aceita e o extrato mostra CR 0 e corretor 0,00 | `REQ-288` |
+| `CA-265` | Uma apólice parcelada sem CR aparece na lista das parceladas como "Sem CR", e não na lista de `REQ-286`; informados os CRs, passa a "Nenhuma parcela elegida" | `REQ-268` |
+| `CA-267` | Uma parcela elegível leva a apólice a "Parcialmente elegida"; todas elegíveis, a "Totalmente elegida" | `REQ-268` |
+| `CA-268` | Proposta parcelada com uma parcela é recusada; com duas, aceita; remover uma das duas é recusado | `REQ-292` |
+| `CA-266` | A auditoria de uma alteração das CRs guarda os dados do cálculo de cada parcela | `REQ-265` |
 
 ### 11.4 Casos que devem ser rejeitados
 
@@ -958,7 +1153,7 @@ situações) está nas perguntas `Q-207` a `Q-213`.
 | `REJ-208` | Registrar recusa sem motivo                                               | `REQ-253`                                                       |
 | `REJ-209` | Declarar mais de uma intermediária na mesma proposta                      | `REQ-220`                                                       |
 | `REJ-210` | Originar apólice de uma proposta recusada                                 | `REQ-253`                                                       |
-| `REJ-211` | Alterar prêmio líquido, número, vigência ou parcelas depois do registro   | `REQ-261`                                                       |
+| `REJ-211` | Alterar prêmio líquido, número ou vigência depois do registro, ou parcelas depois da emissão | `REQ-261`, `REQ-254` |
 | `REJ-212` | Alterar uma proposta recusada                                             | `REQ-253`                                                       |
 | `REJ-213` | Declarar intermediária ou alterar CT sem identificar o autor              | `REQ-215`, `REQ-216`, `REQ-223`                                 |
 | `REJ-214` | Registrar proposta com fim da vigência igual ou anterior ao início        | `REQ-202`                                                       |
@@ -980,8 +1175,19 @@ situações) está nas perguntas `Q-207` a `Q-213`.
 | `REJ-230` | Receber comissão parcelada através de intermediária                       | `REQ-296`                                                       |
 | `REJ-231` | Aplicar a CT parcelada sobre o prêmio líquido                             | `REQ-293`                                                       |
 | `REJ-232` | Acumular os valores esperados das parcelas num total                      | `REQ-293`                                                       |
-| `REJ-233` | Registrar CT parcelada sem parcelas ou sem um dos dois CTs                | `REQ-291`, `REQ-292`                                            |
-| `REJ-234` | Alterar os CRs da parcelada depois de uma parcela reconhecida             | `REQ-289`                                                       |
+| `REJ-233` | Registrar CT parcelada com menos de duas parcelas ou sem um dos dois CTs  | `REQ-291`, `REQ-292`                                            |
+| `REJ-234` | Alterar os CRs da parcelada depois de uma parcela elegível                | `REQ-289`                                                       |
+| `REJ-235` | Trocar para parcelada com intermediária declarada ou com menos de duas parcelas | `REQ-299`                                                 |
+| `REJ-236` | Recusar uma troca de modo, ou qualquer regra da parcelada, só na tela     | `REQ-299`                                                       |
+| `REJ-237` | Calcular o valor do corretor da parcela sobre o valor da Usina da parcela | `REQ-264`                                                       |
+| `REJ-238` | Tornar elegível uma parcela sem assinatura                                | `REQ-288`                                                       |
+| `REJ-239` | Alterar ou desfazer a elegibilidade de uma parcela                        | `REQ-288`                                                       |
+| `REJ-240` | Arredondar qualquer valor de outra forma que não a ABNT NBR 5891 (metade para cima, piso) | `REQ-298`                                                       |
+| `REJ-241` | Informar uma CR da parcelada maior que o seu CT                           | `REQ-263`                                                       |
+| `REJ-242` | Tornar elegível uma parcela sem CR                                        | `REQ-288`                                                       |
+| `REJ-243` | Informar ou alterar só uma das duas CRs da parcelada                      | `REQ-287`                                                       |
+| `REJ-244` | Incluir, alterar ou remover parcela sem registrar autor e momento         | `REQ-254`                                                       |
+| `REJ-245` | Mostrar apólice parcelada na lista de apólices sem CR de `REQ-286`        | `REQ-268`                                                       |
 
 ---
 
@@ -1016,6 +1222,9 @@ situações) está nas perguntas `Q-207` a `Q-213`.
 | FP-03 — repasse ao corretor, da liberação ao pagamento registrado                | FP-02 — da CR à **elegibilidade**; o pagamento acontece fora do sistema (`REQ-280`)                              |
 | `REQ-094`, `REQ-095`, `REQ-096` — relatório de repasse, recibo, registro do pagamento | **Suspensas**, não descartadas: aguardam os fluxos posteriores à elegibilidade (`DEC-211`). O repasse da V1 (abertura, liberação, pagamento, comprovante, extrato por corretor) foi **removido do sistema** em 2026-09-25; volta, sob a V2, quando `DEC-211` for decidida |
 | `REQ-066` — ajuste extraordinário da comissão acordada, a receber e a pagar | Mantido **só no lado a receber** (2026-09-25): sem tabela do corretor não há "a pagar" a ajustar; a parte do corretor é a CR (`REQ-270`) |
+| `REQ-275` (versão de 2026-09-25) — valor a repassar arredondado **para baixo (piso)** | `REQ-275`, `REQ-298` (2026-10-07) — **ABNT NBR 5891**; `CA-227` passou de 7,05/2,95 para 7,06/2,94 |
+| `REQ-261`, `REJ-211` (versões anteriores) — parcelas imutáveis desde o registro | `REQ-254` (2026-10-07) — editáveis antes da emissão, nos dois modos, com autoria |
+| `REQ-237` (versão de 2026-09-25) — valor da Usina arredondado **metade para cima** a cada etapa | `REQ-237`, `REQ-298` (2026-10-05) — **ABNT NBR 5891** a cada etapa; `CA-241` passou de 7,51 para 7,50 |
 
 ### 12.3 Retiradas **durante** o levantamento
 
@@ -1026,6 +1235,7 @@ situações) está nas perguntas `Q-207` a `Q-213`.
 | `REQ-234` (versão anterior) — base do repasse configurável entre o valor da intermediária e o da Usina | Em 2026-09-25 a base passou a ser **sempre o valor da Usina** (`REQ-274`), mantida desacoplada do cálculo                                                          |
 | `REQ-236` (trecho) — "a parte do corretor continua sendo a tabela do corretor" | Retirado com a tabela do corretor (`REQ-270`). `CA-219` perdeu a parte "1,00 a pagar", que vinha da tabela                                                                     |
 | `CA-215` — "com a CT parcelada, o valor esperado é o mesmo da CT integral"  | Em 2026-10-05 a CT parcelada ganhou cálculo próprio, por parcela (`REQ-293`, `DEC-203` respondida). O identificador não é reaproveitado |
+| `FA-218` — CT parcelada com uma só parcela; `REQ-292` (versão de 2026-10-05) — ao menos uma parcela | Em 2026-10-07 a parcelada passou a exigir **ao menos duas** parcelas (`REQ-292`). O identificador não é reaproveitado |
 | `REQ-235` (versão anterior) — base = prêmio líquido **qualquer que seja o modo** | Passou a valer só para a CT integral; a parcelada usa a parcela (`REQ-293`) |
 | `REQ-271`, `FA-214`, `REJ-218` (versões anteriores) — apólice com CT parcelada sem CR, sem comissão calculada nem elegível | Em 2026-10-05 a parcelada ganhou dois CRs e elegibilidade por parcela (seção 9B). A CR única da seção 9A continua só para a integral |
 | `FA-215`, `CA-242` — proposta registrada sem o aceite do cliente                | Em 2026-09-28 o aceite deixou primeiro de ser obrigatório e, na mesma data, foi retirado da proposta (`REQ-201`). Os dois itens perderam o objeto; os identificadores não são reaproveitados |
@@ -1050,8 +1260,9 @@ apólice; os dois números seguem consultáveis) · `REQ-120`, `REQ-121` (precis
 | `DEC-205` | **Correção de registro errado** — como um registro com dado incorreto é encerrado e se o número volta a ficar disponível                                                               | `REQ-262`; deixado em aberto por decisão do negócio         |
 | `DEC-206` | **Endosso, sinistro e renovação** sobre a apólice                                                                                                                                      | `REQ-246`; fora desta entrega                               |
 | `DEC-208` | **Governança de dados dos cadastros** — hoje cliente, corretor e forma de pagamento lidos do PDF entram como o texto do documento. No futuro haverá cadastro formal (prévio ou não) e busca de identificadores já conhecidos (ex.: renovação, cliente recorrente). A identificação deve ficar desacoplada da leitura. **O corretor também terá identificação por id**, para controle e governança: hoje vale o nome declarado na proposta e na apólice — inclusive no extrato de elegibilidade (`REQ-283`) —, mas no futuro próximo o corretor terá dados enriquecidos e o nome não bastará, ali e em outros pontos do sistema | Os identificadores lidos do PDF são provisórios; o corretor do extrato é, por ora, só o nome |
-| `DEC-210` | **Repasse e elegibilidade com CT parcelada** — respondida **em parte** em 2026-10-05: dois CRs (`REQ-287`), elegibilidade por parcela (`REQ-288`), CRs congelados depois de uma parcela reconhecida (`REQ-289`). O restante está em `Q-206`–`Q-213` | A seção 9B só tem o que foi confirmado; o resto não é implementado |
-| `DEC-216` | **Faixa dos CTs da parcelada** — como funciona de fato: o negócio citou 0–200% e precisa levantar mais. **Provisório**, explícito: acima de 100% e sem limite superior (`REQ-295`) | Só os CTs da parcelada; a faixa da CT integral não muda |
+| `DEC-210` | **Repasse e elegibilidade com CT parcelada** — **respondida** em 2026-10-05 e 2026-10-07 (seção 9B). O que resta está em `DEC-216` e `DEC-217` | — |
+| `DEC-216` | **Faixa dos CTs da parcelada** — como funciona de fato: o negócio citou 0–200% e precisa levantar mais. **Provisório**, explícito: acima de 100% e sem limite superior (`REQ-295`). As CRs da parcelada não dependem disto: cada uma é limitada pelo seu CT (`REQ-263`) | Só a parcelada; a faixa da CT integral não muda |
+| `DEC-217` | **Alterar a CT ou a CR de uma parcela no momento da elegibilidade** — hipótese ainda não levantada | Por ora o ato só **exibe** a CT e a CR da parcela (`REQ-288`) |
 | `DEC-211` | **Depois da elegibilidade** — estorno e outras possibilidades ainda não levantadas; relatório de repasse, recibo e registro do pagamento (`REQ-094`–`REQ-096` da V1, suspensas) | A comissão elegível é final e só consultável (`REQ-282`) |
 | `DEC-212` | **Valor efetivamente recebido diferente do valor da Usina** — a CR incide sobre o valor da Usina calculado da apólice (`REQ-274`); o que acontece se a Usina receber outro valor **não foi discutido** | Nenhuma regra: a elegibilidade não registra o valor efetivamente recebido |
 | `DEC-213` | **Conteúdo do PDF da apólice** — quais informações o PDF da apólice deve conter, e se o sistema deve ler, extrair ou conferir algum dado dele. Deixado em aberto para uma rodada futura de levantamento de requisitos | `REQ-247`: o arquivo é guardado como enviado; nenhum conteúdo é lido nem validado |
@@ -1061,20 +1272,20 @@ apólice; os dois números seguem consultáveis) · `REQ-120`, `REQ-121` (precis
 
 ### 13.2 Confirmações pendentes
 
-**CT parcelada (2026-10-05)** — perguntas abertas. Nada delas é regra:
+Nenhuma. Todas foram respondidas:
 
-| ID | Pergunta |
-| --- | --- |
-| `Q-205` | **Edição antes da emissão** (`REQ-297`): os dois CTs são editáveis como a CT integral, com autoria? Trocar o modo para parcelado com intermediária já declarada é recusado (como declarar intermediária numa parcelada, `REQ-296`)? E trocar para parcelado numa proposta registrada **sem parcelas**, que não podem mais ser incluídas (`REQ-261`)? |
-| `Q-206` | **Os dois CRs** (`REQ-287`): "CR da segunda" é a CR de **cada parcela a partir da segunda**, como o CT das subsequentes? A faixa é a da integral (0–100%, até duas casas, zero só deliberado — `REQ-272`)? Os dois são informados juntos e são obrigatórios? |
-| `Q-207` | **Cálculo do repasse por parcela**: a base é o valor esperado da parcela (`REQ-293`) × a CR correspondente? O valor do corretor é arredondado com **piso** (`REQ-275`) ou pela **ABNT NBR 5891** (`REQ-294`)? O que fica na Usina é a diferença? |
-| `Q-208` | **Recálculo e auditoria**: antes da primeira parcela reconhecida, os CRs podem ser alterados com motivo e auditoria, como em `REQ-277`/`REQ-279`? |
-| `Q-209` | **"Reconhecida"** (`REQ-289`): é a parcela que se tornou **elegível** (`REQ-288`)? Os CRs congelam para **todas** as parcelas a partir da primeira reconhecida? |
-| `Q-210` | **Ato da elegibilidade da parcela** (`REQ-288`): é assinado por um usuário (`REQ-216`) no momento do registro, como `REQ-281`? Exige os CRs informados? Precisa seguir a ordem das parcelas? É definitivo, como `REQ-282`? |
-| `Q-211` | **Extrato e consulta**: cada parcela elegível gera um extrato? Com quais dados além dos de `REQ-283` (número da parcela, valor, CT e CR aplicados)? A consulta de `REQ-284` lista parcelas, com os mesmos filtros? |
-| `Q-212` | **Situações e lista**: quais são as situações de uma apólice parcelada quanto ao repasse (`REQ-285` vale só para a integral)? Existe uma lista de apólices parceladas sem CR, como `REQ-286`? |
-| `Q-213` | **"Confirmar recebimento" existente**: a confirmação de pagamento de parcela que já existe na apólice vem da V1 (o **cliente** pagou — `REQ-092`, descartada na seção 12.1). Na apólice parcelada ela passa a ser a elegibilidade da parcela. E na apólice com CT **integral**, ela continua como está? |
-| `Q-214` | **Arredondamento — padronizar**: a ABNT NBR 5891 vale **só para a parcelada**, ou deve passar a valer também na integral? Na integral isso mudaria `REQ-237` e valores já validados (`CA-241`: 7,505 → 7,51 hoje; pela norma seria 7,50). |
+**Respondidas em 2026-10-07:** `Q-215` (`REQ-254`), `Q-216` (`REQ-263`, `REQ-264`),
+`Q-217` (`REQ-275`, `REQ-298`), `Q-218` (`REQ-288`), `Q-219` em parte (`REQ-268`; o
+restante em `Q-222`), `Q-220` (`REQ-287`), `Q-221` (`REQ-265`), `Q-222` (`REQ-268`),
+`Q-223` (`REQ-254`, `REQ-292`). **Não há pergunta aberta sobre a CT parcelada**; restam
+`DEC-216` e `DEC-217`. Ao começar a implementação, o negócio decidiu ainda: comissão
+acordada (`REQ-227`), notificação (`REQ-228`), confirmação da V1 na parcelada (`REQ-269`),
+como se editam as parcelas (`REQ-254`) e as colunas da lista da parcelada (`REQ-268`).
+
+**Respondidas em 2026-10-05:** `Q-205` (`REQ-297`, `REQ-299`), `Q-206` (`REQ-287`,
+`REQ-263`), `Q-207` (`REQ-264`), `Q-208` (`REQ-265`), `Q-209` (`REQ-288`, `REQ-289`),
+`Q-210` (`REQ-288`, `DEC-217`), `Q-211` (`REQ-266`, `REQ-267`), `Q-212` em parte (`REQ-287`;
+o restante em `Q-219`), `Q-213` (`REQ-269`), `Q-214` (`REQ-237`, `REQ-298`).
 
 **Respondidas anteriormente:**
 

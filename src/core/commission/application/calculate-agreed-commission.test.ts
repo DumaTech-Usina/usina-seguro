@@ -86,3 +86,37 @@ describe('CalculateAgreedCommission', () => {
     expect(commission?.agreedReceivable.toString()).toBe('20.00');
   });
 });
+
+describe('CalculateAgreedCommission with parcelled CT (REQ-227)', () => {
+  it('creates no agreed commission: a parcelled CT has no single value (REQ-227, REJ-232)', async () => {
+    const { proposals, commissions, useCase } = scenario();
+    await proposals.save(
+      Proposal.register({
+        id: 'proposal-1',
+        clientId: 'client-1',
+        brokerId: 'broker-1',
+        insurerId: 'insurer-1',
+        productId: 'auto',
+        paymentMethodId: 'credit',
+        proposalNumber: 'PRP-1',
+        netPremium: Money.fromString('100.00'),
+        coverageStart: CalendarDate.fromString('2026-10-01'),
+        coverageEnd: CalendarDate.fromString('2027-10-01'),
+        installments: [
+          { amount: Money.fromString('50.00'), dueDate: null },
+          { amount: Money.fromString('50.00'), dueDate: null },
+        ],
+        workedCommission: Percentage.fromString('100'),
+        subsequentWorkedCommission: Percentage.fromString('30'),
+        workedCommissionMode: 'PARCELLED',
+        receipt: { kind: 'DIRECT' },
+        registeredBy: 'operator',
+        registeredAt: new Date('2026-09-17T12:00:00.000Z'),
+      }),
+    );
+
+    await useCase.calculateFor(request);
+
+    expect(await commissions.findByPolicyId('policy-1')).toBeNull();
+  });
+});

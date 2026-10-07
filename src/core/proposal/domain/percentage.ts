@@ -31,6 +31,24 @@ export class Percentage {
   }
 
   static fromString(value: string): Percentage {
+    const percentage = Percentage.fromStringWithoutCeiling(value);
+
+    if (percentage.exceedsHundred()) {
+      throw new BusinessRuleViolation('REQ-121', PROPOSAL_MESSAGES.PERCENTAGE_OUT_OF_RANGE, {
+        value,
+      });
+    }
+
+    return percentage;
+  }
+
+  /**
+   * The CTs of a parcelled proposal may go past 100% and have no upper limit
+   * for now (REQ-295, DEC-216), and so may the CRs bounded by them (REQ-263).
+   * Only the format is checked here; whoever needs the 100% ceiling asks
+   * `exceedsHundred`.
+   */
+  static fromStringWithoutCeiling(value: string): Percentage {
     const text = value.trim();
 
     if (!DECIMAL_STRING.test(text)) {
@@ -39,17 +57,22 @@ export class Percentage {
       });
     }
 
-    const [whole = '0', fraction = ''] = text.split('.');
-    const aboveHundred = BigInt(whole) > 100n;
-    const hundredPlusFraction = BigInt(whole) === 100n && /[1-9]/.test(fraction);
-
-    if (aboveHundred || hundredPlusFraction) {
-      throw new BusinessRuleViolation('REQ-121', PROPOSAL_MESSAGES.PERCENTAGE_OUT_OF_RANGE, {
-        value,
-      });
-    }
-
     return new Percentage(text);
+  }
+
+  exceedsHundred(): boolean {
+    return this.isGreaterThan(HUNDRED);
+  }
+
+  /** Exact comparison, whatever the informed scales (REQ-263: a CR is at most its CT). */
+  isGreaterThan(other: Percentage): boolean {
+    const mine = this.asFraction();
+    const theirs = other.asFraction();
+    const scale = Math.max(mine.scale, theirs.scale);
+    return (
+      mine.numerator * 10n ** BigInt(scale - mine.scale) >
+      theirs.numerator * 10n ** BigInt(scale - theirs.scale)
+    );
   }
 
   /**
@@ -83,3 +106,5 @@ export class Percentage {
     return this.value;
   }
 }
+
+const HUNDRED = Percentage.fromStringWithoutCeiling('100');

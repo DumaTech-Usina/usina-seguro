@@ -81,6 +81,8 @@ export class NotifyPolicyIssued implements PolicyIssuedNotifier {
         broker: { id: proposal.brokerId, name: names.of('BROKER', proposal.brokerId) },
         product: { id: proposal.productId, name: names.of('PRODUCT', proposal.productId) },
         workedCommission: proposal.workedCommission,
+        // REQ-228: a parcelled CT is notified with both of its CTs.
+        subsequentWorkedCommission: proposal.subsequentWorkedCommission,
         netPremium: proposal.netPremium,
       },
       occurredAt: event.issuedAt,

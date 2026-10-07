@@ -227,8 +227,10 @@ async function issuedPolicy(options: {
     netPremium: '1000.00',
     coverageStart: '2026-10-01',
     coverageEnd: '2027-10-01',
-    installments: [],
+    // REQ-291, REQ-292: a parcelled CT has two CTs and at least two installments.
+    installments: options.mode === 'PARCELLED' ? [{ amount: '500.00' }, { amount: '500.00' }] : [],
     workedCommission: options.workedCommission ?? '30',
+    subsequentWorkedCommission: options.mode === 'PARCELLED' ? '10' : null,
     workedCommissionMode: options.mode ?? 'INTEGRAL',
     intermediary: options.intermediary ?? null,
     userId: 'operator',
@@ -445,7 +447,8 @@ describe('FP-02 edge cases', () => {
 
     await openPolicy(policyId);
     expect(card(CR_CARD).textContent).toContain('CT parcelada');
-    expect(buttonsIn(CR_CARD)).toEqual([]);
+    // REQ-287: the parcelled CT has its own two CRs, not the single CR.
+    expect(buttonsIn(CR_CARD)).toEqual(['Informar CRs']);
 
     await openPayouts();
     expect(rowWith('#without-rate', 'APL-FP02-PARC')).toBeUndefined();

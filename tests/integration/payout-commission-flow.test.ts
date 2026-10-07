@@ -43,10 +43,19 @@ async function policy(proposalNumber: string, mode: 'INTEGRAL' | 'PARCELLED' = '
     netPremium: '1000.00',
     coverageStart: '2026-10-01',
     coverageEnd: '2027-10-01',
-    installments: [],
-    workedCommission: '20',
+    // REQ-291, REQ-292, REQ-296: a parcelled CT has two CTs, at least two
+    // installments and no intermediary.
+    installments:
+      mode === 'PARCELLED'
+        ? [
+            { amount: '100.00', dueDate: null },
+            { amount: '100.00', dueDate: null },
+          ]
+        : [],
+    workedCommission: mode === 'PARCELLED' ? '100' : '20',
+    subsequentWorkedCommission: mode === 'PARCELLED' ? '30' : null,
     workedCommissionMode: mode,
-    intermediary: { intermediaryId: 'Mega', ctu: '80' },
+    intermediary: mode === 'PARCELLED' ? null : { intermediaryId: 'Mega', ctu: '80' },
     author: 'operator',
   });
 
@@ -157,5 +166,62 @@ describe('payout commission on SQLite (FP-02)', () => {
         userId: 'ana',
       }),
     ).rejects.toThrow(BusinessRuleViolation);
+  });
+});
+
+describe('parcelled payout on SQLite (V2 section 9B)', () => {
+  it('keeps the CR entries, the calculation of each installment and the statements across a reopening (REQ-265, REQ-266)', async () => {
+    const issued = await policy('PRP-P1', 'PARCELLED');
+    const { useCases } = application;
+
+    await useCases.informParcelledPayoutRates.execute({
+      policyId: issued.id,
+      firstRate: '100',
+      subsequentRate: '15',
+      userId: 'ana',
+    });
+    await useCases.reviseParcelledPayoutRates.execute({
+      policyId: issued.id,
+      firstRate: '90',
+      subsequentRate: '20',
+      reason: 'acordo revisto',
+      userId: 'bruno',
+    });
+    const eligible = await useCases.declareInstallmentEligibility.execute({
+      policyId: issued.id,
+      number: 2,
+      userId: 'carla',
+    });
+
+    await application.shutdown();
+    application = open();
+
+    const read = await application.useCases.getParcelledPayout.execute(issued.id);
+
+    expect(read).toEqual(eligible);
+    expect(read.situation).toBe('PARTIALLY_ELIGIBLE');
+    expect(read.entries.map((entry) => entry.calculations.map((c) => c.payout))).toEqual([
+      ['100.00', '15.00'],
+      ['90.00', '20.00'],
+    ]);
+    expect(read.installments[1]?.statement).toMatchObject({
+      installmentNumber: 2,
+      payoutRate: '20',
+      payout: '20.00',
+      retained: '10.00',
+      signedBy: 'carla',
+    });
+  });
+
+  it('lists the parcelled policies with their situation after a reopening (REQ-268)', async () => {
+    const parcelled = await policy('PRP-P2', 'PARCELLED');
+    await policy('PRP-I1');
+
+    await application.shutdown();
+    application = open();
+
+    expect(await application.useCases.listParcelledPolicies.execute()).toEqual([
+      expect.objectContaining({ policyId: parcelled.id, situation: 'WITHOUT_CR' }),
+    ]);
   });
 });

@@ -68,14 +68,27 @@ describe('RegisterProposal', () => {
         { number: 2, amount: '50.00', dueDate: null },
       ],
       workedCommission: '20',
+      subsequentWorkedCommission: null,
       workedCommissionMode: 'INTEGRAL',
       intermediaryId: null,
       ctu: null,
       expectedReceipt: { intermediary: null, usina: '20.00' },
+      expectedInstallments: null,
       workedCommissionHistory: [
         {
           workedCommission: '20',
+          subsequentWorkedCommission: null,
           workedCommissionMode: 'INTEGRAL',
+          informedBy: 'ana.souza',
+          informedAt: NOW.toISOString(),
+        },
+      ],
+      installmentHistory: [
+        {
+          installments: [
+            { number: 1, amount: '50.00', dueDate: '2026-10-10' },
+            { number: 2, amount: '50.00', dueDate: null },
+          ],
           informedBy: 'ana.souza',
           informedAt: NOW.toISOString(),
         },
@@ -194,5 +207,77 @@ describe('RegisterProposal', () => {
     const { useCase } = scenario();
 
     await expect(useCase.execute(input(overrides))).rejects.toThrow(BusinessRuleViolation);
+  });
+
+  describe('with parcelled CT (V2 section 6A)', () => {
+    const PARCELLED = {
+      workedCommissionMode: 'PARCELLED',
+      workedCommission: '100',
+      subsequentWorkedCommission: '30',
+      installments: [
+        { amount: '100.00', dueDate: null },
+        { amount: '100.00', dueDate: null },
+        { amount: '100.00', dueDate: null },
+      ],
+    } as const;
+
+    it('registers the two CTs and shows only the expected value of each installment (REQ-291, REQ-293, CA-246)', async () => {
+      const { useCase } = scenario();
+
+      const view = await useCase.execute(input(PARCELLED));
+
+      expect(view.workedCommission).toBe('100');
+      expect(view.subsequentWorkedCommission).toBe('30');
+      expect(view.expectedReceipt).toBeNull();
+      expect(view.expectedInstallments).toEqual([
+        { number: 1, amount: '100.00', workedCommission: '100', usina: '100.00' },
+        { number: 2, amount: '100.00', workedCommission: '30', usina: '30.00' },
+        { number: 3, amount: '100.00', workedCommission: '30', usina: '30.00' },
+      ]);
+      expect(view.workedCommissionHistory[0]?.subsequentWorkedCommission).toBe('30');
+    });
+
+    it('accepts CTs above 100% (REQ-295, CA-249)', async () => {
+      const { useCase } = scenario();
+
+      const view = await useCase.execute(
+        input({ ...PARCELLED, workedCommission: '150', subsequentWorkedCommission: '120' }),
+      );
+
+      expect(view.expectedInstallments?.[0]?.usina).toBe('150.00');
+    });
+
+    it('keeps the integral CT within 100% (REQ-121, CA-251)', async () => {
+      const { useCase } = scenario();
+
+      await expect(useCase.execute(input({ workedCommission: '101' }))).rejects.toThrow(
+        BusinessRuleViolation,
+      );
+    });
+
+    it('refuses an intermediary and persists nothing (REQ-296, REJ-230)', async () => {
+      const { proposals, useCase } = scenario();
+
+      await expect(
+        useCase.execute(
+          input({ ...PARCELLED, intermediary: { intermediaryId: 'intermediary-1', ctu: '50' } }),
+        ),
+      ).rejects.toThrow(BusinessRuleViolation);
+
+      expect(await proposals.findById('fixed-id')).toBeNull();
+    });
+
+    it('refuses fewer than two installments or a missing CT (REQ-292, REQ-291, REJ-233)', async () => {
+      const { useCase } = scenario();
+
+      await expect(
+        useCase.execute(
+          input({ ...PARCELLED, installments: [{ amount: '100.00', dueDate: null }] }),
+        ),
+      ).rejects.toThrow(BusinessRuleViolation);
+      await expect(
+        useCase.execute(input({ ...PARCELLED, subsequentWorkedCommission: null })),
+      ).rejects.toThrow(BusinessRuleViolation);
+    });
   });
 });

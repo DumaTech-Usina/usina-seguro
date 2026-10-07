@@ -12,9 +12,12 @@
 import { ApiError, api } from '/app/shared/api.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
 import { reportError } from '/app/shared/shell.js';
+import { statusChip } from '/app/shared/status.js';
 
 const withoutRate = document.querySelector('#without-rate');
 const withoutSummary = document.querySelector('#without-summary');
+const parcelled = document.querySelector('#parcelled');
+const parcelledSummary = document.querySelector('#parcelled-summary');
 const eligible = document.querySelector('#eligible');
 const eligibleSummary = document.querySelector('#eligible-summary');
 const filters = document.querySelector('#eligible-filters');
@@ -130,6 +133,58 @@ async function loadWithoutRate() {
   );
 }
 
+/* -------------------------------------------------------- parcelled -- */
+
+/**
+ * REQ-268: every policy with parcelled CT and its situation. No Usina value:
+ * a parcelled CT has no total (REJ-232).
+ */
+async function loadParcelled() {
+  let lines;
+  try {
+    lines = await api.listParcelledPolicies();
+  } catch (error) {
+    failure(parcelled, 'Não foi possível carregar as apólices parceladas', error);
+    return;
+  }
+
+  parcelledSummary.replaceChildren(element('span', 'chip', `${lines.length} parceladas`));
+
+  if (lines.length === 0) {
+    parcelled.replaceChildren(
+      emptyState('inbox', 'Nenhuma apólice parcelada', 'Nenhuma apólice tem CT parcelada.'),
+    );
+    return;
+  }
+
+  parcelled.replaceChildren(
+    table(
+      [
+        ['Apólice', ''],
+        ['Cliente', ''],
+        ['Corretor', ''],
+        ['Renovação', ''],
+        ['Situação', ''],
+        ['', 'is-action'],
+      ],
+      lines.map((line) => {
+        const row = element('tr');
+        const situation = element('td');
+        situation.append(statusChip('parcelledPayout', line.situation));
+        row.append(
+          element('td', 'policy-number', line.policyNumber),
+          element('td', undefined, line.client),
+          element('td', undefined, line.broker),
+          element('td', undefined, formatDate(line.renewalDate)),
+          situation,
+          policyLink(line.policyId, 'Abrir apólice'),
+        );
+        return row;
+      }),
+    ),
+  );
+}
+
 /* --------------------------------------------------------- eligible -- */
 
 /**
@@ -232,4 +287,5 @@ document.querySelector('#clear-filters').addEventListener('click', () => {
 });
 
 loadWithoutRate();
+loadParcelled();
 loadEligible();

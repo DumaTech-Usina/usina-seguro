@@ -22,6 +22,13 @@ export const COMMISSION_MESSAGES = {
   PAYOUT_NOT_INFORMED: 'commission.payout_not_informed',
   PAYOUT_REVISION_REASON_REQUIRED: 'commission.payout_revision_reason_required',
   PAYOUT_ELIGIBLE_IS_FINAL: 'commission.payout_eligible_is_final',
+  PARCELLED_PAYOUT_REQUIRES_PARCELLED_CT: 'commission.parcelled_payout_requires_parcelled_ct',
+  PARCELLED_FIRST_RATE_ABOVE_CT: 'commission.parcelled_first_rate_above_ct',
+  PARCELLED_SUBSEQUENT_RATE_ABOVE_CT: 'commission.parcelled_subsequent_rate_above_ct',
+  PARCELLED_RATES_FROZEN: 'commission.parcelled_rates_frozen',
+  INSTALLMENT_ELIGIBILITY_REQUIRES_RATES: 'commission.installment_eligibility_requires_rates',
+  INSTALLMENT_ALREADY_ELIGIBLE: 'commission.installment_already_eligible',
+  INSTALLMENT_NOT_IN_POLICY: 'commission.installment_not_in_policy',
 } as const;
 
 export type CommissionMessageKey = (typeof COMMISSION_MESSAGES)[keyof typeof COMMISSION_MESSAGES];

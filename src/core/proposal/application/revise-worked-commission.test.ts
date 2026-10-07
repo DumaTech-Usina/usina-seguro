@@ -26,7 +26,10 @@ async function scenario() {
     netPremium: '100.00',
     coverageStart: '2026-10-01',
     coverageEnd: '2027-10-01',
-    installments: [],
+    installments: [
+      { amount: '50.00', dueDate: null },
+      { amount: '50.00', dueDate: null },
+    ],
     workedCommission: '20',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
@@ -46,27 +49,49 @@ describe('ReviseWorkedCommission', () => {
     const view = await useCase.execute({
       proposalId: 'proposal-1',
       workedCommission: '25',
+      subsequentWorkedCommission: '10',
       workedCommissionMode: 'PARCELLED',
       author: 'bruno.lima',
     });
 
     expect(view.workedCommission).toBe('25');
+    expect(view.subsequentWorkedCommission).toBe('10');
     expect(view.workedCommissionMode).toBe('PARCELLED');
-    expect(view.expectedReceipt.usina).toBe('25.00');
+    expect(view.expectedInstallments?.map((installment) => installment.usina)).toEqual([
+      '12.50',
+      '5.00',
+    ]);
     expect(view.workedCommissionHistory).toEqual([
       {
         workedCommission: '20',
+        subsequentWorkedCommission: null,
         workedCommissionMode: 'INTEGRAL',
         informedBy: 'ana.souza',
         informedAt: REGISTERED_AT.toISOString(),
       },
       {
         workedCommission: '25',
+        subsequentWorkedCommission: '10',
         workedCommissionMode: 'PARCELLED',
         informedBy: 'bruno.lima',
         informedAt: REVISED_AT.toISOString(),
       },
     ]);
+  });
+
+  it('refuses the switch to parcelled without the CT of the subsequent installments (REQ-291)', async () => {
+    const { proposals, useCase } = await scenario();
+
+    await expect(
+      useCase.execute({
+        proposalId: 'proposal-1',
+        workedCommission: '25',
+        workedCommissionMode: 'PARCELLED',
+        author: 'bruno.lima',
+      }),
+    ).rejects.toThrow(BusinessRuleViolation);
+
+    expect((await proposals.findById('proposal-1'))?.workedCommissionMode).toBe('INTEGRAL');
   });
 
   it('persists the correction', async () => {

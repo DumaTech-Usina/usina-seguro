@@ -1,7 +1,13 @@
 import { Authorship } from './authorship.ts';
 import type { CalendarDate } from './calendar-date.ts';
 import { BusinessRuleViolation, PROPOSAL_MESSAGES } from './errors.ts';
-import { type ExpectedReceipt, commissionBase, expectedReceipt } from './expected-receipt.ts';
+import {
+  type ExpectedInstallmentReceipt,
+  type ExpectedReceipt,
+  commissionBase,
+  expectedInstallmentReceipts,
+  expectedReceipt,
+} from './expected-receipt.ts';
 import type { Money } from './money.ts';
 import type { Percentage } from './percentage.ts';
 import type { Receipt, ReceiptDeclaration } from './receipt.ts';
@@ -30,6 +36,16 @@ export interface ProposalInstallment {
 }
 
 /**
+ * REQ-254: one version of the installment list — the one informed at
+ * registration, or one "Corrigir parcelas" — with who signed it and when. The
+ * earlier versions stay (REQ-124).
+ */
+export interface InstallmentSchedule {
+  readonly installments: readonly ProposalInstallment[];
+  readonly informed: Authorship;
+}
+
+/**
  * REQ-219: the PDF the proposal was imported from. The bytes live in a
  * document store; the proposal keeps which document it is and its name.
  */
@@ -41,7 +57,8 @@ export interface ProposalSourceDocument {
 /**
  * What the proposal holds from its registration on and never changes
  * (REQ-261, REJ-211): the commercial data (REQ-201) and the standardized data
- * (REQ-202), all informed at registration (REQ-206).
+ * (REQ-202), all informed at registration (REQ-206). The installments are not
+ * here: they may be corrected before issuance (REQ-254).
  *
  * The product-specific data of REQ-205 is absent: its catalogue is `DEC-201`.
  */
@@ -57,8 +74,6 @@ export interface ProposalRegistrationData {
   readonly netPremium: Money;
   readonly coverageStart: CalendarDate;
   readonly coverageEnd: CalendarDate;
-  /** REQ-204: may be empty (REQ-202). */
-  readonly installments: readonly ProposalInstallment[];
   /** REQ-219: absent when the proposal was typed by hand. */
   readonly sourceDocument?: ProposalSourceDocument | null;
   readonly registeredAt: Date;
@@ -70,7 +85,12 @@ export interface ProposalRegistrationData {
  * REQ-223).
  */
 export interface ProposalRegistration extends ProposalRegistrationData {
+  /** REQ-204: may be empty with an integral CT (REQ-202), at least two with a parcelled one (REQ-292). */
+  readonly installments: readonly ProposalInstallment[];
+  /** The CT; with a parcelled CT, the CT of the first installment (REQ-291). */
   readonly workedCommission: Percentage;
+  /** REQ-291: the CT of the subsequent installments, only with a parcelled CT. */
+  readonly subsequentWorkedCommission?: Percentage | null;
   readonly workedCommissionMode: WorkedCommissionMode;
   readonly receipt: Receipt;
   readonly registeredBy: string;
@@ -83,6 +103,8 @@ export interface ProposalState {
   readonly workedCommissionHistory: readonly WorkedCommission[];
   /** Oldest first; never empty. */
   readonly receiptHistory: readonly ReceiptDeclaration[];
+  /** REQ-254: oldest first; never empty — the first entry is the registration's. */
+  readonly installmentHistory: readonly InstallmentSchedule[];
   readonly rejectionReason?: string | null;
   /** REQ-209: present exactly when the issuance was recognised. */
   readonly issuanceRecognition?: Authorship | null;
@@ -99,12 +121,12 @@ export class Proposal {
   readonly netPremium: Money;
   readonly coverageStart: CalendarDate;
   readonly coverageEnd: CalendarDate;
-  readonly installments: readonly ProposalInstallment[];
   readonly sourceDocument: ProposalSourceDocument | null;
   readonly registeredAt: Date;
   readonly status: ProposalStatus;
   readonly workedCommissionHistory: readonly WorkedCommission[];
   readonly receiptHistory: readonly ReceiptDeclaration[];
+  readonly installmentHistory: readonly InstallmentSchedule[];
   /** REQ-253: present exactly when the proposal was refused. */
   readonly rejectionReason: string | null;
   /** REQ-209, CA-207: who identified the issuance, and when it was recorded. */
@@ -121,12 +143,12 @@ export class Proposal {
     this.netPremium = data.netPremium;
     this.coverageStart = data.coverageStart;
     this.coverageEnd = data.coverageEnd;
-    this.installments = data.installments;
     this.sourceDocument = data.sourceDocument ?? null;
     this.registeredAt = data.registeredAt;
     this.status = state.status;
     this.workedCommissionHistory = state.workedCommissionHistory;
     this.receiptHistory = state.receiptHistory;
+    this.installmentHistory = state.installmentHistory;
     this.rejectionReason = state.rejectionReason ?? null;
     this.issuanceRecognition = state.issuanceRecognition ?? null;
   }
@@ -174,27 +196,25 @@ export class Proposal {
       });
     }
 
-    // REQ-204, REJ-215: every installment is worth something.
-    input.installments.forEach((installment, index) => {
-      if (!installment.amount.isPositive()) {
-        throw new BusinessRuleViolation(
-          'REQ-204',
-          PROPOSAL_MESSAGES.INSTALLMENT_AMOUNT_MUST_BE_POSITIVE,
-          { number: String(index + 1) },
-        );
-      }
-    });
+    assertInstallmentsWorthSomething(input.installments);
 
     const signed = Authorship.of(input.registeredBy, input.registeredAt);
+    const workedCommission: WorkedCommission = {
+      rate: input.workedCommission,
+      mode: input.workedCommissionMode,
+      subsequentRate: input.subsequentWorkedCommission ?? null,
+      informed: signed,
+    };
+
+    assertModeConsistent(workedCommission, input.installments, input.receipt);
 
     return new Proposal(
       { ...input, proposalNumber },
       {
         status: 'AWAITING_ISSUANCE',
-        workedCommissionHistory: [
-          { rate: input.workedCommission, mode: input.workedCommissionMode, informed: signed },
-        ],
+        workedCommissionHistory: [workedCommission],
         receiptHistory: [{ receipt: input.receipt, declared: signed }],
+        installmentHistory: [{ installments: input.installments, informed: signed }],
       },
     );
   }
@@ -222,13 +242,32 @@ export class Proposal {
     return this.currentWorkedCommission().mode;
   }
 
+  /** REQ-291: the CT of the subsequent installments; `null` with an integral CT. */
+  get subsequentWorkedCommission(): Percentage | null {
+    return this.currentWorkedCommission().subsequentRate ?? null;
+  }
+
+  /** REQ-254: the installments in force — the last list informed. */
+  get installments(): readonly ProposalInstallment[] {
+    return (this.installmentHistory[this.installmentHistory.length - 1] as InstallmentSchedule)
+      .installments;
+  }
+
   /** The receipt in force: the last one declared (REQ-225). */
   get receipt(): Receipt {
     return this.currentReceipt().receipt;
   }
 
-  /** REQ-232, CA-203: what the Usina expects, visible before issuance. */
+  /**
+   * REQ-232, CA-203: what the Usina expects, visible before issuance — with an
+   * integral CT. A parcelled CT has no total (REQ-293, REJ-232): its expected
+   * value is per installment (`expectedInstallmentReceipts`).
+   */
   expectedReceipt(): ExpectedReceipt {
+    if (this.workedCommissionMode !== 'INTEGRAL') {
+      throw new Error('A parcelled CT has no total expected value (REQ-293, REJ-232).');
+    }
+
     return expectedReceipt(
       commissionBase(this.netPremium, this.workedCommissionMode),
       this.workedCommission,
@@ -237,13 +276,47 @@ export class Proposal {
   }
 
   /**
+   * REQ-293, CA-246: with a parcelled CT, what the Usina expects from each
+   * installment; `null` with an integral CT, whose expected value is one
+   * (`expectedReceipt`).
+   */
+  expectedInstallmentReceipts(): ExpectedInstallmentReceipt[] | null {
+    const subsequent = this.subsequentWorkedCommission;
+
+    if (this.workedCommissionMode !== 'PARCELLED' || subsequent === null) {
+      return null;
+    }
+
+    return expectedInstallmentReceipts(this.installments, this.workedCommission, subsequent);
+  }
+
+  /**
    * REQ-214, FA-203, CA-217: corrects the CT and its mode before issuance. The
    * correction is a new signed entry; the earlier ones stay (REQ-215, REQ-124).
+   * With a parcelled CT both CTs are corrected together (REQ-297), and the
+   * switch to parcelled needs a direct receipt and two installments (REQ-299).
    */
   reviseWorkedCommission(entry: WorkedCommission): Proposal {
     this.ensureAwaitingIssuance();
 
-    return this.with({ workedCommissionHistory: [...this.workedCommissionHistory, entry] });
+    const normalized = { ...entry, subsequentRate: entry.subsequentRate ?? null };
+    assertModeConsistent(normalized, this.installments, this.receipt);
+
+    return this.with({ workedCommissionHistory: [...this.workedCommissionHistory, normalized] });
+  }
+
+  /**
+   * REQ-254, FA-224, CA-261: the installments corrected before issuance —
+   * included, altered or removed — in either mode. The new list is a signed
+   * entry; the earlier ones stay (REQ-124). A parcelled proposal keeps at least
+   * two (REQ-292).
+   */
+  reviseInstallments(schedule: InstallmentSchedule): Proposal {
+    this.ensureAwaitingIssuance();
+    assertInstallmentsWorthSomething(schedule.installments);
+    assertModeConsistent(this.currentWorkedCommission(), schedule.installments, this.receipt);
+
+    return this.with({ installmentHistory: [...this.installmentHistory, schedule] });
   }
 
   /**
@@ -253,6 +326,8 @@ export class Proposal {
    */
   reviseReceipt(declaration: ReceiptDeclaration): Proposal {
     this.ensureAwaitingIssuance();
+    // REQ-296, EX-207: a parcelled commission is never received through an intermediary.
+    assertModeConsistent(this.currentWorkedCommission(), this.installments, declaration.receipt);
 
     return this.with({ receiptHistory: [...this.receiptHistory, declaration] });
   }
@@ -328,9 +403,75 @@ export class Proposal {
       status: this.status,
       workedCommissionHistory: this.workedCommissionHistory,
       receiptHistory: this.receiptHistory,
+      installmentHistory: this.installmentHistory,
       rejectionReason: this.rejectionReason,
       issuanceRecognition: this.issuanceRecognition,
       ...changes,
     });
+  }
+}
+
+/** REQ-204, REJ-215: every installment is worth something. */
+function assertInstallmentsWorthSomething(installments: readonly ProposalInstallment[]): void {
+  installments.forEach((installment, index) => {
+    if (!installment.amount.isPositive()) {
+      throw new BusinessRuleViolation(
+        'REQ-204',
+        PROPOSAL_MESSAGES.INSTALLMENT_AMOUNT_MUST_BE_POSITIVE,
+        {
+          number: String(index + 1),
+        },
+      );
+    }
+  });
+}
+
+/**
+ * The CT, the installments and the receipt fit the mode (REQ-290):
+ *
+ * - integral: one CT, within 100% (REQ-291, REQ-121);
+ * - parcelled: two CTs, no ceiling for now (REQ-291, REQ-295), at least two
+ *   installments (REQ-292) and no intermediary (REQ-296).
+ *
+ * Checked on every change of any of the three, so no sequence of corrections
+ * reaches a combination the registration would refuse (REQ-299).
+ */
+function assertModeConsistent(
+  workedCommission: WorkedCommission,
+  installments: readonly ProposalInstallment[],
+  receipt: Receipt,
+): void {
+  const subsequent = workedCommission.subsequentRate ?? null;
+
+  if (workedCommission.mode === 'INTEGRAL') {
+    if (subsequent !== null) {
+      throw new BusinessRuleViolation('REQ-291', PROPOSAL_MESSAGES.INTEGRAL_HAS_SINGLE_CT);
+    }
+
+    if (workedCommission.rate.exceedsHundred()) {
+      throw new BusinessRuleViolation('REQ-121', PROPOSAL_MESSAGES.PERCENTAGE_OUT_OF_RANGE, {
+        value: workedCommission.rate.toString(),
+      });
+    }
+
+    return;
+  }
+
+  if (subsequent === null) {
+    throw new BusinessRuleViolation('REQ-291', PROPOSAL_MESSAGES.PARCELLED_REQUIRES_SUBSEQUENT_CT);
+  }
+
+  if (installments.length < 2) {
+    throw new BusinessRuleViolation(
+      'REQ-292',
+      PROPOSAL_MESSAGES.PARCELLED_REQUIRES_TWO_INSTALLMENTS,
+    );
+  }
+
+  if (receipt.kind !== 'DIRECT') {
+    throw new BusinessRuleViolation(
+      'REQ-296',
+      PROPOSAL_MESSAGES.PARCELLED_CANNOT_HAVE_INTERMEDIARY,
+    );
   }
 }

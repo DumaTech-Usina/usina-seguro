@@ -101,7 +101,11 @@ function row(notification) {
       'is-numeric',
       notification.workedCommission === null
         ? '—'
-        : formatPercentage(notification.workedCommission),
+        : // REQ-228: a parcelled CT is notified with both CTs, first / subsequent.
+          [notification.workedCommission, notification.subsequentWorkedCommission]
+            .filter((rate) => rate !== null)
+            .map(formatPercentage)
+            .join(' / '),
     ),
     element('td', 'is-numeric', formatMoney(notification.netPremium)),
   );

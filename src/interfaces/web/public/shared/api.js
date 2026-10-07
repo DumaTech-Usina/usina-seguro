@@ -78,6 +78,9 @@ export const api = {
     }),
   reviseReceipt: (id, input) =>
     request(`/proposals/${encodeURIComponent(id)}/receipt`, { method: 'POST', body: input }),
+  /** REQ-254: "Corrigir parcelas" — `input` is `{ installments, userId }`, the list as it stays. */
+  reviseInstallments: (id, input) =>
+    request(`/proposals/${encodeURIComponent(id)}/installments`, { method: 'POST', body: input }),
   rejectProposal: (id, reason) =>
     request(`/proposals/${encodeURIComponent(id)}/rejection`, {
       method: 'POST',
@@ -184,6 +187,32 @@ export const api = {
   },
   /** REQ-286: the policies that still need a CR. */
   listPoliciesWithoutPayoutRate: () => request('/payouts/policies-without-rate'),
+
+  // V2 section 9B — the payout of a policy with parcelled CT: two CRs and the
+  // eligibility of each installment. Every act is signed: `userId` (REQ-216).
+  /** REQ-268, REQ-293: each installment with its CT, Usina value and payout. */
+  getParcelledPayout: (policyId) =>
+    request(`/policies/${encodeURIComponent(policyId)}/parcelled-payout`),
+  /** REQ-287: `input` is `{ firstRate, subsequentRate, userId }`. */
+  informParcelledPayoutRates: (policyId, input) =>
+    request(`/policies/${encodeURIComponent(policyId)}/parcelled-payout`, {
+      method: 'POST',
+      body: input,
+    }),
+  /** REQ-265: `input` is `{ firstRate, subsequentRate, reason, userId }`. */
+  reviseParcelledPayoutRates: (policyId, input) =>
+    request(`/policies/${encodeURIComponent(policyId)}/parcelled-payout/revision`, {
+      method: 'POST',
+      body: input,
+    }),
+  /** REQ-288: the eligibility of one installment, signed. */
+  declareInstallmentEligibility: (policyId, number, userId) =>
+    request(`/policies/${encodeURIComponent(policyId)}/installments/${number}/eligibility`, {
+      method: 'POST',
+      body: { userId },
+    }),
+  /** REQ-268: every policy with parcelled CT, with its situation. */
+  listParcelledPolicies: () => request('/payouts/parcelled-policies'),
 
   // FP-02 — the commission report the Financeiro imports.
   //

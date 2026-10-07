@@ -39,6 +39,12 @@ export class CalculateAgreedCommission implements AgreedCommissionCalculator {
       throw new RecordNotFound(PROPOSAL_MESSAGES.NOT_FOUND, { id: request.proposalId });
     }
 
+    // REQ-227: a parcelled CT has no single agreed value (REJ-232), so the
+    // policy gets no agreed commission.
+    if (proposal.workedCommissionMode === 'PARCELLED') {
+      return;
+    }
+
     const calculated = calculateCommission(proposal);
 
     await this.deps.commissions.save(

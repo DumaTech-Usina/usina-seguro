@@ -72,8 +72,17 @@ function scenario() {
           netPremium: Money.fromString(options.netPremium ?? '1000.00'),
           coverageStart: CalendarDate.fromString('2026-10-01'),
           coverageEnd: CalendarDate.fromString(options.coverageEnd ?? '2027-10-01'),
-          installments: [],
+          // REQ-291, REQ-292: a parcelled CT has two CTs and at least two installments.
+          installments:
+            options.mode === 'PARCELLED'
+              ? [
+                  { amount: Money.fromString('500.00'), dueDate: null },
+                  { amount: Money.fromString('500.00'), dueDate: null },
+                ]
+              : [],
           workedCommission: Percentage.fromString(options.ct ?? '30'),
+          subsequentWorkedCommission:
+            options.mode === 'PARCELLED' ? Percentage.fromString('10') : null,
           workedCommissionMode: options.mode ?? 'INTEGRAL',
           receipt: options.receipt ?? { kind: 'DIRECT' },
           registeredBy: 'operator',

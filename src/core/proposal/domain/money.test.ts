@@ -69,14 +69,14 @@ describe('Money (REQ-120)', () => {
       ).toBe('123.46');
     });
 
-    it('rounds halves away from zero, on the cent', () => {
-      // 100.05 x 50% = 50.025 -> 50.03
+    it('rounds on the cent by ABNT NBR 5891: an exact half goes to the even cent (REQ-298)', () => {
+      // 100.05 x 50% = 50.025 -> 50.02 (2 is even)
       expect(Money.fromString('100.05').applyRate(Percentage.fromString('50')).toString()).toBe(
-        '50.03',
+        '50.02',
       );
-      // 0.01 x 50% = 0.005 -> 0.01
+      // 0.01 x 50% = 0.005 -> 0.00 (0 is even)
       expect(Money.fromString('0.01').applyRate(Percentage.fromString('50')).toString()).toBe(
-        '0.01',
+        '0.00',
       );
     });
 
@@ -96,25 +96,44 @@ describe('Money (REQ-120)', () => {
     });
   });
 
-  describe('applyRate rounding down (REQ-275)', () => {
-    it('floors on the cent: 10.00 x 70.55% = 7.055 -> 7.05 (CA-227)', () => {
+  describe('applyRate by ABNT NBR 5891 (REQ-298, CA-248)', () => {
+    it('keeps the cent when less than half of it is discarded', () => {
+      // 100.00 x 12.3444% = 12.3444 -> 12.34
       expect(
-        Money.fromString('10.00').applyRate(Percentage.fromString('70.55'), 'FLOOR').toString(),
-      ).toBe('7.05');
+        Money.fromString('100.00').applyRate(Percentage.fromString('12.3444')).toString(),
+      ).toBe('12.34');
     });
 
-    it('keeps an exact result exact (CA-225, CA-226)', () => {
-      expect(
-        Money.fromString('300.00').applyRate(Percentage.fromString('60'), 'FLOOR').toString(),
-      ).toBe('180.00');
-      expect(
-        Money.fromString('160.00').applyRate(Percentage.fromString('70'), 'FLOOR').toString(),
-      ).toBe('112.00');
+    it('raises the cent when more than half of it is discarded: 15.0075 -> 15.01', () => {
+      expect(Money.fromString('100.05').applyRate(Percentage.fromString('15')).toString()).toBe(
+        '15.01',
+      );
     });
 
-    it('does not change the default, which rounds halves up (REQ-237)', () => {
+    it('on an exact half, keeps an even cent: 10.05 x 50% = 5.025 -> 5.02', () => {
+      expect(Money.fromString('10.05').applyRate(Percentage.fromString('50')).toString()).toBe(
+        '5.02',
+      );
+    });
+
+    it('on an exact half, raises an odd cent to the even one: 10.15 x 50% = 5.075 -> 5.08', () => {
+      expect(Money.fromString('10.15').applyRate(Percentage.fromString('50')).toString()).toBe(
+        '5.08',
+      );
+    });
+
+    it('is the rounding of the broker amount too: 10.00 x 70.55% = 7.055 -> 7.06 (CA-227)', () => {
       expect(Money.fromString('10.00').applyRate(Percentage.fromString('70.55')).toString()).toBe(
         '7.06',
+      );
+    });
+
+    it('is symmetric for a negative amount', () => {
+      expect(Money.fromString('-10.05').applyRate(Percentage.fromString('50')).toString()).toBe(
+        '-5.02',
+      );
+      expect(Money.fromString('-10.15').applyRate(Percentage.fromString('50')).toString()).toBe(
+        '-5.08',
       );
     });
   });

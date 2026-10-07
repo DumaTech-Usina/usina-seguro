@@ -7,7 +7,7 @@ import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
-import { Proposal } from '../../proposal/domain/proposal.ts';
+import { Proposal, type ProposalRegistration } from '../../proposal/domain/proposal.ts';
 import { Reference, type ReferenceKind } from '../../registry/domain/reference.ts';
 import type { NotificationChannel } from './notification-channel.ts';
 import type { NotificationView } from './notification-view.ts';
@@ -50,7 +50,7 @@ function scenario(channels: readonly NotificationChannel[] = []) {
   return { notifications, proposals, references, useCase };
 }
 
-function transmitted(): Proposal {
+function transmitted(overrides: Partial<ProposalRegistration> = {}): Proposal {
   return Proposal.register({
     id: 'proposal-1',
     clientId: 'client-1',
@@ -68,6 +68,7 @@ function transmitted(): Proposal {
     receipt: { kind: 'DIRECT' },
     registeredBy: 'operator',
     registeredAt: new Date('2026-09-17T12:00:00.000Z'),
+    ...overrides,
   });
 }
 
@@ -215,5 +216,46 @@ describe('NotifyPolicyIssued', () => {
     const { useCase } = scenario();
 
     await expect(useCase.notify(event({ proposalId: 'ghost' }))).rejects.toThrow(RecordNotFound);
+  });
+});
+
+describe('NotifyPolicyIssued with parcelled CT (REQ-228)', () => {
+  it('carries both CTs: the first and the subsequent installments (REQ-228)', async () => {
+    const email = new RecordingChannel('email');
+    const { notifications, proposals, useCase } = scenario([email]);
+    await proposals.save(
+      transmitted({
+        installments: [
+          { amount: Money.fromString('100.00'), dueDate: null },
+          { amount: Money.fromString('100.00'), dueDate: null },
+        ],
+        workedCommission: Percentage.fromStringWithoutCeiling('150'),
+        subsequentWorkedCommission: Percentage.fromString('30'),
+        workedCommissionMode: 'PARCELLED',
+      }),
+    );
+
+    await useCase.notify(event());
+
+    const [recorded] = await notifications.list({});
+    expect(recorded?.content.workedCommission?.toString()).toBe('150');
+    expect(recorded?.content.subsequentWorkedCommission?.toString()).toBe('30');
+    expect(email.published[0]).toMatchObject({
+      workedCommission: '150',
+      subsequentWorkedCommission: '30',
+    });
+  });
+
+  it('carries one CT with integral CT, as before', async () => {
+    const email = new RecordingChannel('email');
+    const { proposals, useCase } = scenario([email]);
+    await proposals.save(transmitted());
+
+    await useCase.notify(event());
+
+    expect(email.published[0]).toMatchObject({
+      workedCommission: '32.5',
+      subsequentWorkedCommission: null,
+    });
   });
 });

@@ -38,6 +38,12 @@ export class InformPayoutRate {
       throw new BusinessRuleViolation('REQ-271', COMMISSION_MESSAGES.PAYOUT_ALREADY_INFORMED);
     }
 
+    // REQ-271, REJ-218: the single CR is the integral CT's. Refused before the
+    // base is read, because a parcelled CT has no total to base it on (REJ-232).
+    if (context.proposal.workedCommissionMode !== 'INTEGRAL') {
+      throw new BusinessRuleViolation('REQ-271', COMMISSION_MESSAGES.PAYOUT_REQUIRES_INTEGRAL_CT);
+    }
+
     const commission = PayoutCommission.inform({
       id: this.deps.newId(),
       policyId: context.policy.id,

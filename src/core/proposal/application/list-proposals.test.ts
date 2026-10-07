@@ -52,7 +52,7 @@ describe('ListProposals', () => {
 
     expect(open.map((view) => view.id)).toEqual(['open-2', 'open-1']);
     expect(open[0]?.proposalNumber).toBe('PRP-open-2');
-    expect(open[0]?.expectedReceipt.usina).toBe('20.00');
+    expect(open[0]?.expectedReceipt?.usina).toBe('20.00');
   });
 
   it('lists the refused ones with their reason (REQ-253)', async () => {

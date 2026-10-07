@@ -16,12 +16,11 @@ export interface ExpectedReceipt {
 }
 
 /**
- * REQ-235: the amount the CT is applied to.
+ * REQ-235: the amount the integral CT is applied to — the net premium.
  *
- * Kept apart from `expectedReceipt` on purpose. Whether a parcelled CT takes
- * the installments as its base is `DEC-203`, still open; until it is decided,
- * the base is the net premium whatever the mode. The day it is decided, this is
- * the only function that changes.
+ * Kept apart from `expectedReceipt` on purpose: the choice of the base is
+ * decoupled from the calculation. A parcelled CT has its own base, the value of
+ * each installment (`expectedInstallmentReceipts`, REQ-293).
  */
 export function commissionBase(netPremium: Money, _mode: WorkedCommissionMode): Money {
   return netPremium;
@@ -42,4 +41,39 @@ export function expectedReceipt(base: Money, ct: Percentage, receipt: Receipt): 
   }
 
   return { intermediary: worked, usina: worked.applyRate(receipt.ctu) };
+}
+
+/** REQ-293: what the Usina expects from one installment of a parcelled CT. */
+export interface ExpectedInstallmentReceipt {
+  /** Position in the list, starting at 1 (REQ-291). */
+  readonly number: number;
+  /** The installment value as informed: the base (REQ-293). */
+  readonly amount: Money;
+  /** The CT applied to it: the first's on installment 1, the other on the rest. */
+  readonly workedCommission: Percentage;
+  readonly usina: Money;
+}
+
+/**
+ * REQ-291, REQ-293, REQ-294: with a parcelled CT, each CT is applied to the
+ * value of the installment — never to the net premium (REJ-231) — and the
+ * result is the expected value of that installment. Nothing is accumulated
+ * (REJ-232). There is no intermediary to chain (REQ-296). Rounding is
+ * `Money.applyRate`'s (REQ-298).
+ */
+export function expectedInstallmentReceipts(
+  installments: readonly { readonly amount: Money }[],
+  firstInstallment: Percentage,
+  subsequentInstallments: Percentage,
+): ExpectedInstallmentReceipt[] {
+  return installments.map((installment, index) => {
+    const workedCommission = index === 0 ? firstInstallment : subsequentInstallments;
+
+    return {
+      number: index + 1,
+      amount: installment.amount,
+      workedCommission,
+      usina: installment.amount.applyRate(workedCommission),
+    };
+  });
 }

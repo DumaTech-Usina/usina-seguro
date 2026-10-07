@@ -37,7 +37,10 @@ export interface RegisterProposalInput {
   readonly coverageStart: string;
   readonly coverageEnd: string;
   readonly installments: readonly RegisterProposalInstallmentInput[];
+  /** The CT; with a parcelled CT, the CT of the first installment (REQ-291). */
   readonly workedCommission: string;
+  /** REQ-291: the CT of the subsequent installments, only with a parcelled CT. */
+  readonly subsequentWorkedCommission?: string | null;
   readonly workedCommissionMode: WorkedCommissionMode;
   /** REQ-220: `null` declares a direct receipt. */
   readonly intermediary: IntermediaryDeclarationInput | null;
@@ -94,11 +97,8 @@ export class RegisterProposal {
       netPremium: Money.fromString(input.netPremium),
       coverageStart: CalendarDate.fromString(input.coverageStart),
       coverageEnd: CalendarDate.fromString(input.coverageEnd),
-      installments: input.installments.map((installment) => ({
-        amount: Money.fromString(installment.amount),
-        dueDate: installment.dueDate === null ? null : CalendarDate.fromString(installment.dueDate),
-      })),
-      workedCommission: Percentage.fromString(input.workedCommission),
+      installments: toInstallments(input.installments),
+      ...toWorkedCommissionRates(input),
       workedCommissionMode: input.workedCommissionMode,
       receipt: declareReceipt(toIntermediary(input.intermediary)),
       sourceDocument:
@@ -117,6 +117,32 @@ export class RegisterProposal {
 
     return toProposalView(proposal);
   }
+}
+
+/** Shared with `ReviseInstallments`: REQ-204, the due date is optional. */
+export function toInstallments(installments: readonly RegisterProposalInstallmentInput[]) {
+  return installments.map((installment) => ({
+    amount: Money.fromString(installment.amount),
+    dueDate: installment.dueDate === null ? null : CalendarDate.fromString(installment.dueDate),
+  }));
+}
+
+/**
+ * Shared with `ReviseWorkedCommission`. The CTs are read without the 100%
+ * ceiling: a parcelled CT may go past it (REQ-295), and the domain keeps the
+ * integral one within it (REQ-121).
+ */
+export function toWorkedCommissionRates(input: {
+  readonly workedCommission: string;
+  readonly subsequentWorkedCommission?: string | null;
+}) {
+  const subsequent = input.subsequentWorkedCommission ?? null;
+
+  return {
+    workedCommission: Percentage.fromStringWithoutCeiling(input.workedCommission),
+    subsequentWorkedCommission:
+      subsequent === null ? null : Percentage.fromStringWithoutCeiling(subsequent),
+  };
 }
 
 /** Shared with `ReviseReceipt`: the CTU only becomes a percentage when present. */

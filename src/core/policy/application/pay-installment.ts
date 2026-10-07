@@ -1,5 +1,9 @@
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
-import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
+import {
+  BusinessRuleViolation,
+  PROPOSAL_MESSAGES,
+  RecordNotFound,
+} from '../../proposal/domain/errors.ts';
 import { POLICY_MESSAGES } from '../domain/errors.ts';
 import type { PolicyRepository } from './policy-repository.ts';
 import { type PolicyView, toPolicyView } from './policy-view.ts';
@@ -40,17 +44,26 @@ export class PayInstallment {
       throw new RecordNotFound(POLICY_MESSAGES.NOT_FOUND, { id: input.policyId });
     }
 
+    const proposal = await this.deps.proposals.findById(policy.proposalId);
+
+    if (proposal === null) {
+      throw new RecordNotFound(PROPOSAL_MESSAGES.NOT_FOUND, { id: policy.proposalId });
+    }
+
+    // REQ-269: on a policy with parcelled CT the act on an installment is its
+    // eligibility; the confirmation of payment does not exist there.
+    if (proposal.workedCommissionMode === 'PARCELLED') {
+      throw new BusinessRuleViolation(
+        'REQ-269',
+        POLICY_MESSAGES.PARCELLED_INSTALLMENT_HAS_NO_PAYMENT_CONFIRMATION,
+      );
+    }
+
     const paid = policy.payInstallment(input.number, {
       userId: input.userId,
       at: this.deps.now(),
     });
     await this.deps.policies.save(paid);
-
-    const proposal = await this.deps.proposals.findById(paid.proposalId);
-
-    if (proposal === null) {
-      throw new RecordNotFound(PROPOSAL_MESSAGES.NOT_FOUND, { id: paid.proposalId });
-    }
 
     return toPolicyView(paid, proposal);
   }

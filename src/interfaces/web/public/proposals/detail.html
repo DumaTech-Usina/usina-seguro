@@ -39,9 +39,9 @@
           </div>
           <div class="card__body stack">
             <p class="text-muted">
-              Enquanto a proposta aguarda emissão, só a comissão trabalhada, seu modo e o
-              recebimento podem ser corrigidos. Cada correção fica registrada com quem a fez e
-              quando; as anteriores são mantidas.
+              Enquanto a proposta aguarda emissão, só a comissão trabalhada, seu modo, o
+              recebimento e as parcelas podem ser corrigidos. Cada correção fica registrada com
+              quem a fez e quando; as anteriores são mantidas.
             </p>
 
             <!-- REQ-214, REQ-215 -->
@@ -57,7 +57,7 @@
                     pattern="\d+(\.\d+)?"
                     required
                   />
-                  <label class="field__label">CT (%)</label>
+                  <label class="field__label" data-label="workedCommission">CT (%)</label>
                 </div>
                 <div class="field">
                   <select class="field__input" name="workedCommissionMode" required>
@@ -66,6 +66,17 @@
                   </select>
                   <label class="field__label">Modo da CT</label>
                 </div>
+                <!-- REQ-291, REQ-297: só com CT parcelada. -->
+                <div class="field hidden">
+                  <input
+                    class="field__input"
+                    name="subsequentWorkedCommission"
+                    placeholder=" "
+                    inputmode="decimal"
+                    pattern="\d+(\.\d+)?"
+                  />
+                  <label class="field__label">CT das parcelas subsequentes (%)</label>
+                </div>
                 <div class="field">
                   <input class="field__input" name="userId" placeholder=" " required />
                   <label class="field__label">Seu identificador</label>
@@ -73,6 +84,31 @@
               </div>
               <div class="row row--end">
                 <button class="btn btn--outlined" type="submit">Corrigir CT</button>
+              </div>
+            </form>
+
+            <!-- REQ-254: incluir, alterar e remover parcelas, assinado. -->
+            <form id="form-installments" class="stack">
+              <div class="row row--between">
+                <span class="text-label">Parcelas</span>
+                <button
+                  class="btn btn--sm btn--outlined"
+                  type="button"
+                  id="add-installment-correction"
+                >
+                  <span class="material-symbols-outlined">add</span>
+                  Adicionar parcela
+                </button>
+              </div>
+              <div class="installments" id="installments-correction"></div>
+              <div class="form-grid">
+                <div class="field">
+                  <input class="field__input" name="userId" placeholder=" " required />
+                  <label class="field__label">Seu identificador</label>
+                </div>
+              </div>
+              <div class="row row--end">
+                <button class="btn btn--outlined" type="submit">Corrigir parcelas</button>
               </div>
             </form>
 

@@ -48,8 +48,13 @@ export interface NotificationContent {
   readonly broker: NotificationParty;
   /** REQ-022 names the field "produto/ramo": the product's name is the ramo. */
   readonly product: NotificationParty;
-  /** REQ-041: the percentage informed in the act of transmission. */
+  /**
+   * REQ-041: the percentage informed in the act of transmission. With a
+   * parcelled CT, the CT of the first installment (REQ-228).
+   */
   readonly workedCommission: Percentage | null;
+  /** REQ-228: with a parcelled CT, the CT of the subsequent installments too. */
+  readonly subsequentWorkedCommission?: Percentage | null;
   /** REQ-022: the net premium of the proposal, the "valor liquido". */
   readonly netPremium: Money;
 }

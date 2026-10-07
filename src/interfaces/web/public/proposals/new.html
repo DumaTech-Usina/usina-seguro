@@ -166,7 +166,10 @@
 
               <div>
                 <div class="row row--between" style="margin-bottom: var(--space-3)">
-                  <span class="text-label">Parcelas (opcionais; vencimento opcional)</span>
+                  <span class="text-label"
+                    >Parcelas (opcionais com CT integral; ao menos duas com CT parcelada;
+                    vencimento opcional)</span
+                  >
                   <button class="btn btn--sm btn--outlined" type="button" id="add-installment">
                     <span class="material-symbols-outlined">add</span>
                     Adicionar parcela
@@ -194,7 +197,7 @@
                     pattern="\d+(\.\d+)?"
                     required
                   />
-                  <label class="field__label">CT (%)</label>
+                  <label class="field__label" data-label="workedCommission">CT (%)</label>
                   <span class="field__hint">
                     Levantada pela comunicação interna da Usina; a seguradora não a informa.
                   </span>
@@ -206,6 +209,21 @@
                   </select>
                   <label class="field__label">Modo da CT</label>
                   <span class="field__hint">Recebida em um valor total ou por parcela.</span>
+                </div>
+                <!-- REQ-291: só com CT parcelada. -->
+                <div class="field hidden">
+                  <input
+                    class="field__input"
+                    name="subsequentWorkedCommission"
+                    placeholder=" "
+                    inputmode="decimal"
+                    pattern="\d+(\.\d+)?"
+                  />
+                  <label class="field__label">CT das parcelas subsequentes (%)</label>
+                  <span class="field__hint">
+                    Com CT parcelada, cada CT incide sobre o valor da parcela: a CT da primeira
+                    na parcela 1, esta nas demais. Sem intermediária.
+                  </span>
                 </div>
               </div>
             </div>

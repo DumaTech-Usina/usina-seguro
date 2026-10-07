@@ -375,18 +375,25 @@ describe('FP-01 through the web interface', () => {
   });
 
   it('corrects the CT and its mode before issuance, signed (FA-203, CA-204, CA-217)', async () => {
-    const id = await awaitingProposal({ proposalNumber: 'PRP-CT-1' });
+    // REQ-292: a parcelled CT needs at least two installments.
+    const id = await awaitingProposal({
+      proposalNumber: 'PRP-CT-1',
+      installments: [{ amount: '50.00' }, { amount: '50.00' }],
+    });
     await openProposal(id);
 
     expect(hidden('[data-panel="corrections"]')).toBe(false);
 
     field('#form-worked-commission', 'workedCommission').value = '25';
-    field('#form-worked-commission', 'workedCommissionMode').value = 'PARCELLED';
+    choose('#form-worked-commission', 'workedCommissionMode', 'PARCELLED');
+    // REQ-291: both CTs of the parcelled CT.
+    field('#form-worked-commission', 'subsequentWorkedCommission').value = '10';
     field('#form-worked-commission', 'userId').value = 'bruno.lima';
     submit('#form-worked-commission');
 
     await vi.waitFor(() => {
-      expect(text('#expected')).toContain('R$ 25,00');
+      // REQ-293: 50.00 x 25% on the first installment.
+      expect(text('#expected')).toContain('R$ 12,50');
     });
     expect(requests).toContain(`POST /proposals/${id}/worked-commission`);
     expect(text('[data-definition="workedCommission"]')).toContain('Parcelada');

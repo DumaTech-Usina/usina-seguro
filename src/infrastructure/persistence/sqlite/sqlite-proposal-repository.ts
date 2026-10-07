@@ -7,7 +7,11 @@ import { Authorship } from '../../../core/proposal/domain/authorship.ts';
 import { CalendarDate } from '../../../core/proposal/domain/calendar-date.ts';
 import { Money } from '../../../core/proposal/domain/money.ts';
 import { Percentage } from '../../../core/proposal/domain/percentage.ts';
-import { Proposal, type ProposalStatus } from '../../../core/proposal/domain/proposal.ts';
+import {
+  type InstallmentSchedule,
+  Proposal,
+  type ProposalStatus,
+} from '../../../core/proposal/domain/proposal.ts';
 import type { Receipt, ReceiptDeclaration } from '../../../core/proposal/domain/receipt.ts';
 import type {
   WorkedCommission,
@@ -35,7 +39,14 @@ interface ProposalRow {
   source_document_file_name: string | null;
 }
 
+interface InstallmentScheduleRow {
+  sequence: number;
+  informed_by: string;
+  informed_at: string;
+}
+
 interface InstallmentRow {
+  sequence: number;
   amount: string;
   due_date: string | null;
 }
@@ -43,6 +54,7 @@ interface InstallmentRow {
 interface WorkedCommissionRow {
   rate: string;
   mode: string;
+  subsequent_rate: string | null;
   informed_by: string;
   informed_at: string;
 }
@@ -62,10 +74,10 @@ export class SqliteProposalRepository implements ProposalRepository {
   }
 
   /**
-   * One proposal is four tables, written together. Only the state and the
-   * refusal reason are updated in place; installments are written once
-   * (REQ-261) and the CT and receipt histories only gain rows (REQ-124), so
-   * an entry already stored is left as it is.
+   * One proposal is several tables, written together. Only the state and the
+   * refusal reason are updated in place; the CT, receipt and installment
+   * histories only gain rows (REQ-124, REQ-254), so an entry already stored is
+   * left as it is.
    */
   async save(proposal: Proposal): Promise<void> {
     await withSavepoint(this.db, 'proposal_save', async () => {
@@ -105,23 +117,33 @@ export class SqliteProposalRepository implements ProposalRepository {
           proposal.sourceDocument?.fileName ?? null,
         );
 
-      const installment = this.db.prepare(
-        `INSERT INTO proposal_installment (proposal_id, number, amount, due_date)
+      const schedule = this.db.prepare(
+        `INSERT INTO proposal_installment_schedule
+           (proposal_id, sequence, informed_by, informed_at)
          VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`,
       );
-      proposal.installments.forEach((entry, index) => {
-        installment.run(
-          proposal.id,
-          index + 1,
-          entry.amount.toString(),
-          entry.dueDate?.toString() ?? null,
-        );
+      const installment = this.db.prepare(
+        `INSERT INTO proposal_installment (proposal_id, sequence, number, amount, due_date)
+         VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+      );
+      proposal.installmentHistory.forEach((entry, index) => {
+        const sequence = index + 1;
+        schedule.run(proposal.id, sequence, entry.informed.author, entry.informed.at.toISOString());
+        entry.installments.forEach((item, position) => {
+          installment.run(
+            proposal.id,
+            sequence,
+            position + 1,
+            item.amount.toString(),
+            item.dueDate?.toString() ?? null,
+          );
+        });
       });
 
       const commission = this.db.prepare(
         `INSERT INTO proposal_worked_commission
-           (proposal_id, sequence, rate, mode, informed_by, informed_at)
-         VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
+           (proposal_id, sequence, rate, mode, subsequent_rate, informed_by, informed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
       );
       proposal.workedCommissionHistory.forEach((entry, index) => {
         commission.run(
@@ -129,6 +151,7 @@ export class SqliteProposalRepository implements ProposalRepository {
           index + 1,
           entry.rate.toString(),
           entry.mode,
+          entry.subsequentRate?.toString() ?? null,
           entry.informed.author,
           entry.informed.at.toISOString(),
         );
@@ -188,8 +211,14 @@ export class SqliteProposalRepository implements ProposalRepository {
   }
 
   private toProposal(row: ProposalRow): Proposal {
+    const schedules = this.db
+      .prepare(
+        'SELECT * FROM proposal_installment_schedule WHERE proposal_id = ? ORDER BY sequence',
+      )
+      .all(row.id) as unknown as InstallmentScheduleRow[];
+
     const installments = this.db
-      .prepare('SELECT * FROM proposal_installment WHERE proposal_id = ? ORDER BY number')
+      .prepare('SELECT * FROM proposal_installment WHERE proposal_id = ? ORDER BY sequence, number')
       .all(row.id) as unknown as InstallmentRow[];
 
     const commissions = this.db
@@ -212,11 +241,6 @@ export class SqliteProposalRepository implements ProposalRepository {
         netPremium: Money.fromString(row.net_premium),
         coverageStart: CalendarDate.fromString(row.coverage_start),
         coverageEnd: CalendarDate.fromString(row.coverage_end),
-        installments: installments.map((installment) => ({
-          amount: Money.fromString(installment.amount),
-          dueDate:
-            installment.due_date === null ? null : CalendarDate.fromString(installment.due_date),
-        })),
         sourceDocument:
           row.source_document_id === null || row.source_document_file_name === null
             ? null
@@ -227,6 +251,20 @@ export class SqliteProposalRepository implements ProposalRepository {
         status: row.status as ProposalStatus,
         workedCommissionHistory: commissions.map(toWorkedCommission),
         receiptHistory: receipts.map(toReceiptDeclaration),
+        installmentHistory: schedules.map(
+          (schedule): InstallmentSchedule => ({
+            installments: installments
+              .filter((installment) => installment.sequence === schedule.sequence)
+              .map((installment) => ({
+                amount: Money.fromString(installment.amount),
+                dueDate:
+                  installment.due_date === null
+                    ? null
+                    : CalendarDate.fromString(installment.due_date),
+              })),
+            informed: Authorship.restore(schedule.informed_by, new Date(schedule.informed_at)),
+          }),
+        ),
         rejectionReason: row.rejection_reason,
         issuanceRecognition:
           row.issuance_recognized_by === null || row.issuance_recognized_at === null
@@ -237,10 +275,15 @@ export class SqliteProposalRepository implements ProposalRepository {
   }
 }
 
+/** A stored CT is not re-checked: a parcelled one may be above 100% (REQ-295, REQ-124). */
 function toWorkedCommission(row: WorkedCommissionRow): WorkedCommission {
   return {
-    rate: Percentage.fromString(row.rate),
+    rate: Percentage.fromStringWithoutCeiling(row.rate),
     mode: row.mode as WorkedCommissionMode,
+    subsequentRate:
+      row.subsequent_rate === null
+        ? null
+        : Percentage.fromStringWithoutCeiling(row.subsequent_rate),
     informed: Authorship.restore(row.informed_by, new Date(row.informed_at)),
   };
 }

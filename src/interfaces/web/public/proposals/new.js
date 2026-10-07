@@ -10,6 +10,7 @@
 
 import { ApiError, api } from '/app/shared/api.js';
 import { base64Of } from '/app/shared/file.js';
+import { addInstallmentRow, scheduleOf } from '/app/shared/installments.js';
 import { formatDate, formatMoney } from '/app/shared/money.js';
 import {
   bindReceiptFields,
@@ -18,6 +19,7 @@ import {
 } from '/app/shared/receipt.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
+import { bindWorkedCommissionFields, workedCommissionOf } from '/app/shared/worked-commission.js';
 
 /* ------------------------------------------------------- IN-01 hints -- */
 
@@ -67,6 +69,7 @@ const form = document.querySelector('#form-proposal');
 offerRegisteredReferences();
 offerRegisteredIntermediaries(document.querySelector('#intermediary-options'));
 bindReceiptFields(form);
+bindWorkedCommissionFields(form);
 
 /* ------------------------------------------------------------ renewal -- */
 
@@ -80,54 +83,12 @@ coverageEnd.addEventListener('input', () => {
 
 /* ------------------------------------------------------- installments -- */
 
+// REQ-204: the number is the position, never typed.
 const installments = document.querySelector('#installments');
 
-function renumber() {
-  [...installments.querySelectorAll('.installment-row')].forEach((row, index) => {
-    // REQ-204: the number is the position, never typed.
-    row.querySelector('.installment-row__number').textContent = String(index + 1);
-  });
-}
-
-function addInstallmentRow(amount = '') {
-  const row = document.createElement('div');
-  row.className = 'installment-row';
-  row.innerHTML = `
-    <div class="installment-row__number"></div>
-    <div class="field">
-      <input class="field__input" name="amount" placeholder=" " inputmode="decimal"
-             pattern="\\d+(\\.\\d{1,2})?" required />
-      <label class="field__label">Valor</label>
-    </div>
-    <div class="field installment-row__date">
-      <input class="field__input" type="date" name="dueDate" />
-      <label class="field__label">Vencimento (opcional)</label>
-    </div>
-    <button class="installment-row__remove" type="button" title="Remover parcela">
-      <span class="material-symbols-outlined">close</span>
-    </button>`;
-
-  row.querySelector('.installment-row__remove').addEventListener('click', () => {
-    row.remove();
-    renumber();
-  });
-  row.querySelector('[name="amount"]').value = amount;
-
-  installments.append(row);
-  renumber();
-}
-
-document.querySelector('#add-installment').addEventListener('click', () => addInstallmentRow());
-
-function schedule() {
-  return [...installments.querySelectorAll('.installment-row')].map((row) => {
-    const dueDate = row.querySelector('[name="dueDate"]').value;
-    return {
-      amount: row.querySelector('[name="amount"]').value,
-      dueDate: dueDate === '' ? null : dueDate,
-    };
-  });
-}
+document
+  .querySelector('#add-installment')
+  .addEventListener('click', () => addInstallmentRow(installments));
 
 /* ------------------------------------------------------ PDF (REQ-218) -- */
 
@@ -169,7 +130,7 @@ function fillFromPdf(fields) {
     if (name === 'installments') {
       installments.replaceChildren();
       for (const installment of value) {
-        addInstallmentRow(installment.amount);
+        addInstallmentRow(installments, installment.amount);
       }
       continue;
     }
@@ -309,9 +270,8 @@ form.addEventListener('submit', (event) => {
       netPremium: value('netPremium'),
       coverageStart: value('coverageStart'),
       coverageEnd: value('coverageEnd'),
-      installments: schedule(),
-      workedCommission: value('workedCommission'),
-      workedCommissionMode: value('workedCommissionMode'),
+      installments: scheduleOf(installments),
+      ...workedCommissionOf(form),
       intermediary: intermediaryOf(form),
       userId: value('userId'),
       ...(sourceDocument === null ? {} : { sourceDocument }),
@@ -339,9 +299,23 @@ function finish(proposal) {
 
   const chip = statusChip('proposal', proposal.status);
 
-  // REQ-232, CA-203: what the Usina expects, known before the issuance.
-  const expected = document.createElement('p');
-  expected.textContent = `A Usina espera receber ${formatMoney(proposal.expectedReceipt.usina)}.`;
+  // REQ-232, CA-203: what the Usina expects, known before the issuance — one
+  // value with an integral CT, one per installment with a parcelled one
+  // (REQ-293), never a total.
+  const expected = document.createElement('div');
+  if (proposal.expectedInstallments === null) {
+    expected.textContent = `A Usina espera receber ${formatMoney(proposal.expectedReceipt.usina)}.`;
+  } else {
+    const intro = document.createElement('p');
+    intro.textContent = 'A Usina espera receber, por parcela:';
+    const list = document.createElement('ul');
+    for (const installment of proposal.expectedInstallments) {
+      const item = document.createElement('li');
+      item.textContent = `Parcela ${installment.number}: ${formatMoney(installment.usina)}`;
+      list.append(item);
+    }
+    expected.append(intro, list);
+  }
 
   const text = document.createElement('p');
   text.className = 'text-muted';

@@ -36,14 +36,28 @@ CREATE TABLE IF NOT EXISTS proposal (
   CHECK ((issuance_recognized_by IS NULL) = (issuance_recognized_at IS NULL))
 );
 
--- REQ-204: the installments informed at registration, in order. The due date
--- is optional. Written once: nothing here changes after registration (REQ-261).
-CREATE TABLE IF NOT EXISTS proposal_installment (
+-- REQ-254: every list of installments, signed -- the registration's first,
+-- then each "Corrigir parcelas". Append-only: the one in force is the highest
+-- sequence, and the earlier ones are never erased (REQ-124). A list may be
+-- empty, which is why the signature has its own table.
+CREATE TABLE IF NOT EXISTS proposal_installment_schedule (
   proposal_id  TEXT    NOT NULL REFERENCES proposal (id),
+  sequence     INTEGER NOT NULL CHECK (sequence >= 1),
+  informed_by  TEXT    NOT NULL,
+  informed_at  TEXT    NOT NULL,
+  PRIMARY KEY (proposal_id, sequence)
+);
+
+-- REQ-204: the installments of one list, in order. The due date is optional.
+CREATE TABLE IF NOT EXISTS proposal_installment (
+  proposal_id  TEXT    NOT NULL,
+  sequence     INTEGER NOT NULL,
   number       INTEGER NOT NULL CHECK (number >= 1),
   amount       TEXT    NOT NULL,
   due_date     TEXT,
-  PRIMARY KEY (proposal_id, number)
+  PRIMARY KEY (proposal_id, sequence, number),
+  FOREIGN KEY (proposal_id, sequence)
+    REFERENCES proposal_installment_schedule (proposal_id, sequence)
 );
 
 -- REQ-214, REQ-215: every CT informed for the proposal, with its mode and who
@@ -52,12 +66,16 @@ CREATE TABLE IF NOT EXISTS proposal_installment (
 CREATE TABLE IF NOT EXISTS proposal_worked_commission (
   proposal_id  TEXT    NOT NULL REFERENCES proposal (id),
   sequence     INTEGER NOT NULL CHECK (sequence >= 1),
-  -- Percentage as exact decimal text, with the informed scale (REQ-121).
+  -- Percentage as exact decimal text, with the informed scale (REQ-121). With a
+  -- parcelled CT, the CT of the first installment (REQ-291).
   rate         TEXT    NOT NULL,
   mode         TEXT    NOT NULL CHECK (mode IN ('INTEGRAL', 'PARCELLED')),
+  -- REQ-291: the CT of the subsequent installments, present exactly when parcelled.
+  subsequent_rate  TEXT,
   informed_by  TEXT    NOT NULL,
   informed_at  TEXT    NOT NULL,
-  PRIMARY KEY (proposal_id, sequence)
+  PRIMARY KEY (proposal_id, sequence),
+  CHECK ((mode = 'PARCELLED') = (subsequent_rate IS NOT NULL))
 );
 
 -- REQ-220, REQ-223, REQ-225: every receipt declaration, append-only like the
@@ -212,6 +230,64 @@ CREATE TABLE IF NOT EXISTS payout_rate_entry (
   PRIMARY KEY (payout_commission_id, sequence)
 );
 
+-- Payout of a policy with parcelled CT (V2 section 9B). At most one per policy:
+-- the two CRs are informed once and then only revised (REQ-287, REQ-265).
+CREATE TABLE IF NOT EXISTS parcelled_payout (
+  id         TEXT PRIMARY KEY,
+  policy_id  TEXT NOT NULL UNIQUE REFERENCES policy (id)
+);
+
+-- REQ-265: every information or change of the two CRs, signed. Append-only:
+-- the one in force is the highest sequence (REQ-124).
+CREATE TABLE IF NOT EXISTS parcelled_payout_entry (
+  parcelled_payout_id       TEXT    NOT NULL REFERENCES parcelled_payout (id),
+  sequence                  INTEGER NOT NULL CHECK (sequence >= 1),
+  first_rate                TEXT    NOT NULL,
+  subsequent_rate           TEXT    NOT NULL,
+  previous_first_rate       TEXT,
+  previous_subsequent_rate  TEXT,
+  reason                    TEXT,
+  informed_by               TEXT    NOT NULL,
+  informed_at               TEXT    NOT NULL,
+  PRIMARY KEY (parcelled_payout_id, sequence)
+);
+
+-- REQ-265: the calculation of each installment, as it was in that entry.
+-- Amounts and percentages as exact decimal text (REQ-120, REQ-121).
+CREATE TABLE IF NOT EXISTS parcelled_payout_calculation (
+  parcelled_payout_id  TEXT    NOT NULL,
+  sequence             INTEGER NOT NULL,
+  number               INTEGER NOT NULL CHECK (number >= 1),
+  amount               TEXT    NOT NULL,
+  worked_commission    TEXT    NOT NULL,
+  usina_value          TEXT    NOT NULL,
+  payout_rate          TEXT    NOT NULL,
+  payout               TEXT    NOT NULL,
+  retained             TEXT    NOT NULL,
+  PRIMARY KEY (parcelled_payout_id, sequence, number),
+  FOREIGN KEY (parcelled_payout_id, sequence)
+    REFERENCES parcelled_payout_entry (parcelled_payout_id, sequence)
+);
+
+-- REQ-266, REQ-288: the statement of each eligible installment, written once
+-- when it becomes eligible and never recalculated. One per installment.
+CREATE TABLE IF NOT EXISTS parcelled_installment_statement (
+  parcelled_payout_id  TEXT    NOT NULL REFERENCES parcelled_payout (id),
+  installment_number   INTEGER NOT NULL CHECK (installment_number >= 1),
+  policy_number        TEXT    NOT NULL,
+  broker               TEXT    NOT NULL,
+  insurer              TEXT    NOT NULL,
+  client               TEXT    NOT NULL,
+  installment_amount   TEXT    NOT NULL,
+  worked_commission    TEXT    NOT NULL,
+  payout_rate          TEXT    NOT NULL,
+  retained             TEXT    NOT NULL,
+  payout               TEXT    NOT NULL,
+  eligible_by          TEXT    NOT NULL,
+  eligible_at          TEXT    NOT NULL,
+  PRIMARY KEY (parcelled_payout_id, installment_number)
+);
+
 -- Report line with no matching policy (REQ-083, EX-01, OUT-06). It carries no
 -- foreign key on purpose: the whole point is that no policy was found.
 CREATE TABLE IF NOT EXISTS reconciliation_pendency (
@@ -273,6 +349,8 @@ CREATE TABLE IF NOT EXISTS notification (
   -- Nullable because the proposal only knows it from the transmission on
   -- (REQ-041); a policy is unreachable before that, so it is always present.
   worked_commission  TEXT,
+  -- REQ-228: with a parcelled CT, the CT of the subsequent installments.
+  subsequent_worked_commission  TEXT,
   -- Exact decimal as text (REQ-120). Never REAL.
   net_premium        TEXT NOT NULL,
   occurred_at        TEXT NOT NULL

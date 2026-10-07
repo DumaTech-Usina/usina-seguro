@@ -321,3 +321,33 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
     expect(document.querySelector('#list button')).toBeNull();
   });
 });
+
+// Last: it adds a notification the counts above do not expect.
+describe('the notification of a parcelled policy', () => {
+  it('shows both CTs of a parcelled policy (REQ-228)', async () => {
+    const proposal = await callApi('POST', '/proposals', {
+      clientId: 'client-1',
+      brokerId: 'broker-1',
+      insurerId: 'insurer-1',
+      productId: 'auto',
+      paymentMethodId: 'credit',
+      proposalNumber: 'PRP-WEB-NPARC',
+      netPremium: '1200.00',
+      coverageStart: '2026-10-01',
+      coverageEnd: '2027-10-01',
+      installments: [{ amount: '600.00' }, { amount: '600.00' }],
+      workedCommission: '100',
+      subsequentWorkedCommission: '30',
+      workedCommissionMode: 'PARCELLED',
+      intermediary: null,
+      userId: 'operator',
+    });
+    await callApi('POST', '/policies', { proposalId: proposal.id, userId: 'operator' });
+
+    await openNotifications();
+
+    const notified = rowOf('PRP-WEB-NPARC');
+    expect(notified.textContent).toContain('100%');
+    expect(notified.textContent).toContain('30%');
+  });
+});

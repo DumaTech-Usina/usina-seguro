@@ -45,6 +45,16 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'proposal.installment_amount_must_be_positive': 'Valor da parcela {number} deve ser positivo.',
     'proposal.proposal_number_required': 'Proposta exige o número emitido pela seguradora.',
     'proposal.author_required': 'Informe quem está registrando esta informação.',
+    'policy.parcelled_installment_has_no_payment_confirmation':
+      'Na apólice com CT parcelada não há confirmação de pagamento da parcela: o ato sobre a parcela é a elegibilidade.',
+    'proposal.parcelled_requires_subsequent_ct':
+      'Com CT parcelada, informe também a CT das parcelas subsequentes.',
+    'proposal.integral_has_single_ct':
+      'Com CT integral há uma única CT: a CT das parcelas subsequentes só existe na CT parcelada.',
+    'proposal.parcelled_requires_two_installments':
+      'Com CT parcelada, a proposta precisa de ao menos duas parcelas.',
+    'proposal.parcelled_cannot_have_intermediary':
+      'Comissão parcelada não pode ser recebida através de intermediária: com intermediária, a CT só pode ser integral.',
     'proposal.intermediary_requires_ctu':
       'Com intermediária, a CTU (comissão trabalhada da Usina) é obrigatória.',
     'proposal.issued_proposal_is_frozen': 'Proposta emitida não pode ser alterada.',
@@ -102,6 +112,19 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'commission.payout_revision_reason_required': 'A alteração da CR exige um motivo.',
     'commission.payout_eligible_is_final':
       'A comissão já é elegível: é definitiva e só pode ser consultada.',
+    'commission.parcelled_payout_requires_parcelled_ct':
+      'Os CRs da primeira parcela e das subsequentes só existem em apólice com CT parcelada.',
+    'commission.parcelled_first_rate_above_ct':
+      'A CR da primeira parcela ({rate}%) não pode ser maior que a CT da primeira parcela ({ct}%).',
+    'commission.parcelled_subsequent_rate_above_ct':
+      'A CR das parcelas subsequentes ({rate}%) não pode ser maior que a CT das parcelas subsequentes ({ct}%).',
+    'commission.parcelled_rates_frozen':
+      'Os CRs não podem mais ser alterados: já há parcela elegível.',
+    'commission.installment_eligibility_requires_rates':
+      'A parcela só pode ser tornada elegível com os CRs informados (ainda que zero).',
+    'commission.installment_already_eligible':
+      'A parcela {number} já é elegível: a elegibilidade é definitiva.',
+    'commission.installment_not_in_policy': 'A apólice não tem a parcela {number}.',
 
     'reconciliation.competence_required':
       'Importação do arquivo de comissionamento exige a competência.',

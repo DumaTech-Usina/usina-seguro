@@ -49,6 +49,49 @@ const eligibilitySchema: FastifySchema = {
   },
 };
 
+/** V2 section 9B: the two CRs of a parcelled policy, as decimal strings. */
+const informParcelledSchema: FastifySchema = {
+  params: policyIdParams,
+  body: {
+    type: 'object',
+    required: ['firstRate', 'subsequentRate', ...SIGNATURE_REQUIRED],
+    additionalProperties: false,
+    properties: {
+      firstRate: { type: 'string' },
+      subsequentRate: { type: 'string' },
+      ...SIGNATURE_PROPERTIES,
+    },
+  },
+};
+
+const reviseParcelledSchema: FastifySchema = {
+  params: policyIdParams,
+  body: {
+    type: 'object',
+    required: ['firstRate', 'subsequentRate', 'reason', ...SIGNATURE_REQUIRED],
+    additionalProperties: false,
+    properties: {
+      firstRate: { type: 'string' },
+      subsequentRate: { type: 'string' },
+      reason: { type: 'string' },
+      ...SIGNATURE_PROPERTIES,
+    },
+  },
+};
+
+const installmentEligibilitySchema: FastifySchema = {
+  params: {
+    type: 'object',
+    required: ['id', 'number'],
+    properties: {
+      id: { type: 'string' },
+      // Coercion is off for the whole server (REQ-120): the number stays a string.
+      number: { type: 'string', pattern: '^[0-9]+$' },
+    },
+  },
+  body: eligibilitySchema.body,
+};
+
 const MONTH = { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$' } as const;
 const INSTANT = { type: 'string', format: 'date-time' } as const;
 
@@ -119,4 +162,74 @@ export function registerPayoutRoutes(app: FastifyInstance, useCases: UseCases): 
   app.get('/payouts/policies-without-rate', async () => {
     return useCases.listPoliciesWithoutPayoutRate.execute();
   });
+
+  // REQ-268: every policy with parcelled CT, with its situation.
+  app.get('/payouts/parcelled-policies', async () => {
+    return useCases.listParcelledPolicies.execute();
+  });
+
+  // V2 section 9B: the payout of a policy with parcelled CT, per installment.
+  app.get(
+    '/policies/:id/parcelled-payout',
+    { schema: { params: policyIdParams } },
+    async (request) => {
+      const { id } = request.params as PolicyIdParams;
+      return useCases.getParcelledPayout.execute(id);
+    },
+  );
+
+  // REQ-287: the two CRs, informed together.
+  app.post(
+    '/policies/:id/parcelled-payout',
+    { schema: informParcelledSchema },
+    async (request, reply) => {
+      const { id } = request.params as PolicyIdParams;
+      const { firstRate, subsequentRate } = request.body as {
+        firstRate: string;
+        subsequentRate: string;
+      };
+      const output = await useCases.informParcelledPayoutRates.execute({
+        policyId: id,
+        firstRate,
+        subsequentRate,
+        userId: authorOf(request),
+      });
+      return reply.code(201).send(output);
+    },
+  );
+
+  // REQ-265: both CRs changed together, with a reason.
+  app.post(
+    '/policies/:id/parcelled-payout/revision',
+    { schema: reviseParcelledSchema },
+    async (request) => {
+      const { id } = request.params as PolicyIdParams;
+      const { firstRate, subsequentRate, reason } = request.body as {
+        firstRate: string;
+        subsequentRate: string;
+        reason: string;
+      };
+      return useCases.reviseParcelledPayoutRates.execute({
+        policyId: id,
+        firstRate,
+        subsequentRate,
+        reason,
+        userId: authorOf(request),
+      });
+    },
+  );
+
+  // REQ-288: the eligibility of one installment, signed.
+  app.post(
+    '/policies/:id/installments/:number/eligibility',
+    { schema: installmentEligibilitySchema },
+    async (request) => {
+      const { id, number } = request.params as { id: string; number: string };
+      return useCases.declareInstallmentEligibility.execute({
+        policyId: id,
+        number: Number(number),
+        userId: authorOf(request),
+      });
+    },
+  );
 }

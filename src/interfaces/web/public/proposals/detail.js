@@ -14,6 +14,7 @@
 
 import { ApiError, api } from '/app/shared/api.js';
 import { base64Of } from '/app/shared/file.js';
+import { addInstallmentRow, scheduleOf } from '/app/shared/installments.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
 import { viewPdfOnClick } from '/app/shared/pdf-viewer.js';
 import {
@@ -28,6 +29,7 @@ import {
   stageStrip,
   statusChip,
 } from '/app/shared/status.js';
+import { bindWorkedCommissionFields, workedCommissionOf } from '/app/shared/worked-commission.js';
 
 const proposalId = new URLSearchParams(window.location.search).get('id');
 const page = document.querySelector('#page');
@@ -112,6 +114,20 @@ const STAGE_NOTE = {
   REJECTED: 'Proposta recusada. O ciclo comercial está encerrado.',
 };
 
+/**
+ * REQ-291: one CT with an integral CT; with a parcelled one, the CT of the
+ * first installment and the CT of the subsequent installments.
+ */
+function workedCommissionText(workedCommission, subsequentWorkedCommission, mode) {
+  const label = WORKED_COMMISSION_MODE[mode] ?? mode;
+
+  return subsequentWorkedCommission === null
+    ? `${formatPercentage(workedCommission)} · ${label}`
+    : `primeira ${formatPercentage(workedCommission)} · subsequentes ${formatPercentage(
+        subsequentWorkedCommission,
+      )} · ${label}`;
+}
+
 function receiptText(intermediaryId, ctu) {
   return intermediaryId === null
     ? 'Direto da seguradora'
@@ -153,9 +169,11 @@ function summaryCard(proposal) {
     definition('Renovação', formatDate(proposal.renewalDate), 'renewal'),
     definition(
       'Comissão trabalhada',
-      `${formatPercentage(proposal.workedCommission)} · ${
-        WORKED_COMMISSION_MODE[proposal.workedCommissionMode] ?? proposal.workedCommissionMode
-      }`,
+      workedCommissionText(
+        proposal.workedCommission,
+        proposal.subsequentWorkedCommission,
+        proposal.workedCommissionMode,
+      ),
       'workedCommission',
     ),
     definition('Recebimento', receiptText(proposal.intermediaryId, proposal.ctu), 'receipt'),
@@ -220,7 +238,20 @@ function expectedCard(proposal) {
   const body = element('div', 'card__body stack');
   const metrics = element('div', 'definitions');
 
-  if (proposal.expectedReceipt.intermediary !== null) {
+  if (proposal.expectedInstallments !== null) {
+    // REQ-293: with a parcelled CT, one expected value per installment — the
+    // CT applied to the installment value — and no total (REJ-232).
+    for (const installment of proposal.expectedInstallments) {
+      metrics.append(
+        definition(
+          `Parcela ${installment.number} (${formatMoney(installment.amount)} × CT ${formatPercentage(
+            installment.workedCommission,
+          )})`,
+          formatMoney(installment.usina),
+        ),
+      );
+    }
+  } else if (proposal.expectedReceipt.intermediary !== null) {
     metrics.append(
       definition(
         `A intermediária recebe (prêmio × CT ${formatPercentage(proposal.workedCommission)})`,
@@ -268,9 +299,11 @@ function historyCard(proposal) {
     commission.append(
       definition(
         `CT · ${entry.informedBy} · ${formatInstant(entry.informedAt)}`,
-        `${formatPercentage(entry.workedCommission)} · ${
-          WORKED_COMMISSION_MODE[entry.workedCommissionMode] ?? entry.workedCommissionMode
-        }`,
+        workedCommissionText(
+          entry.workedCommission,
+          entry.subsequentWorkedCommission,
+          entry.workedCommissionMode,
+        ),
       ),
     );
   }
@@ -285,7 +318,20 @@ function historyCard(proposal) {
     );
   }
 
-  body.append(commission, receipt);
+  // REQ-254: every list of installments, with who signed it and when.
+  const installments = element('div', 'definitions');
+  for (const entry of proposal.installmentHistory) {
+    installments.append(
+      definition(
+        `Parcelas · ${entry.informedBy} · ${formatInstant(entry.informedAt)}`,
+        entry.installments.length === 0
+          ? 'Nenhuma parcela'
+          : entry.installments.map((installment) => formatMoney(installment.amount)).join(' · '),
+      ),
+    );
+  }
+
+  body.append(commission, receipt, installments);
 
   // REQ-209, CA-207: who identified the issuance, and when it was recorded.
   if (proposal.issuanceRecognizedBy !== null) {
@@ -371,6 +417,8 @@ function policyCard(policy) {
 
 const commissionForm = document.querySelector('#form-worked-commission');
 const receiptForm = document.querySelector('#form-receipt');
+const installmentsForm = document.querySelector('#form-installments');
+const installmentRows = document.querySelector('#installments-correction');
 const issuanceForm = document.querySelector('#form-issuance');
 const rejectionForm = document.querySelector('#form-rejection');
 
@@ -392,6 +440,11 @@ for (const option of document.querySelectorAll('.outcome-switch__option')) {
 }
 
 bindReceiptFields(receiptForm);
+const syncWorkedCommission = bindWorkedCommissionFields(commissionForm);
+
+document
+  .querySelector('#add-installment-correction')
+  .addEventListener('click', () => addInstallmentRow(installmentRows));
 offerRegisteredIntermediaries(document.querySelector('#intermediary-options'));
 
 // FA-203: the CT and its mode, signed (REQ-214, REQ-215).
@@ -400,13 +453,29 @@ commissionForm.addEventListener('submit', (event) => {
   const input = values(commissionForm);
 
   submitting(commissionForm, async () => {
+    // REQ-297: with a parcelled CT both CTs go together.
     await api.reviseWorkedCommission(proposalId, {
-      workedCommission: input.workedCommission,
-      workedCommissionMode: input.workedCommissionMode,
+      ...workedCommissionOf(commissionForm),
       userId: input.userId,
     });
 
     showSnackbar('Comissão trabalhada corrigida.', { tone: 'success' });
+    await render();
+  });
+});
+
+// REQ-254, FA-224: the list of installments as it stays, signed.
+installmentsForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const input = values(installmentsForm);
+
+  submitting(installmentsForm, async () => {
+    await api.reviseInstallments(proposalId, {
+      installments: scheduleOf(installmentRows),
+      userId: input.userId,
+    });
+
+    showSnackbar('Parcelas corrigidas.', { tone: 'success' });
     await render();
   });
 });
@@ -493,6 +562,14 @@ function fillCorrections(proposal) {
   commissionForm.querySelector('[name="workedCommission"]').value = proposal.workedCommission;
   commissionForm.querySelector('[name="workedCommissionMode"]').value =
     proposal.workedCommissionMode;
+  commissionForm.querySelector('[name="subsequentWorkedCommission"]').value =
+    proposal.subsequentWorkedCommission ?? '';
+  syncWorkedCommission();
+
+  installmentRows.replaceChildren();
+  for (const installment of proposal.installments) {
+    addInstallmentRow(installmentRows, installment.amount, installment.dueDate);
+  }
 
   const kind = receiptForm.querySelector('[name="receiptKind"]');
   kind.value = proposal.intermediaryId === null ? 'DIRECT' : 'INTERMEDIARY';

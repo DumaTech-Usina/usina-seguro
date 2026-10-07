@@ -18,7 +18,24 @@ import { SIGNATURE_PROPERTIES, SIGNATURE_REQUIRED, authorOf } from '../author.ts
  */
 const workedCommissionProperties = {
   workedCommission: { type: 'string' },
+  // REQ-291: the CT of the subsequent installments. Whether it must or must not
+  // be there is the mode's rule, answered by the domain.
+  subsequentWorkedCommission: { type: ['string', 'null'] },
   workedCommissionMode: { type: 'string', enum: ['INTEGRAL', 'PARCELLED'] },
+} as const;
+
+/** REQ-204: the due date is optional. */
+const installmentsProperty = {
+  type: 'array',
+  items: {
+    type: 'object',
+    required: ['amount'],
+    additionalProperties: false,
+    properties: {
+      amount: { type: 'string' },
+      dueDate: { type: ['string', 'null'] },
+    },
+  },
 } as const;
 
 /**
@@ -67,19 +84,7 @@ const registerProposalSchema: FastifySchema = {
       netPremium: { type: 'string' },
       coverageStart: { type: 'string' },
       coverageEnd: { type: 'string' },
-      // REQ-204: the due date is optional.
-      installments: {
-        type: 'array',
-        items: {
-          type: 'object',
-          required: ['amount'],
-          additionalProperties: false,
-          properties: {
-            amount: { type: 'string' },
-            dueDate: { type: ['string', 'null'] },
-          },
-        },
-      },
+      installments: installmentsProperty,
       ...workedCommissionProperties,
       intermediary: intermediaryProperty,
       ...SIGNATURE_PROPERTIES,
@@ -111,6 +116,17 @@ const reviseWorkedCommissionSchema: FastifySchema = {
     required: ['workedCommission', 'workedCommissionMode', ...SIGNATURE_REQUIRED],
     additionalProperties: false,
     properties: { ...workedCommissionProperties, ...SIGNATURE_PROPERTIES },
+  },
+};
+
+/** REQ-254: the whole list as it stays, signed. */
+const reviseInstallmentsSchema: FastifySchema = {
+  params: proposalIdParams,
+  body: {
+    type: 'object',
+    required: ['installments', ...SIGNATURE_REQUIRED],
+    additionalProperties: false,
+    properties: { installments: installmentsProperty, ...SIGNATURE_PROPERTIES },
   },
 };
 
@@ -179,11 +195,25 @@ interface RegisterProposalBody {
   netPremium: string;
   coverageStart: string;
   coverageEnd: string;
-  installments?: { amount: string; dueDate?: string | null }[];
+  installments?: InstallmentBody[];
   workedCommission: string;
+  subsequentWorkedCommission?: string | null;
   workedCommissionMode: WorkedCommissionMode;
   intermediary: { intermediaryId: string; ctu?: string | null } | null;
   sourceDocument?: { fileName: string; contentType: string; content: string };
+}
+
+interface InstallmentBody {
+  amount: string;
+  dueDate?: string | null;
+}
+
+/** An absent due date and a null one mean the same: not informed (REQ-204). */
+function installmentsOf(installments: InstallmentBody[]): RegisterProposalInstallmentInput[] {
+  return installments.map((installment) => ({
+    amount: installment.amount,
+    dueDate: installment.dueDate ?? null,
+  }));
 }
 
 /** An absent CTU and a null one mean the same: not informed. */
@@ -238,13 +268,9 @@ export function registerProposalRoutes(app: FastifyInstance, useCases: UseCases)
         netPremium: body.netPremium,
         coverageStart: body.coverageStart,
         coverageEnd: body.coverageEnd,
-        installments: (body.installments ?? []).map(
-          (installment): RegisterProposalInstallmentInput => ({
-            amount: installment.amount,
-            dueDate: installment.dueDate ?? null,
-          }),
-        ),
+        installments: installmentsOf(body.installments ?? []),
         workedCommission: body.workedCommission,
+        subsequentWorkedCommission: body.subsequentWorkedCommission ?? null,
         workedCommissionMode: body.workedCommissionMode,
         intermediary: intermediaryOf(body.intermediary),
         author: authorOf(request),
@@ -291,12 +317,14 @@ export function registerProposalRoutes(app: FastifyInstance, useCases: UseCases)
       const { id } = request.params as ProposalIdParams;
       const body = request.body as {
         workedCommission: string;
+        subsequentWorkedCommission?: string | null;
         workedCommissionMode: WorkedCommissionMode;
       };
 
       return useCases.reviseWorkedCommission.execute({
         proposalId: id,
         workedCommission: body.workedCommission,
+        subsequentWorkedCommission: body.subsequentWorkedCommission ?? null,
         workedCommissionMode: body.workedCommissionMode,
         author: authorOf(request),
       });
@@ -312,6 +340,18 @@ export function registerProposalRoutes(app: FastifyInstance, useCases: UseCases)
     return useCases.reviseReceipt.execute({
       proposalId: id,
       intermediary: intermediaryOf(intermediary),
+      author: authorOf(request),
+    });
+  });
+
+  // REQ-254, FA-224: "Corrigir parcelas" — the list as it stays, signed.
+  app.post('/proposals/:id/installments', { schema: reviseInstallmentsSchema }, async (request) => {
+    const { id } = request.params as ProposalIdParams;
+    const { installments } = request.body as { installments: InstallmentBody[] };
+
+    return useCases.reviseInstallments.execute({
+      proposalId: id,
+      installments: installmentsOf(installments),
       author: authorOf(request),
     });
   });

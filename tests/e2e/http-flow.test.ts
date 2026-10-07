@@ -59,6 +59,15 @@ const validProposal = {
   userId: 'ana.souza',
 };
 
+const TWO_INSTALLMENTS = [{ amount: '617.28' }, { amount: '617.28' }];
+
+const PARCELLED = {
+  workedCommissionMode: 'PARCELLED',
+  workedCommission: '100',
+  subsequentWorkedCommission: '30',
+  installments: [{ amount: '100.00' }, { amount: '100.00' }],
+};
+
 interface ErrorBody {
   error: string;
   rule?: string;
@@ -208,10 +217,15 @@ describe('proposal API (V2)', () => {
   });
 
   it('corrects the CT and its mode, signed (REQ-214, REQ-215, CA-217)', async () => {
-    const id = await registered();
+    const id = await registered({ installments: TWO_INSTALLMENTS });
 
     const response = await post(
-      { workedCommission: '25', workedCommissionMode: 'PARCELLED', userId: 'bruno.lima' },
+      {
+        workedCommission: '25',
+        subsequentWorkedCommission: '10',
+        workedCommissionMode: 'PARCELLED',
+        userId: 'bruno.lima',
+      },
       `/proposals/${id}/worked-commission`,
     );
 
@@ -225,6 +239,76 @@ describe('proposal API (V2)', () => {
       'ana.souza',
       'bruno.lima',
     ]);
+  });
+
+  it('registers a parcelled proposal with its two CTs and the value of each installment (REQ-291, REQ-293)', async () => {
+    const response = await post({
+      ...validProposal,
+      ...PARCELLED,
+    });
+
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({
+      workedCommission: '100',
+      subsequentWorkedCommission: '30',
+      expectedReceipt: null,
+      expectedInstallments: [
+        { number: 1, usina: '100.00' },
+        { number: 2, usina: '30.00' },
+      ],
+    });
+  });
+
+  it('refuses an intermediary on a parcelled proposal with 422, in Portuguese (REQ-296, EX-207)', async () => {
+    const id = await registered(PARCELLED);
+
+    const response = await post(
+      { intermediary: { intermediaryId: 'intermediary-1', ctu: '50' }, userId: 'bruno.lima' },
+      `/proposals/${id}/receipt`,
+    );
+
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as ErrorBody;
+    expect(body.rule).toBe('REQ-296');
+    expect(body.message).toContain('intermediária');
+  });
+
+  it('corrects the installments, signed (REQ-254, CA-261)', async () => {
+    const id = await registered();
+
+    const response = await post(
+      {
+        installments: [{ amount: '600.00', dueDate: '2026-11-10' }, { amount: '634.56' }],
+        userId: 'bruno.lima',
+      },
+      `/proposals/${id}/installments`,
+    );
+
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as {
+      installments: { number: number; amount: string; dueDate: string | null }[];
+      installmentHistory: { informedBy: string }[];
+    };
+    expect(body.installments).toEqual([
+      { number: 1, amount: '600.00', dueDate: '2026-11-10' },
+      { number: 2, amount: '634.56', dueDate: null },
+    ]);
+    expect(body.installmentHistory.map((entry) => entry.informedBy)).toEqual([
+      'ana.souza',
+      'bruno.lima',
+    ]);
+  });
+
+  it('refuses leaving a parcelled proposal with one installment with 422 (REQ-292)', async () => {
+    const id = await registered(PARCELLED);
+
+    const response = await post(
+      { installments: [{ amount: '100.00' }], userId: 'bruno.lima' },
+      `/proposals/${id}/installments`,
+    );
+
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as ErrorBody).rule).toBe('REQ-292');
   });
 
   it('declares and removes the intermediary before issuance (FA-204, FA-209)', async () => {
@@ -362,5 +446,118 @@ describe('the PDF a proposal was imported from (REQ-219)', () => {
 
     expect(created.sourceDocument).toBeNull();
     expect((await fetch(`${baseUrl}/proposals/${created.id}/source-document`)).status).toBe(404);
+  });
+});
+
+describe('parcelled payout API (V2 section 9B)', () => {
+  async function parcelledPolicy(): Promise<string> {
+    const proposalId = await registered({
+      ...PARCELLED,
+      installments: [{ amount: '100.00' }, { amount: '100.00' }, { amount: '100.00' }],
+    });
+    const response = await post({ proposalId, userId: 'carla' }, '/policies');
+    expect(response.status).toBe(201);
+    return ((await response.json()) as { id: string }).id;
+  }
+
+  async function get(url: string): Promise<Response> {
+    return fetch(`${baseUrl}${url}`);
+  }
+
+  it('shows each installment, informs both CRs and signs the eligibility of one (REQ-287, REQ-288)', async () => {
+    const policyId = await parcelledPolicy();
+
+    const before = await get(`/policies/${policyId}/parcelled-payout`);
+    expect(before.status).toBe(200);
+    expect(await before.json()).toMatchObject({ situation: 'WITHOUT_CR' });
+
+    const informed = await post(
+      { firstRate: '100', subsequentRate: '15', userId: 'ana' },
+      `/policies/${policyId}/parcelled-payout`,
+    );
+    expect(informed.status).toBe(201);
+    expect(await informed.json()).toMatchObject({
+      situation: 'NONE_ELIGIBLE',
+      installments: [
+        { number: 1, payout: '100.00', retained: '0.00' },
+        { number: 2, payout: '15.00', retained: '15.00' },
+        { number: 3, payout: '15.00', retained: '15.00' },
+      ],
+    });
+
+    const revised = await post(
+      { firstRate: '90', subsequentRate: '20', reason: 'acordo revisto', userId: 'bruno' },
+      `/policies/${policyId}/parcelled-payout/revision`,
+    );
+    expect(revised.status).toBe(200);
+
+    const eligible = await post(
+      { userId: 'carla' },
+      `/policies/${policyId}/installments/3/eligibility`,
+    );
+    expect(eligible.status).toBe(200);
+    expect(await eligible.json()).toMatchObject({
+      situation: 'PARTIALLY_ELIGIBLE',
+      installments: [
+        { number: 1, statement: null },
+        { number: 2, statement: null },
+        { number: 3, statement: { installmentNumber: 3, payout: '20.00', signedBy: 'carla' } },
+      ],
+    });
+
+    const lines = (await (await get('/payouts/parcelled-policies')).json()) as {
+      policyId: string;
+      situation: string;
+    }[];
+    expect(lines.find((line) => line.policyId === policyId)?.situation).toBe('PARTIALLY_ELIGIBLE');
+  });
+
+  it('refuses a CR above its CT with 422, in Portuguese (REQ-263, EX-213)', async () => {
+    const policyId = await parcelledPolicy();
+
+    const response = await post(
+      { firstRate: '100', subsequentRate: '31', userId: 'ana' },
+      `/policies/${policyId}/parcelled-payout`,
+    );
+
+    expect(response.status).toBe(422);
+    const body = (await response.json()) as ErrorBody;
+    expect(body.rule).toBe('REQ-263');
+    expect(body.message).toContain('CT das parcelas subsequentes');
+  });
+
+  it('refuses the eligibility of an installment without CR with 422 (REQ-288, EX-214)', async () => {
+    const policyId = await parcelledPolicy();
+
+    const response = await post(
+      { userId: 'carla' },
+      `/policies/${policyId}/installments/1/eligibility`,
+    );
+
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as ErrorBody).rule).toBe('REQ-288');
+  });
+
+  it('refuses the confirmation of payment of a parcelled installment with 422 (REQ-269)', async () => {
+    const policyId = await parcelledPolicy();
+
+    const response = await post(
+      { userId: 'carla' },
+      `/policies/${policyId}/installments/1/payment`,
+    );
+
+    expect(response.status).toBe(422);
+    expect(((await response.json()) as ErrorBody).rule).toBe('REQ-269');
+  });
+
+  it('rejects a CR sent as a number with 400 (REQ-121)', async () => {
+    const policyId = await parcelledPolicy();
+
+    const response = await post(
+      { firstRate: 100, subsequentRate: '15', userId: 'ana' },
+      `/policies/${policyId}/parcelled-payout`,
+    );
+
+    expect(response.status).toBe(400);
   });
 });

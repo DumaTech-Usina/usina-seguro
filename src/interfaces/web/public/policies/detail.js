@@ -229,6 +229,102 @@ async function sendDocument(policy) {
 
 /* ----------------------------------------------------------- schedule -- */
 
+/**
+ * REQ-293, REQ-264, REQ-288: with a parcelled CT each installment shows its CT,
+ * its Usina value and, with CRs, its payout and eligibility. There is no
+ * confirmation of payment there: the act on an installment is its
+ * eligibility (REQ-269).
+ */
+function parcelledInstallmentsCard(policy, parcelled) {
+  const { section } = card('Parcelas', 'receipt_long');
+  const body = element('div', 'card__body card__body--flush');
+
+  const table = element('table', 'table');
+  const head = element('thead');
+  const headRow = element('tr');
+  for (const [label, className] of [
+    ['#', ''],
+    ['Valor', 'is-numeric'],
+    ['Vencimento', ''],
+    ['CT', 'is-numeric'],
+    ['Valor da Usina', 'is-numeric'],
+    ['CR', 'is-numeric'],
+    ['A repassar', 'is-numeric'],
+    ['Fica na Usina', 'is-numeric'],
+    ['Elegibilidade', ''],
+    ['', 'is-action'],
+  ]) {
+    headRow.append(element('th', className, label));
+  }
+  head.append(headRow);
+
+  const rows = element('tbody');
+  const money = (value) => (value === null ? '—' : formatMoney(value));
+
+  for (const installment of parcelled.installments) {
+    const row = element('tr');
+    row.append(
+      element('td', 'text-numeric', String(installment.number)),
+      element('td', 'is-numeric', formatMoney(installment.amount)),
+      element('td', undefined, formatDate(installment.dueDate)),
+      element('td', 'is-numeric', formatPercentage(installment.workedCommission)),
+      element('td', 'is-numeric', formatMoney(installment.usinaValue)),
+      element(
+        'td',
+        'is-numeric',
+        installment.payoutRate === null ? '—' : formatPercentage(installment.payoutRate),
+      ),
+      element('td', 'is-numeric', money(installment.payout)),
+      element('td', 'is-numeric', money(installment.retained)),
+    );
+
+    const statement = installment.statement;
+    row.append(
+      element(
+        'td',
+        'text-muted',
+        statement === null
+          ? '—'
+          : `Elegível · ${statement.signedBy} · ${formatInstant(statement.eligibleAt)}`,
+      ),
+    );
+
+    // REQ-288: only an installment of a policy with CRs, not yet eligible.
+    const action = element('td', 'is-action');
+    if (parcelled.firstRate !== null && statement === null) {
+      action.append(
+        button('Assinar elegibilidade', {
+          variant: 'sm btn--outlined',
+          onClick: () => declareInstallmentEligibility(policy, installment),
+        }),
+      );
+    }
+    row.append(action);
+
+    rows.append(row);
+  }
+
+  table.append(head, rows);
+  body.append(table);
+  section.append(body);
+  return section;
+}
+
+async function declareInstallmentEligibility(policy, installment) {
+  const answer = await ask('#dialog-installment-eligibility', (dialog) => {
+    dialog.querySelector('#dialog-installment-eligibility-subtitle').textContent =
+      `Parcela ${installment.number} — ${formatMoney(installment.amount)}.`;
+  });
+  if (answer === null) {
+    return;
+  }
+
+  await perform(
+    () => api.declareInstallmentEligibility(policy.id, installment.number, answer.userId),
+    `Elegibilidade da parcela ${installment.number} assinada. O extrato da parcela foi gerado.`,
+  );
+}
+
 function installmentsCard(policy) {
   const { section } = card('Parcelas', 'receipt_long');
   const body = element('div', 'card__body card__body--flush');
@@ -308,9 +404,22 @@ async function confirmInstallment(policy, installment) {
 
 /* --------------------------------------------------------- commission -- */
 
-function commissionCard(policy, commission) {
+function commissionCard(policy, commission, parcelled) {
   const { section, header } = card('Comissão', 'percent');
   const body = element('div', 'card__body stack');
+
+  // REQ-227: a parcelled CT has no single agreed value, so no agreed commission.
+  if (commission === null && parcelled !== null) {
+    body.append(
+      emptyState(
+        'price_change',
+        'Comissão acordada não se aplica',
+        'A comissão acordada não se aplica a CT parcelada: o valor esperado é por parcela, sem total.',
+      ),
+    );
+    section.append(body);
+    return section;
+  }
 
   if (commission === null) {
     // A comissão acordada nasce com a apólice (REQ-236); a ausência só ocorre
@@ -517,6 +626,177 @@ function statementBlock(statement) {
   return block;
 }
 
+/** REQ-266: the statement of one eligible installment, as it was generated. */
+function installmentStatementBlock(statement) {
+  const block = element('div', 'payout-statement stack');
+  const details = element('div', 'definitions');
+  details.append(
+    definition('Número da apólice', statement.policyNumber),
+    definition('Corretor', statement.broker),
+    definition('Seguradora', statement.insurer),
+    definition('Cliente', statement.client),
+    definition('Número da parcela', `Parcela ${statement.installmentNumber}`),
+    definition('Valor da parcela', formatMoney(statement.installmentAmount)),
+    definition('CT da parcela', formatPercentage(statement.workedCommission)),
+    definition('CR da parcela', formatPercentage(statement.payoutRate)),
+    definition('Fica na Usina', formatMoney(statement.retained)),
+    definition('A repassar ao corretor', formatMoney(statement.payout)),
+    definition('Data da elegibilidade', formatInstant(statement.eligibleAt)),
+    definition('Assinado por', statement.signedBy),
+  );
+  block.append(
+    element('span', 'text-label', `Extrato da parcela ${statement.installmentNumber}`),
+    details,
+  );
+  return block;
+}
+
+/** REQ-265: every information or change of the two CRs. */
+function parcelledHistory(entries) {
+  const table = element('table', 'table');
+  const head = element('thead');
+  const headRow = element('tr');
+  for (const [label, className] of [
+    ['CR da primeira', 'is-numeric'],
+    ['CR das subsequentes', 'is-numeric'],
+    ['Anteriores', 'is-numeric'],
+    ['Motivo', ''],
+    ['Quem · quando', ''],
+  ]) {
+    headRow.append(element('th', className, label));
+  }
+  head.append(headRow);
+
+  const rows = element('tbody');
+  for (const entry of entries) {
+    const row = element('tr');
+    row.append(
+      element('td', 'is-numeric', formatPercentage(entry.firstRate)),
+      element('td', 'is-numeric', formatPercentage(entry.subsequentRate)),
+      element(
+        'td',
+        'is-numeric text-muted',
+        entry.previousFirstRate === null
+          ? '—'
+          : `${formatPercentage(entry.previousFirstRate)} · ${formatPercentage(
+              entry.previousSubsequentRate,
+            )}`,
+      ),
+      element('td', undefined, entry.reason ?? 'Primeira informação'),
+      element('td', 'text-muted', `${entry.informedBy} · ${formatInstant(entry.informedAt)}`),
+    );
+    rows.append(row);
+  }
+
+  table.append(head, rows);
+  const wrapper = element('div', 'payout-history');
+  wrapper.append(element('span', 'text-label', 'Histórico das CRs'), table);
+  return wrapper;
+}
+
+/**
+ * V2 section 9B: the payout of a policy with parcelled CT — two CRs, each at
+ * most its CT (REQ-263), and the eligibility per installment (REQ-288).
+ */
+function parcelledPayoutCard(policy, parcelled) {
+  const { section, header } = card('Comissão de repasse (CR)', 'volunteer_activism');
+  const body = element('div', 'card__body stack');
+  const footer = element('div', 'card__footer');
+
+  const actions = element('div', 'card__header-actions');
+  actions.append(
+    element('span', 'chip', 'CT parcelada'),
+    statusChip('parcelledPayout', parcelled.situation),
+  );
+  header.append(actions);
+
+  const cts = element('div', 'comparison');
+  cts.append(
+    metric('CT da primeira', formatPercentage(parcelled.firstWorkedCommission)),
+    metric('CT das subsequentes', formatPercentage(parcelled.subsequentWorkedCommission)),
+  );
+
+  if (parcelled.firstRate === null) {
+    body.append(
+      cts,
+      emptyState(
+        'pending_actions',
+        'Apólice sem CR',
+        'A apólice é válida, mas ainda não foi repassada: não existe repasse sem CR e nenhuma parcela pode ser tornada elegível. Informe as duas CRs.',
+      ),
+    );
+    footer.append(
+      button('Informar CRs', {
+        variant: 'filled',
+        iconName: 'edit',
+        onClick: () => informParcelledRates(policy),
+      }),
+    );
+    section.append(body, footer);
+    return section;
+  }
+
+  cts.append(
+    metric('CR da primeira', formatPercentage(parcelled.firstRate)),
+    metric('CR das subsequentes', formatPercentage(parcelled.subsequentRate)),
+  );
+  body.append(cts);
+
+  for (const installment of parcelled.installments) {
+    if (installment.statement !== null) {
+      body.append(installmentStatementBlock(installment.statement));
+    }
+  }
+
+  body.append(parcelledHistory(parcelled.entries));
+  section.append(body);
+
+  // REQ-289: the CRs change only while no installment is eligible.
+  if (parcelled.situation === 'NONE_ELIGIBLE') {
+    footer.append(
+      button('Alterar CRs', { iconName: 'tune', onClick: () => reviseParcelledRates(policy) }),
+    );
+    section.append(footer);
+  }
+
+  return section;
+}
+
+async function informParcelledRates(policy) {
+  const answer = await ask('#dialog-parcelled-rates');
+  if (answer === null) {
+    return;
+  }
+
+  await perform(
+    () =>
+      api.informParcelledPayoutRates(policy.id, {
+        firstRate: answer.firstRate,
+        subsequentRate: answer.subsequentRate,
+        userId: answer.userId,
+      }),
+    'CRs informadas: o repasse de cada parcela está nas parcelas.',
+  );
+}
+
+async function reviseParcelledRates(policy) {
+  const answer = await ask('#dialog-parcelled-revision');
+  if (answer === null) {
+    return;
+  }
+
+  await perform(
+    () =>
+      api.reviseParcelledPayoutRates(policy.id, {
+        firstRate: answer.firstRate,
+        subsequentRate: answer.subsequentRate,
+        reason: answer.reason,
+        userId: answer.userId,
+      }),
+    'CRs alteradas: o repasse de cada parcela foi recalculado.',
+  );
+}
+
 function payoutCard(policy, view) {
   const { section, header } = card('Comissão de repasse (CR)', 'volunteer_activism');
   const body = element('div', 'card__body stack');
@@ -681,6 +961,9 @@ async function render() {
     optional(() => api.getCommission(policyId)),
     api.getPolicyPayout(policyId),
   ]);
+  // V2 section 9B: a policy with parcelled CT has its payout per installment.
+  const parcelled =
+    payout.workedCommissionMode === 'PARCELLED' ? await api.getParcelledPayout(policyId) : null;
 
   const head = element('div', 'page-head');
   const text = element('div', 'page-head__text');
@@ -697,9 +980,9 @@ async function render() {
   page.replaceChildren(
     head,
     policyCard(policy),
-    installmentsCard(policy),
-    commissionCard(policy, commission),
-    payoutCard(policy, payout),
+    parcelled === null ? installmentsCard(policy) : parcelledInstallmentsCard(policy, parcelled),
+    commissionCard(policy, commission, parcelled),
+    parcelled === null ? payoutCard(policy, payout) : parcelledPayoutCard(policy, parcelled),
   );
 }
 

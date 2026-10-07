@@ -242,6 +242,112 @@
       </form>
     </dialog>
 
+    <!-- CT parcelada: as duas CRs, informadas juntas (REQ-287, REQ-263). -->
+    <dialog class="dialog" id="dialog-parcelled-rates">
+      <form method="dialog">
+        <div class="dialog__header">
+          <h2 class="text-title">Informar CRs</h2>
+          <p class="text-muted">
+            Cada CR incide sobre o valor da parcela e não pode ser maior que a CT
+            correspondente: a da primeira na parcela 1, a das subsequentes nas demais.
+          </p>
+        </div>
+        <div class="dialog__body">
+          <div class="field">
+            <input class="field__input" name="firstRate" placeholder=" " inputmode="decimal" required />
+            <label class="field__label">CR da primeira parcela (%)</label>
+          </div>
+          <div class="field">
+            <input
+              class="field__input"
+              name="subsequentRate"
+              placeholder=" "
+              inputmode="decimal"
+              required
+            />
+            <label class="field__label">CR das parcelas subsequentes (%)</label>
+          </div>
+          <div class="field">
+            <input class="field__input" name="userId" placeholder=" " required />
+            <label class="field__label">Quem informa</label>
+          </div>
+        </div>
+        <div class="dialog__footer">
+          <button class="btn" value="cancel" type="submit">Cancelar</button>
+          <button class="btn btn--filled" value="confirm" type="submit">Informar CRs</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- CT parcelada: as duas CRs alteradas juntas, com motivo (REQ-265). -->
+    <dialog class="dialog" id="dialog-parcelled-revision">
+      <form method="dialog">
+        <div class="dialog__header">
+          <h2 class="text-title">Alterar CRs</h2>
+          <p class="text-muted">
+            Só enquanto nenhuma parcela for elegível. O cálculo anterior de cada parcela fica
+            no histórico, como estava; o motivo é obrigatório.
+          </p>
+        </div>
+        <div class="dialog__body">
+          <div class="field">
+            <input class="field__input" name="firstRate" placeholder=" " inputmode="decimal" required />
+            <label class="field__label">Nova CR da primeira parcela (%)</label>
+          </div>
+          <div class="field">
+            <input
+              class="field__input"
+              name="subsequentRate"
+              placeholder=" "
+              inputmode="decimal"
+              required
+            />
+            <label class="field__label">Nova CR das parcelas subsequentes (%)</label>
+          </div>
+          <div class="field">
+            <input class="field__input" name="reason" placeholder=" " required />
+            <label class="field__label">Motivo</label>
+          </div>
+          <div class="field">
+            <input class="field__input" name="userId" placeholder=" " required />
+            <label class="field__label">Quem altera</label>
+          </div>
+        </div>
+        <div class="dialog__footer">
+          <button class="btn" value="cancel" type="submit">Cancelar</button>
+          <button class="btn btn--filled" value="confirm" type="submit">Alterar CRs</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- CT parcelada: a elegibilidade de uma parcela, assinada (REQ-288). -->
+    <dialog class="dialog" id="dialog-installment-eligibility">
+      <form method="dialog">
+        <div class="dialog__header">
+          <h2 class="text-title">Assinar elegibilidade da parcela</h2>
+          <p class="text-muted" id="dialog-installment-eligibility-subtitle"></p>
+        </div>
+        <div class="dialog__body">
+          <div class="banner">
+            <span class="material-symbols-outlined">info</span>
+            <div class="banner__text">
+              Assine somente depois de verificar, fora do sistema, que a Usina recebeu a
+              comissão desta parcela. A elegibilidade é definitiva e gera o extrato da parcela;
+              a partir da primeira parcela elegível, as CRs não mudam mais.
+            </div>
+          </div>
+          <div class="field">
+            <input class="field__input" name="userId" placeholder=" " required />
+            <label class="field__label">Quem assina</label>
+          </div>
+        </div>
+        <div class="dialog__footer">
+          <button class="btn" value="cancel" type="submit">Cancelar</button>
+          <button class="btn btn--filled" value="confirm" type="submit">Assinar</button>
+        </div>
+      </form>
+    </dialog>
+
     <script type="module" src="/app/shared/shell.js"></script>
     <script type="module" src="/app/policies/detail.js"></script>
   </body>

@@ -5,16 +5,22 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Config } from './config/config.ts';
 import { CalculateAgreedCommission } from './core/commission/application/calculate-agreed-commission.ts';
 import type { CommissionRepository } from './core/commission/application/commission-repository.ts';
+import { DeclareInstallmentEligibility } from './core/commission/application/declare-installment-eligibility.ts';
 import { DeclarePayoutEligibility } from './core/commission/application/declare-payout-eligibility.ts';
 import { GetCommission } from './core/commission/application/get-commission.ts';
+import { GetParcelledPayout } from './core/commission/application/get-parcelled-payout.ts';
 import { GetPolicyPayout } from './core/commission/application/get-policy-payout.ts';
+import { InformParcelledPayoutRates } from './core/commission/application/inform-parcelled-payout-rates.ts';
 import { InformPayoutRate } from './core/commission/application/inform-payout-rate.ts';
 import { ListCommissions } from './core/commission/application/list-commissions.ts';
 import { ListEligiblePayouts } from './core/commission/application/list-eligible-payouts.ts';
+import { ListParcelledPolicies } from './core/commission/application/list-parcelled-policies.ts';
 import { ListPoliciesWithoutPayoutRate } from './core/commission/application/list-policies-without-payout-rate.ts';
 import { OverrideCommission } from './core/commission/application/override-commission.ts';
+import type { ParcelledPayoutRepository } from './core/commission/application/parcelled-payout-repository.ts';
 import type { PayoutCommissionRepository } from './core/commission/application/payout-commission-repository.ts';
 import { ResolveCommissionDivergence } from './core/commission/application/resolve-commission-divergence.ts';
+import { ReviseParcelledPayoutRates } from './core/commission/application/revise-parcelled-payout-rates.ts';
 import { RevisePayoutRate } from './core/commission/application/revise-payout-rate.ts';
 import { ListNotifications } from './core/notification/application/list-notifications.ts';
 import type { NotificationChannel } from './core/notification/application/notification-channel.ts';
@@ -35,6 +41,7 @@ import { ListProposals } from './core/proposal/application/list-proposals.ts';
 import type { ProposalRepository } from './core/proposal/application/proposal-repository.ts';
 import { RegisterProposal } from './core/proposal/application/register-proposal.ts';
 import { RejectProposal } from './core/proposal/application/reject-proposal.ts';
+import { ReviseInstallments } from './core/proposal/application/revise-installments.ts';
 import { ReviseReceipt } from './core/proposal/application/revise-receipt.ts';
 import { ReviseWorkedCommission } from './core/proposal/application/revise-worked-commission.ts';
 import type { SourceDocumentStorage } from './core/proposal/application/source-document-storage.ts';
@@ -49,6 +56,7 @@ import { ImmediateTransaction } from './infrastructure/persistence/in-memory/imm
 import { InMemoryCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
 import { InMemoryDocumentStorage } from './infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryNotificationRepository } from './infrastructure/persistence/in-memory/in-memory-notification-repository.ts';
+import { InMemoryParcelledPayoutRepository } from './infrastructure/persistence/in-memory/in-memory-parcelled-payout-repository.ts';
 import { InMemoryPayoutCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-payout-commission-repository.ts';
 import { InMemoryPolicyRepository } from './infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from './infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
@@ -58,6 +66,7 @@ import { SqliteCommissionRepository } from './infrastructure/persistence/sqlite/
 import { openSqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.ts';
 import { SqliteDocumentStorage } from './infrastructure/persistence/sqlite/sqlite-document-storage.ts';
 import { SqliteNotificationRepository } from './infrastructure/persistence/sqlite/sqlite-notification-repository.ts';
+import { SqliteParcelledPayoutRepository } from './infrastructure/persistence/sqlite/sqlite-parcelled-payout-repository.ts';
 import { SqlitePayoutCommissionRepository } from './infrastructure/persistence/sqlite/sqlite-payout-commission-repository.ts';
 import { SqlitePolicyRepository } from './infrastructure/persistence/sqlite/sqlite-policy-repository.ts';
 import { SqliteProposalRepository } from './infrastructure/persistence/sqlite/sqlite-proposal-repository.ts';
@@ -74,6 +83,7 @@ export interface UseCases {
   readonly registerProposal: RegisterProposal;
   readonly reviseWorkedCommission: ReviseWorkedCommission;
   readonly reviseReceipt: ReviseReceipt;
+  readonly reviseInstallments: ReviseInstallments;
   readonly rejectProposal: RejectProposal;
   /**
    * REQ-218: an aid to filling the registration form, not a use case of the
@@ -103,6 +113,11 @@ export interface UseCases {
   readonly declarePayoutEligibility: DeclarePayoutEligibility;
   readonly listEligiblePayouts: ListEligiblePayouts;
   readonly listPoliciesWithoutPayoutRate: ListPoliciesWithoutPayoutRate;
+  readonly getParcelledPayout: GetParcelledPayout;
+  readonly informParcelledPayoutRates: InformParcelledPayoutRates;
+  readonly reviseParcelledPayoutRates: ReviseParcelledPayoutRates;
+  readonly declareInstallmentEligibility: DeclareInstallmentEligibility;
+  readonly listParcelledPolicies: ListParcelledPolicies;
   readonly reconcileCommissionReport: ReconcileCommissionReport;
   readonly listReconciliationPendencies: ListReconciliationPendencies;
   readonly registerReference: RegisterReference;
@@ -127,6 +142,7 @@ export function composeApplication(config: Config): Application {
     policies,
     commissions,
     payouts,
+    parcelledPayouts,
     pendencies,
     references,
     documents,
@@ -169,6 +185,7 @@ export function composeApplication(config: Config): Application {
       registerProposal: new RegisterProposal({ proposals, documents, newId, now }),
       reviseWorkedCommission: new ReviseWorkedCommission({ proposals, now }),
       reviseReceipt: new ReviseReceipt({ proposals, now }),
+      reviseInstallments: new ReviseInstallments({ proposals, now }),
       rejectProposal: new RejectProposal({ proposals }),
       // DEC-208: the identifiers are the text of the document until a formal
       // registry exists; that is the only thing to change here then.
@@ -218,6 +235,30 @@ export function composeApplication(config: Config): Application {
         proposals,
         payouts,
       }),
+      // V2 section 9B: the payout of a policy with parcelled CT.
+      getParcelledPayout: new GetParcelledPayout({ policies, proposals, parcelledPayouts }),
+      informParcelledPayoutRates: new InformParcelledPayoutRates({
+        policies,
+        proposals,
+        parcelledPayouts,
+        newId,
+        now,
+      }),
+      reviseParcelledPayoutRates: new ReviseParcelledPayoutRates({
+        policies,
+        proposals,
+        parcelledPayouts,
+        newId,
+        now,
+      }),
+      declareInstallmentEligibility: new DeclareInstallmentEligibility({
+        policies,
+        proposals,
+        parcelledPayouts,
+        newId,
+        now,
+      }),
+      listParcelledPolicies: new ListParcelledPolicies({ policies, proposals, parcelledPayouts }),
       reconcileCommissionReport: new ReconcileCommissionReport({
         proposals,
         policies,
@@ -243,6 +284,7 @@ interface Persistence {
   readonly policies: PolicyRepository;
   readonly commissions: CommissionRepository;
   readonly payouts: PayoutCommissionRepository;
+  readonly parcelledPayouts: ParcelledPayoutRepository;
   readonly pendencies: ReconciliationPendencyRepository;
   readonly references: ReferenceRepository;
   readonly documents: SourceDocumentStorage;
@@ -259,6 +301,7 @@ function composePersistence(config: Config): Persistence {
         policies: new InMemoryPolicyRepository(),
         commissions: new InMemoryCommissionRepository(),
         payouts: new InMemoryPayoutCommissionRepository(),
+        parcelledPayouts: new InMemoryParcelledPayoutRepository(),
         pendencies: new InMemoryReconciliationPendencyRepository(),
         references: new InMemoryReferenceRepository(),
         documents: new InMemoryDocumentStorage(),
@@ -274,6 +317,7 @@ function composePersistence(config: Config): Persistence {
         policies: new SqlitePolicyRepository(db),
         commissions: new SqliteCommissionRepository(db),
         payouts: new SqlitePayoutCommissionRepository(db),
+        parcelledPayouts: new SqliteParcelledPayoutRepository(db),
         pendencies: new SqliteReconciliationPendencyRepository(db),
         references: new SqliteReferenceRepository(db),
         documents: new SqliteDocumentStorage(db),
