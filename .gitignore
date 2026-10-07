@@ -9,3 +9,4 @@ data/
 tree.md
 # Reference PDFs with real personal data: local only, never versioned.
 /*.pdf
+bitrix/
