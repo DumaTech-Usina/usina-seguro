@@ -2,9 +2,11 @@
 
 Modular monolith em TypeScript. Um comando, um processo, uma porta.
 
-Fonte de verdade dos requisitos: [`requisitos_refinados.md`](./requisitos_refinados.md).
-Identificadores `REQ-xxx`, `CA-xxx`, `ITP-xxx` e `DEC-xxx` no código referenciam esse
-documento.
+Fonte de verdade dos requisitos: [`docs/requisitos_refinados_v2.md`](./docs/requisitos_refinados_v2.md),
+em construção. A V1, [`docs/requisitos_refinados.md`](./docs/requisitos_refinados.md), é o
+registro do entendimento anterior; onde as duas divergem, vale a V2. Identificadores da
+série `2xx` (`REQ-2xx`, `CA-2xx`, `DEC-2xx`…) no código referenciam a V2; os demais
+(`REQ-0xx`/`REQ-1xx`, `ITP-xxx`, `DEC-0xx`) referenciam a V1.
 
 > **Estado atual: `Proposta → Apólice → CR → Comissão elegível` (FP-01 e FP-02 da V2),
 > com a conciliação e a notificação da V1.**
