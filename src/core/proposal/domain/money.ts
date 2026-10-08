@@ -9,9 +9,8 @@ import type { Percentage } from './percentage.ts';
  * transport is the 2-decimal string from `toString()`, never `number`.
  *
  * The scale is fixed at 2 because every confirmed amount is in BRL (net
- * premium REQ-022, policy premium REQ-020, commission and broker transfer
- * REQ-068, REQ-069, REQ-093). Percentages keep their own precision in
- * `Percentage` (REQ-121).
+ * premium REQ-202, the Usina value REQ-230/REQ-231, the broker's amount
+ * REQ-275). Percentages keep their own precision in `Percentage` (REQ-121).
  */
 const DECIMAL_PLACES = 2;
 const DECIMAL_STRING = /^-?\d+(\.\d{1,2})?$/;
@@ -43,13 +42,9 @@ export class Money {
     return new Money(negative ? -cents : cents);
   }
 
-  /** Zero, the neutral element of `plus`: where a total starts (OUT-07). */
-  static zero(): Money {
-    return new Money(0n);
-  }
-
   /**
-   * Applies a commission rate to this amount (REQ-062..REQ-069, REQ-093).
+   * Applies a commission rate to this amount (CT, CTU and CR — REQ-230,
+   * REQ-231, REQ-274).
    *
    * The whole operation runs on integers: cents times the percentage's exact
    * numerator, divided by `100 * 10 ** scale`. Nothing goes through binary
@@ -67,18 +62,6 @@ export class Money {
     const denominator = 100n * 10n ** BigInt(scale);
 
     return new Money(divideAbnt5891(this.cents * numerator, denominator));
-  }
-
-  /**
-   * Exact sum, on integer cents (REQ-120).
-   *
-   * It exists because a statement adds amounts up (OUT-07): the totals of what
-   * the Usina expects to pay, holds, released and paid are sums of values the
-   * system already holds, and adding them through `number` would reintroduce
-   * the binary floating point the whole type avoids.
-   */
-  plus(other: Money): Money {
-    return new Money(this.cents + other.cents);
   }
 
   /** Exact difference, on integer cents (REQ-275: what stays with the Usina). */

@@ -114,8 +114,8 @@ export class Policy {
     // The schedule may be empty: the policy inherits the proposal's
     // installments (REQ-241), and a proposal without them is valid (CA-216).
     data.installments.forEach((installment, index) => {
-      // REQ-091 releases the broker transfer against the *first* installment,
-      // so the numbering has to identify it without ambiguity.
+      // A parcelled CT applies its own rate to the *first* installment
+      // (REQ-291), so the numbering has to identify it without ambiguity.
       if (installment.number !== index + 1) {
         throw new BusinessRuleViolation(
           'REQ-020',

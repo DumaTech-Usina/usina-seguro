@@ -175,7 +175,7 @@ async function callApi(method: string, apiPath: string, body?: unknown): Promise
   return response.status === 204 ? null : await response.json();
 }
 
-/** A business the way FP-01 leaves it: proposal accepted, policy registered. */
+/** A business the way FP-01 leaves it: issuance recognised, policy registered. */
 async function registeredPolicy(
   proposalNumber: string,
   policyNumber: string,

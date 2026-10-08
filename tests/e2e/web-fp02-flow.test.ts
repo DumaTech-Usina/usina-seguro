@@ -147,7 +147,7 @@ async function callApi(method: string, apiPath: string, body?: unknown): Promise
 }
 
 /**
- * A business the way FP-01 leaves it: proposal transmitted, policy registered,
+ * A business the way FP-01 leaves it: proposal registered, issuance recognised,
  * agreed commission calculated. Premium 100.00 with the rates above makes the
  * agreed receivable 40.00.
  */

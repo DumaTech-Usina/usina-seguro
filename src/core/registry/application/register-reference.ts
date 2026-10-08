@@ -16,9 +16,8 @@ export interface RegisterReferenceDependencies {
 /**
  * IN-01: the Administrator maintains the reference records.
  *
- * Registering the same kind and identifier again replaces the name, the way
- * the broker table and the release rule already behave: the record is the
- * current name of that entity, not a financial entry, so REQ-124 — which
+ * Registering the same kind and identifier again replaces the name: the
+ * record is the current name of that entity, not a financial entry, so REQ-124 — which
  * forbids erasing a *lancamento financeiro* — is not what governs it. Whether
  * a reference may be removed altogether is not decided by any requirement, so
  * there is no operation for it.

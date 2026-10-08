@@ -74,8 +74,8 @@ describe('web interface under /app', () => {
   });
 
   it('serves every page of the FP-01 flow', async () => {
-    // What an operator walks through: register and transmit, follow the open
-    // proposals (REQ-043), record the outcome, open the policy.
+    // What an operator walks through: register the proposal, follow the ones
+    // awaiting issuance, record the outcome (REQ-209, REQ-253), open the policy.
     for (const page of [
       '/app/proposals/new.html',
       '/app/proposals/',

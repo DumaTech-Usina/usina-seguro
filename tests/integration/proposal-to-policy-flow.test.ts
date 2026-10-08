@@ -149,7 +149,7 @@ describe('proposal to policy flow on SQLite', () => {
       policyId: policy.id,
       policyNumber: 'PRP-9001',
       client: { id: 'client-1', name: 'Maria Souza' },
-      // REQ-041: the percentage informed at transmission, with its scale.
+      // REQ-212: the CT informed on the proposal, with its scale (REQ-121).
       workedCommission: '32.5',
       netPremium: '1200.00',
     });

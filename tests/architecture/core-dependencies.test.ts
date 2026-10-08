@@ -70,7 +70,7 @@ describe('core dependency rule', () => {
     // in each entry.
     const declared = [
       // A policy only exists as the outcome of a proposal (REQ-048): the
-      // policy module loads it and drives its transition to ACCEPTED (REQ-111).
+      // policy module loads it and drives its transition to ISSUED (REQ-240).
       'policy -> proposal',
       // FP-01 step 7: the commission is calculated once the policy exists. The
       // commission module implements the port the policy module declares
@@ -109,7 +109,7 @@ describe('core dependency rule', () => {
       'notification -> policy',
       // REQ-100 and REQ-096 list the five fields the notification carries:
       // client, broker, worked percentage, net value and ramo. All five live
-      // on the proposal (REQ-022, REQ-041), and the names come from IN-01.
+      // on the proposal (REQ-201, REQ-202), and the names come from IN-01.
       'notification -> proposal',
       'notification -> registry',
     ];

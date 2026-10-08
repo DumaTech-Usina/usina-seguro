@@ -12,9 +12,9 @@ import { POLICY_MESSAGES } from './errors.ts';
  *         └─► CANCELLED
  * ```
  *
- * `PENDING` and `PAID` are reachable: IN-13 and REQ-092 make the confirmation
- * of the client's payment a manual act by a user of the Usina, and REQ-091
- * makes it the condition that releases the broker transfer. `OVERDUE` depends
+ * `PENDING` and `PAID` are reachable: the confirmation of the client's payment
+ * is a manual act by a user of the Usina, kept as it is for a policy with
+ * integral CT (REQ-269). `OVERDUE` depends
  * on a rule nobody has stated (who marks it, against which clock) and
  * `CANCELLED` on the policy cancellation of REQ-053, which is not modelled.
  * Both stay in the union because they are part of the documented machine.
@@ -22,10 +22,8 @@ import { POLICY_MESSAGES } from './errors.ts';
 export type InstallmentStatus = 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELLED';
 
 /**
- * REQ-123: the manual confirmation that the client paid (IN-13, REQ-092) is
- * one of the operations that change a financial outcome — it is what releases
- * the broker transfer of REQ-091 — so the record says who confirmed it and
- * when. There is no bank integration (REQ-013): this record is the only
+ * REQ-123: the manual confirmation that the client paid (REQ-269) records who
+ * confirmed it and when. There is no bank integration (REQ-013): this record is the only
  * source, and without the user there is nobody to ask about it later.
  */
 export interface InstallmentPaymentConfirmation {
@@ -36,7 +34,7 @@ export interface InstallmentPaymentConfirmation {
 export interface InstallmentData {
   readonly id: string;
   readonly policyId: string;
-  /** Position in the schedule, starting at 1 (REQ-091 needs a first one). */
+  /** Position in the schedule, starting at 1 (REQ-204; REQ-291 names the first). */
   readonly number: number;
   readonly amount: Money;
   /** REQ-204, REQ-241: optional on the proposal, inherited as it is. */
@@ -111,11 +109,11 @@ export class Installment {
   }
 
   /**
-   * IN-13, REQ-092, ITP-008: a user of the Usina confirms the client paid.
-   * There is no bank integration (REQ-013), so this record is the only source.
+   * REQ-269: a user of the Usina confirms the client paid. There is no bank
+   * integration (REQ-013), so this record is the only source.
    *
-   * Confirming twice is refused: the confirmation releases the transfer of
-   * REQ-091 and REQ-124 forbids overwriting a financial record.
+   * Confirming twice is refused: REQ-124 forbids overwriting a financial
+   * record.
    */
   pay(confirmation: InstallmentPaymentConfirmation): Installment {
     if (this.status !== 'PENDING') {

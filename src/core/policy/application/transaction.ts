@@ -3,10 +3,9 @@
  *
  * Declared here because `RegisterPolicy` is the first operation that has to
  * change two aggregates for a single business fact: the proposal becomes
- * `ACCEPTED` and the policy is created. REQ-111 states that `ACCEPTED` is only
- * reachable with a policy registered, and REQ-112/REJ-015 forbid reopening a
- * proposal, so a half-applied write would leave a record that no operation can
- * fix.
+ * `ISSUED` and the policy is created — the same act, with no state in between
+ * (REQ-240, REQ-251) — and an issued proposal is frozen (REQ-244, REQ-260), so a
+ * half-applied write would leave a record that no operation can fix.
  *
  * The contract says nothing about how atomicity is achieved: the SQLite adapter
  * uses a savepoint, a PostgreSQL adapter would use a transaction, and the

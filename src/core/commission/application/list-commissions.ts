@@ -57,7 +57,7 @@ export class ListCommissions {
       commissions.map(async (commission) => {
         const policy = await this.deps.policies.findById(commission.policyId);
 
-        // REQ-051, REQ-070: a commission without its policy is not a line to
+        // REQ-245: a commission without its policy is not a line to
         // hide from the panel, it is a broken record, and the reading says so.
         if (policy === null) {
           throw new RecordNotFound(POLICY_MESSAGES.NOT_FOUND, { id: commission.policyId });

@@ -4,26 +4,29 @@ Modular monolith em TypeScript. Um comando, um processo, uma porta.
 
 Fonte de verdade dos requisitos: [`docs/requisitos_refinados_v2.md`](./docs/requisitos_refinados_v2.md),
 em construção. A V1, [`docs/requisitos_refinados.md`](./docs/requisitos_refinados.md), é o
-registro do entendimento anterior; onde as duas divergem, vale a V2. Identificadores da
-série `2xx` (`REQ-2xx`, `CA-2xx`, `DEC-2xx`…) no código referenciam a V2; os demais
-(`REQ-0xx`/`REQ-1xx`, `ITP-xxx`, `DEC-0xx`) referenciam a V1.
+registro do entendimento anterior e não orienta decisões novas; onde as duas divergem, vale
+a V2. Identificadores da série `2xx` (`REQ-2xx`, `CA-2xx`, `DEC-2xx`…) no código
+referenciam a V2; os demais (`REQ-0xx`/`REQ-1xx`, `IN-xx`, `OUT-xx`) referenciam a V1 e
+descrevem o que a V2 ainda não revisou — conciliação, notificação, comissão acordada ×
+real e cadastros de referência.
 
 > **Estado atual: `Proposta → Apólice → CR → Comissão elegível` (FP-01 e FP-02 da V2),
 > com a conciliação e a notificação da V1.**
-> `FP-01` vai do registro da proposta (`REQ-040`), passa pela emissão devolvida pela
-> seguradora (`REQ-041`) e pelo rastreio das propostas em
-> aberto (`REQ-043`, `OUT-01`, passo 5) e chega, no momento em que a apólice nasce, ao
-> cálculo da comissão acordada e à **notificação do corretor** (`REQ-048`, `REQ-075`,
-> `REQ-100`, passo 7). `FP-02` concilia o relatório de comissionamento contra as
-> apólices (`REQ-082`, `REQ-083`, `REQ-086`). O `FP-02` da V2 vai da CR informada na
-> apólice à comissão elegível e ao extrato de elegibilidade (`REQ-270`–`REQ-286`); o
-> sistema não paga nem movimenta dinheiro (`REQ-280`).
+> `FP-01` vai do registro da proposta — digitada ou lida do PDF (`REQ-201`–`REQ-219`) —,
+> com a CT, a intermediária e o valor esperado pela Usina (`REQ-212`–`REQ-232`), ao
+> reconhecimento da emissão, que cria a apólice (`REQ-209`, `REQ-240`–`REQ-247`), ou à
+> recusa (`REQ-253`). Quando a apólice nasce, a comissão acordada é calculada pela CT
+> (`REQ-236`) e o corretor é notificado (`REQ-100`, `REQ-228`). O `FP-02` vai da CR
+> informada na apólice à comissão elegível e ao extrato de elegibilidade
+> (`REQ-270`–`REQ-286`), e a CT parcelada segue o seu fluxo próprio (seções 6A e 9B da
+> V2); o sistema não paga nem movimenta dinheiro (`REQ-280`). A conciliação do relatório
+> de comissionamento contra as apólices (`REQ-082`, `REQ-083`, `REQ-086`) segue a V1.
 >
 > O controle das apólices vendidas e das que estão a vencer (`REQ-055`, `OUT-03`,
 > `OUT-04`) é lido da mesma base.
 >
-> **Fora**: cotação, **geração** da renovação (`REQ-056`), endosso, sinistro e
-> cancelamento de apólice. A entrega da notificação é interna (`REQ-102`): o contrato de
+> **Fora**: cotação, renovação, endosso, sinistro (`DEC-206`), cancelamento de apólice e
+> o que vem depois da elegibilidade (`DEC-211`). A entrega da notificação é interna (`REQ-102`): o contrato de
 > canal existe (`REQ-101`, `REQ-103`, `REQ-104`) e nenhum *adapter* externo está ligado.
 > O *parser* do arquivo de comissionamento também não existe —
 > `DEC-001` não definiu o layout; a conciliação recebe linhas já estruturadas. Ver
@@ -94,29 +97,33 @@ curl http://127.0.0.1:3000/health
 Fluxo `FP-01` completo:
 
 ```bash
-# 1. Registrar a proposta (REQ-040)
+# 1. Registrar a proposta com todos os dados de REQ-202 — só as parcelas são
+#    opcionais com CT integral —, a CT e o seu modo (REQ-213) e o recebimento
+#    direto ou através de intermediária (REQ-220). Quem informa assina (REQ-216).
 curl -X POST http://127.0.0.1:3000/proposals -H 'content-type: application/json' -d '{
   "clientId":"client-1","brokerId":"broker-1","insurerId":"insurer-1","productId":"auto",
-  "paymentMethodId":"bank-slip","netPremium":"1200.00"
+  "paymentMethodId":"bank-slip","proposalNumber":"PRP-9001","netPremium":"1200.00",
+  "coverageStart":"2026-10-01","coverageEnd":"2027-10-01",
+  "installments":[{"amount":"600.00","dueDate":"2026-10-10"},{"amount":"600.00"}],
+  "workedCommission":"35","workedCommissionMode":"INTEGRAL","intermediary":null,
+  "userId":"ana"
 }'
-# 201 {"id":"<proposta>","status":"DRAFT","netPremium":"1200.00","registeredAt":"..."}
+# 201 {"id":"<proposta>","status":"AWAITING_ISSUANCE","proposalNumber":"PRP-9001",
+#      "renewalDate":"2027-10-01","expectedReceipt":{"intermediary":null,"usina":"420.00"},...}
 
-# 2. Registrar a emissão pela seguradora: ela devolve o número e a comissão
-#    trabalhada (REQ-041). A Usina não produz esses valores, registra o que veio.
-curl -X POST http://127.0.0.1:3000/proposals/<proposta>/transmission \
+# 2. Enquanto aguarda emissão, a CT pode ser corrigida, com autoria (REQ-214, REQ-215).
+curl -X POST http://127.0.0.1:3000/proposals/<proposta>/worked-commission \
   -H 'content-type: application/json' \
-  -d '{"proposalNumber":"PRP-9001","workedCommission":"32.5"}'
-# 200 {"status":"TRANSMITTED","proposalNumber":"PRP-9001","workedCommission":"32.5",...}
+  -d '{"workedCommission":"40","workedCommissionMode":"INTEGRAL","userId":"bruno"}'
+# 200 {"workedCommission":"40","expectedReceipt":{"intermediary":null,"usina":"480.00"},...}
 
-# 3. Em aberto, rastreável (REQ-043, OUT-01, passo 5)
-curl 'http://127.0.0.1:3000/proposals?status=TRANSMITTED'
-# 200 [{"id":"<proposta>","status":"TRANSMITTED","proposalNumber":"PRP-9001",
-#       "workedCommission":"32.5","netPremium":"1200.00",...}]
+# 3. Em aberto, rastreável (REQ-043, OUT-01)
+curl 'http://127.0.0.1:3000/proposals?status=AWAITING_ISSUANCE'
 #
 # Sem filtro lista todas; `status=REJECTED` é o relatório de recusadas (OUT-02).
 curl http://127.0.0.1:3000/proposals/<proposta>
 
-# 4a. Desfecho recusa: motivo obrigatório (REQ-045)
+# 4a. Desfecho recusa: motivo obrigatório (REQ-253)
 curl -X POST http://127.0.0.1:3000/proposals/<proposta>/rejection \
   -H 'content-type: application/json' -d '{"reason":"perfil de risco"}'
 # 200 {"status":"REJECTED","rejectionReason":"perfil de risco"}
@@ -128,6 +135,7 @@ curl -X POST http://127.0.0.1:3000/policies -H 'content-type: application/json' 
   -d '{"proposalId":"<proposta>","userId":"carla.dias"}'
 # 201 {"id":"<apolice>","policyNumber":"PRP-9001","proposalNumber":"PRP-9001",
 #      "status":"ACTIVE","installments":[{"number":1,...,"status":"PENDING"},...]}
+#     O PDF da apólice pode ir junto ou depois (REQ-247): POST /policies/<apolice>/document
 
 # 5. Consultar: os dois números e o cronograma (REQ-050, REQ-241)
 curl http://127.0.0.1:3000/policies/<apolice>
@@ -155,13 +163,13 @@ curl 'http://127.0.0.1:3000/notifications?recipientId=broker-1'
 #       "client":{"id":"client-1","name":"Ana Lima"},
 #       "broker":{"id":"broker-1","name":"Corretora Alfa"},
 #       "product":{"id":"auto","name":"Automóvel"},
-#       "workedCommission":"32.5","netPremium":"1200.00","occurredAt":"..."}]
+#       "workedCommission":"40","netPremium":"1200.00","occurredAt":"..."}]
 #
-# Os cinco campos de REQ-096/REQ-100 são gravados como foram notificados
-# (REQ-105): corrigir um nome em IN-01 depois não reescreve o que já foi dito.
+# Os cinco campos de REQ-100 são gravados como foram notificados (REQ-105):
+# corrigir um nome em IN-01 depois não reescreve o que já foi dito.
 ```
 
-Fluxo financeiro `FP-02` / `FP-03`:
+Comissão acordada, conciliação e `FP-02`:
 
 ```bash
 # 0a. Cadastros de referência (IN-01): dão nome a quem aparece na operação.
@@ -174,29 +182,13 @@ curl -X POST http://127.0.0.1:3000/references \
 # nenhuma regra confirmada lê uma cobertura.
 curl 'http://127.0.0.1:3000/references?kind=CLIENT'
 
-# 0b. Cadastros do Administrador (IN-02..IN-06), sem os quais não há o que calcular.
-#    Cadeia direta: a seguradora paga 40% do prêmio à Usina (REQ-060, REQ-065).
-curl -X POST http://127.0.0.1:3000/commission-agreements \
-  -H 'content-type: application/json' -d '{
-  "insurerId":"insurer-1","productId":"auto","effectiveFrom":"2026-01-01","insurerRate":"40"
-}'
-# Cadeia com intermediária (REQ-063/REQ-064): base do corretor configurável.
-#   "intermediary":{"intermediaryId":"mega","intermediaryRate":"80","brokerBase":"INTERMEDIARY"}
-
-# Cada cadastro é lido de volta pela mesma forma com que foi gravado. É o que
-# torna REQ-061/REQ-125 utilizáveis: um parâmetro que ninguém consegue conferir
-# só aparece errado na comissão que ele já produziu.
-curl http://127.0.0.1:3000/commission-agreements
-# Registrar a mesma chave de novo substitui o registro; no acordo comercial a
-# chave inclui a vigência, então uma nova vigência é um novo registro e a
-# anterior continua listada (REQ-065, REQ-124, CA-012).
-
-# 1. A comissão acordada nasce junto com a apólice (FP-01 passo 7): nada a chamar.
+# 1. A comissão acordada nasce junto com a apólice, calculada pela CT (ou CT → CTU)
+#    da proposta (REQ-236): nada a chamar.
 curl http://127.0.0.1:3000/policies/<apolice>/commission
 # {"status":"FORECAST","agreedReceivable":"480.00",
 #  "realReceivable":null,"divergent":false,...}
 
-# 2. Conciliação do relatório (FP-02). O arquivo em si é DEC-001: aqui entram
+# 2. Conciliação do relatório (V1). O arquivo em si é DEC-001: aqui entram
 #    linhas já estruturadas.
 curl -X POST http://127.0.0.1:3000/commission-reconciliations \
   -H 'content-type: application/json' -d '{
@@ -208,7 +200,7 @@ curl -X POST http://127.0.0.1:3000/commission-reconciliations \
 curl http://127.0.0.1:3000/commission-reconciliations/pendencies   # OUT-06
 
 #    O painel acordado × real de todas as apólices (OUT-05). Sem filtro é o
-#    painel inteiro; por estado é a lista de trabalho de FP-02 passo 5.
+#    painel inteiro; por estado, a lista do que divergiu.
 curl http://127.0.0.1:3000/commissions
 curl 'http://127.0.0.1:3000/commissions?status=DIVERGENT'
 
@@ -241,8 +233,8 @@ Rejeições, com a regra e o texto traduzido na resposta:
 # Segunda apólice para a mesma proposta (CA-007)
 # 422 {"rule":"REQ-049","message":"Proposta já possui apólice registrada."}
 
-# Apólice a partir de proposta recusada (CA-006)
-# 422 {"rule":"REQ-047","message":"Proposta recusada não origina apólice."}
+# Apólice a partir de proposta recusada (REJ-210)
+# 422 {"rule":"REQ-253","message":"Proposta recusada não origina apólice."}
 
 # Elegibilidade de apólice sem CR (EX-205)
 # 422 {"rule":"REQ-273","message":"A apólice ainda não tem CR informada."}
@@ -278,9 +270,9 @@ O que existe hoje:
 | Tela | Rota | Estado |
 |------|------|--------|
 | Início | `/app/` | Pronta |
-| Nova proposta e emissão pela seguradora (`FP-01` passos 3 e 4) | `/app/proposals/new.html` | Pronta |
-| Propostas, por estado (`OUT-01`, `OUT-02`, passo 5) | `/app/proposals/` | Pronta |
-| Proposta: dados, emissão e desfecho — aceite vira apólice, recusa exige motivo (passo 6) | `/app/proposals/detail.html?id=…` | Pronta |
+| Nova proposta, digitada ou lida do PDF (`FP-01` passos 1–5, `REQ-218`) | `/app/proposals/new.html` | Pronta |
+| Propostas, por estado (`OUT-01`, `OUT-02`) | `/app/proposals/` | Pronta |
+| Proposta: dados, correções e desfecho — o reconhecimento da emissão gera a apólice, a recusa exige motivo (`FP-01` passos 6–9) | `/app/proposals/detail.html?id=…` | Pronta |
 | Apólice: parcelas, comissão acordada × real, CR e elegibilidade (`FP-02`) | `/app/policies/detail.html?id=…` | Pronta |
 | Conciliação do comissionamento (`FP-02`, `OUT-06`) | `/app/reconciliations/` | Pronta — as linhas são digitadas; o arquivo é `DEC-001` |
 | Comissões: acordado × real de todas as apólices (`OUT-05`) | `/app/commissions/` | Pronta |
@@ -289,26 +281,17 @@ O que existe hoje:
 | Apólices: vendidas e a vencer (`OUT-03`, `OUT-04`) | `/app/policies/` | Pronta — o corte por data de renovação é informado pelo operador (`CA-032` não define a janela) |
 | Notificações de emissão efetivada (`OUT-10`, `REQ-100`) | `/app/notifications/` | Pronta — só leitura; a entrega é interna (`REQ-102`) |
 
-O caminho completo pela interface: **nova proposta → registrar a emissão da seguradora →
-a proposta aparece em
-_Propostas / Em aberto_ → abrir → registrar a apólice (ou a recusa) → abrir a apólice**.
-Depois disso a apólice fica encontrável por conta própria, em _Apólices_, e o corretor
-encontra em _Notificações_ o que lhe foi comunicado sobre a emissão (`REQ-100`) — com o
-caminho de volta para a apólice que ele encaminha ao segurado (`FP-01` passo 8).
-`FP-01` separa esses atos no tempo de propósito: a seguradora responde depois, e o
-desfecho é registrado na própria proposta, não no formulário de cadastro.
+O caminho completo pela interface: **nova proposta → a proposta aparece em
+_Propostas_, aguardando emissão → abrir → reconhecer a emissão (ou registrar a recusa) →
+abrir a apólice**. Depois disso a apólice fica encontrável por conta própria, em
+_Apólices_, e o corretor encontra em _Notificações_ o que lhe foi comunicado sobre a
+emissão (`REQ-100`), com o caminho de volta para a apólice. `FP-01` separa esses atos no
+tempo de propósito: a seguradora responde depois, e o desfecho é registrado na própria
+proposta, não no formulário de cadastro.
 
-Comece pelos **cadastros**: sem acordo comercial e tabela do corretor a apólice nasce
-sem comissão, e a tela mostra isso explicitamente em vez de inventar um valor. A tela
-lista o que já está registrado abaixo de cada formulário, então dá para conferir o
-percentual antes de ele virar uma comissão — e ver, pela ausência, qual forma de
-pagamento ainda não tem regra de liberação.
-
-Cadastre também as **referências de `IN-01`** (cliente, corretor, seguradora,
-intermediária, produto/ramo): é o que faz as telas dizerem *Ana Lima* em vez de
-`client-1`. Nenhuma tela exige esse cadastro — sem ele o identificador aparece como
-sempre apareceu —, mas é dele que saem três dos cinco campos que `REQ-096` pede no
-relatório de repasse.
+Cadastre as **referências de `IN-01`** (cliente, corretor, seguradora, intermediária,
+produto/ramo): é o que faz as telas dizerem *Ana Lima* em vez de `client-1`. Nenhuma tela
+exige esse cadastro — sem ele o identificador aparece como sempre apareceu.
 
 **Sem build.** Não há bundler, transpilador nem framework: o que é servido é o que está
 em disco — HTML, CSS e ES modules nativos. Por isso o código de browser é `.js` e não
@@ -380,13 +363,10 @@ src/
 │   ├── policy/              # apólice e suas parcelas
 │   │   ├── domain/
 │   │   └── application/
-│   ├── commission/          # quanto a Usina recebe e quanto paga, acordado e real
+│   ├── commission/          # comissão acordada × real, CR e elegibilidade
 │   │   ├── domain/
 │   │   └── application/
 │   ├── reconciliation/      # casar o informado pelo terceiro com o que o sistema sabe
-│   │   ├── domain/
-│   │   └── application/
-│   ├── settlement/          # repasse ao corretor
 │   │   ├── domain/
 │   │   └── application/
 │   ├── registry/            # IN-01: o nome de cada referência que o negócio guarda
@@ -407,12 +387,8 @@ src/
 ```
 
 Não existem `src/utils/`, `core/shared/`, `core/common/` nem `core/financial/`: nenhum
-requisito atual os justifica. Os três módulos financeiros são três porque são três
-capacidades, com atores e fluxos distintos — `FP-01` passo 7 (`ATR-001`), `FP-02`
-(`ATR-002`) e `FP-03` (`ATR-002`) — e cada uma tem o seu próprio agregado com ciclo de
-vida próprio (seções 10.5 e 10.6). Os cadastros que alimentam o cálculo (acordo
-comercial, cadeia, tabela do corretor) vivem no módulo que os lê, `commission/`; a regra
-de liberação por forma de pagamento vive em `settlement/`, pelo mesmo motivo. Não há um
+requisito atual os justifica. Nenhum percentual vem de cadastro: a CT e a CTU são
+informadas na proposta (`REQ-212`, `REQ-221`) e a CR na apólice (`REQ-270`). Não há um
 módulo de cadastros — `registry/` guarda apenas o **nome** de uma referência (`IN-01`),
 que é uma capacidade de leitura, não um parâmetro de cálculo.
 
@@ -440,10 +416,8 @@ então um ciclo quebra a suíte:
 
 ```
 proposal ◄── policy ◄── commission ◄── reconciliation
-                            ▲
-                            └────────── settlement ──► policy, proposal
 
-registry ──► proposal          ◄── policy, commission, settlement, notification
+registry ──► proposal          ◄── policy, commission, notification
 notification ──► policy, proposal
 ```
 
@@ -451,20 +425,16 @@ Todos leem o vocabulário que o módulo de proposta declara (`Money`, `Percentag
 `BusinessRuleViolation`, `RecordNotFound`) — ele fica lá por ser o módulo do qual todos
 os outros já dependem, e não em `core/shared/`, que nenhum requisito justifica.
 
-Três travessias merecem nota:
+Duas travessias merecem nota:
 
-- **`commission → policy` e não o contrário.** `FP-01` passo 7 manda calcular a comissão
-  acordada assim que a apólice nasce, mas quem declara o contrato é o módulo de apólice
+- **`commission → policy` e não o contrário.** A comissão acordada é calculada assim que a
+  apólice nasce (`REQ-236`), mas quem declara o contrato é o módulo de apólice
   (`AgreedCommissionCalculator`, em `core/policy/application/`) e quem o implementa é o
   de comissão. O `RegisterPolicy` chama uma interface que ele mesmo definiu e nunca
   aprende que comissão existe; o composition root liga os dois. O contrato leva o mínimo:
   id da apólice, id da proposta, prêmio e data do cálculo.
-- **`settlement` não depende de `reconciliation`.** A sequência conceitual
-  `Comissão → Conciliação → Repasse` existe, mas o que o repasse precisa saber é o valor
-  a pagar (`REQ-093`) e se a comissão real foi apurada (`FP-03` passo 1) — ambos estão na
-  comissão. Quem conciliou não interessa.
-- **`notification → policy`, pelo mesmo motivo que a comissão.** A outra metade do passo
-  7 de `FP-01` é avisar o corretor (`REQ-100`), e de novo quem declara o contrato é o
+- **`notification → policy`, pelo mesmo motivo que a comissão.** Quando a apólice nasce, o
+  corretor é avisado (`REQ-100`), e de novo quem declara o contrato é o
   módulo de apólice (`PolicyIssuedNotifier`). É isso que torna `REJ-017` verdadeiro na
   estrutura e não só na intenção: a regra que dispara a notificação não nomeia canal
   nenhum. Os canais ficam atrás de um segundo contrato, `NotificationChannel`
@@ -498,16 +468,14 @@ Vigência, data de renovação e vencimento de parcela são **dias de calendári
 instantes: `CalendarDate` guarda `AAAA-MM-DD` sem fuso, para que um vencimento não mude
 de dia conforme onde o processo roda.
 
-As duas chaves de conciliação de `REQ-082` — número da apólice e número da proposta —
-**identificam um registro só**. Sem isso, uma linha do relatório de `FP-02` casaria com
-qualquer uma das apólices que repetissem o número, e o valor real cairia na apólice
-errada. A recusa fica no caso de uso (que enxerga os outros registros) e a constraint
-`UNIQUE` no schema é a garantia de armazenamento, como já acontece com `REQ-049`.
+O número da proposta — e, portanto, o da apólice — **não é único** (`DEC-207`): quando a
+conciliação encontra um número repetido, vale a apólice registrada primeiro.
 
 Registrar a apólice altera três registros por um único fato de negócio (a proposta vira
-`ACCEPTED`, a apólice nasce e a comissão acordada é calculada — `FP-01` passo 7). Como
-`REQ-111` amarra os dois primeiros e `REQ-112`/`REJ-015` proíbem reabrir proposta, uma
-escrita pela metade deixaria um registro que nenhuma operação conserta. Daí o contrato
+`ISSUED`, a apólice nasce e a comissão acordada é calculada). O reconhecimento da emissão
+e a criação da apólice são o mesmo ato (`REQ-240`) e a proposta emitida fica congelada
+(`REQ-244`), então uma escrita pela metade deixaria um registro que nenhuma operação
+conserta. Daí o contrato
 `Transaction` (`core/policy/application/transaction.ts`): savepoint no SQLite, transação
 no PostgreSQL, execução direta no InMemory.
 
@@ -531,29 +499,23 @@ ganha as colunas novas. Em desenvolvimento, apague `./data/usina.sqlite` e deixe
 | Biome | Lint + format em uma ferramenta, sem cadeia de plugins |
 | Composição manual, sem container de DI | A ligação cabe em uma função legível; um container só acrescentaria indireção |
 | Sem framework de migration | Um `schema.sql` por driver. Migration entra quando houver schema em produção para evoluir |
-| Percentuais e cadeia de comissão como **cadastro**, não como código | `REQ-061`, `REQ-065` e `REQ-125` exigem mudar percentual, cadeia, base e regra de liberação sem deploy. Nenhuma forma de pagamento é nomeada no código |
-| Arredondamento meio para cima, no centavo, ao aplicar percentual | O cálculo inteiro roda em `bigint` (`REQ-120`) e usa a escala informada do percentual (`REQ-121`), mas o resultado precisa cair num centavo. Nenhum requisito define o modo; a regra fica declarada em um só lugar, `Money.applyRate` |
+| Arredondamento pela ABNT NBR 5891, no centavo, ao aplicar percentual | O cálculo inteiro roda em `bigint` (`REQ-120`) e usa a escala informada do percentual (`REQ-121`); o resultado cai no centavo pela ABNT NBR 5891 (`REQ-298`), declarada em um só lugar, `Money.applyRate` |
 | Frontend como MPA sem build, servido pelo próprio monolito | `erasableSyntaxOnly` e "um comando, um processo, zero build" são decisões já tomadas; Next/Vite as reverteria para ganhar ergonomia que cinco telas de back office não pedem. Uma pasta por capacidade, `.html`/`.css`/`.js` por página, ES modules nativos para o que é comum |
 | Design system escrito à mão, no vocabulário do Material | Elevação, grid de 4px, campo *outlined*, chip de estado — o padrão que o operador já conhece, sem arrastar biblioteca de componentes e bundler atrás. `<dialog>` nativo dá foco preso e ESC de graça |
 | `@fastify/static` como segunda dependência de runtime | Servir arquivo à mão traria *path traversal* e content-type para dentro do nosso código |
-| Percentuais **copiados** para o registro da comissão | `REJ-011`: editar o acordo não pode alterar cálculo já feito. Guardar o acordo por referência exigiria reler o cadastro na hora de exibir, e o painel de `REQ-076` deixaria de ser auditável |
+| Percentuais **copiados** para o registro da comissão | A CT e a CTU com que a comissão acordada foi calculada ficam no próprio registro (`REQ-245`), e o painel de `REQ-076` continua auditável sem reler a proposta |
 
 ## Decisões de negócio em aberto
 
-O que os requisitos deixaram pendente e onde isso aparece no código:
+As decisões pendentes da V2 estão na seção 13 de
+[`docs/requisitos_refinados_v2.md`](./docs/requisitos_refinados_v2.md). Fora dela, a
+conciliação ainda depende de uma decisão da V1:
 
 | ID | Pendência | Efeito neste slice |
 |----|-----------|--------------------|
 | `DEC-001` | Layout do arquivo de comissionamento | **Bloqueia o parser.** `POST /commission-reconciliations` recebe linhas já estruturadas; tudo o que `REQ-082`, `REQ-083` e `REQ-086` fazem com uma linha está implementado e testado |
-| `DEC-002` | Regra padrão do Pix | Nenhuma. A regra é cadastro (`REQ-090`); o Pix simplesmente não tem uma registrada, e abrir repasse sem ela é recusado em vez de adivinhado |
-| `DEC-003` / `ITP-005` | Efeito do cancelamento de apólice sobre repasses | `REQ-054`/`REJ-016`/`CA-031` **não** implementados: o cancelamento de apólice em si não está modelado. `DIVERGENTE`/`RESOLVIDO` seguem na união de estados do repasse, sem transição que os alcance |
-| `DEC-008` | Prazo e periodicidade do repasse | Não há janela de apuração nem relatório do período (`REQ-094`). O repasse é aberto por operação explícita do Financeiro e é um por apólice |
-| `DEC-009` | Tributos e retenções sobre o repasse | O valor pago é informado e registrado como veio (`REQ-095`); nada é deduzido |
-| `ITP-006` | Não retroatividade de alteração de acordo | Não virou regra: o que existe é a cópia dos percentuais no registro da comissão, que é o que `REJ-011` (confirmado) pede |
-| `ITP-008` | Confirmação do boleto é manual | Implementada como manual, mas apoiada em `REQ-013` e `IN-13`, que são confirmados |
 
-Também ficaram de fora, por serem outras capacidades e não decisões pendentes: cotação,
-renovação, endosso, sinistro e `RECEBIDA` da comissão (a *baixa* de `REQ-075` — nenhum
-requisito diz quem a registra). Os relatórios/recibo de `REQ-094`/`REQ-096` dependem
-apenas de `DEC-008`: os cinco campos que eles exigem existem desde os cadastros de
-`IN-01`, e são os mesmos que a notificação de `REQ-100` já carrega.
+Também ficaram de fora, por serem outras capacidades e não decisões pendentes: cotação e
+`RECEBIDA` da comissão (a *baixa* de `REQ-075` — nenhum requisito diz quem a registra). O
+relatório de repasse, o recibo e o registro do pagamento (`REQ-094`–`REQ-096` da V1) estão
+suspensos até `DEC-211`.

@@ -4,7 +4,7 @@
  * The minimum the other side needs and nothing else: the policy entity is not
  * shipped across the boundary. `proposalId` travels because the five fields
  * REQ-100 requires — client, broker, worked percentage, net value and ramo —
- * live on the proposal (REQ-022, REQ-041), and the policy number travels
+ * live on the proposal (REQ-201, REQ-202), and the policy number travels
  * because it is what identifies the emission that was effectuated.
  */
 export interface PolicyIssuedEvent {

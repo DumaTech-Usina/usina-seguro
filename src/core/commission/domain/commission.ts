@@ -14,8 +14,7 @@ import { COMMISSION_MESSAGES } from './errors.ts';
  * `RECEIVED` is the "baixa de comissionamento" of the glossary: the moment the
  * Usina recognises the money arrived. No requirement says who records it or
  * when, so no transition reaches it here. It stays in the union because it is
- * part of the documented machine, the same treatment `CANCELLED` gets on the
- * proposal.
+ * part of the documented machine.
  */
 export type CommissionStatus = 'FORECAST' | 'RECONCILED' | 'RECEIVED' | 'DIVERGENT' | 'RESOLVED';
 
@@ -53,7 +52,7 @@ export interface CommissionState {
 
 export interface CommissionData {
   readonly id: string;
-  /** REQ-051, REQ-070, REJ-001, REJ-002: the policy, never the proposal. */
+  /** REQ-245: the policy is the canonical base, never the proposal. */
   readonly policyId: string;
   readonly basis: CommissionBasis;
   readonly agreedReceivable: Money;

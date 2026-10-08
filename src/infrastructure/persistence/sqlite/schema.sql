@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS reference (
 -- Commission of a policy, agreed and real side by side (REQ-075, CA-016).
 CREATE TABLE IF NOT EXISTS commission (
   id                      TEXT PRIMARY KEY,
-  -- REQ-051, REQ-070, REJ-001: the base is the policy, and only one entry per
+  -- REQ-245: the base is the policy, and only one entry per
   -- policy exists, which is also what REQ-086 relies on.
   policy_id               TEXT NOT NULL UNIQUE REFERENCES policy (id),
   status                  TEXT NOT NULL,
@@ -346,8 +346,8 @@ CREATE TABLE IF NOT EXISTS notification (
   product_id         TEXT NOT NULL,
   product_name       TEXT,
   -- Percentage as exact decimal text, with the informed scale (REQ-121).
-  -- Nullable because the proposal only knows it from the transmission on
-  -- (REQ-041); a policy is unreachable before that, so it is always present.
+  -- Nullable in the type only: the CT is mandatory at the registration of the
+  -- proposal (REQ-202), so it is always present.
   worked_commission  TEXT,
   -- REQ-228: with a parcelled CT, the CT of the subsequent installments.
   subsequent_worked_commission  TEXT,

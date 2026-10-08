@@ -10,9 +10,7 @@ import { REGISTRY_MESSAGES } from './errors.ts';
  *
  * - **cobertura**: no confirmed rule reads a coverage anywhere in the system,
  *   so registering one would write rows nothing consumes;
- * - **forma de pagamento**: it is not in IN-01. It already has an identity of
- *   its own through the release rule of IN-06 (REQ-090), and giving it a
- *   second one would be two registries for one concept.
+ * - **forma de pagamento**: it is not in IN-01.
  */
 export type ReferenceKind = 'CLIENT' | 'BROKER' | 'INSURER' | 'INTERMEDIARY' | 'PRODUCT';
 

@@ -16,7 +16,7 @@ export interface CommissionListFilter {
  *
  * The lookup is by policy, not by id: every confirmed operation starts from
  * the policy (REQ-075 keeps the pair per policy, REQ-082 conciliates by policy
- * number, REQ-093 pays the transfer of a policy).
+ * number).
  */
 export interface CommissionRepository {
   save(commission: Commission): Promise<void>;

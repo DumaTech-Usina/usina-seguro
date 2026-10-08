@@ -1,9 +1,8 @@
 import { BusinessRuleViolation, PROPOSAL_MESSAGES } from './errors.ts';
 
 /**
- * Commission percentage (REQ-041: worked commission informed at transmission;
- * REQ-065, REQ-093: the rates of the commercial agreement and of the broker
- * table).
+ * Commission percentage: the CT and the CTU of the proposal (REQ-212,
+ * REQ-221) and the CR of the policy (REQ-270).
  *
  * REQ-121 requires the percentage to be kept with the precision needed to
  * reproduce the apportioned value without a rounding that diverges from what

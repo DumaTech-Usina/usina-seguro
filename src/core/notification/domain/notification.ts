@@ -37,11 +37,11 @@ export interface NotificationParty {
  * the registry says today instead of what the broker was told. It is the same
  * reason `CommissionBasis` copies the rates it calculated with (REJ-011).
  *
- * `workedCommission` is nullable only because the proposal types it that way
- * (REQ-041: it is known from the transmission on). A policy is only reachable
- * from a transmitted proposal (REQ-111), so in practice it is always present;
- * refusing the notification over it would invent a rule REQ-100 does not
- * state, and would do so inside the registration of a policy that did happen.
+ * `workedCommission` is nullable only because the type allows it. The CT is
+ * mandatory at the registration of the proposal (REQ-202), so in practice it
+ * is always present; refusing the notification over it would invent a rule
+ * REQ-100 does not state, and would do so inside the registration of a policy
+ * that did happen.
  */
 export interface NotificationContent {
   readonly client: NotificationParty;
@@ -49,8 +49,8 @@ export interface NotificationContent {
   /** REQ-022 names the field "produto/ramo": the product's name is the ramo. */
   readonly product: NotificationParty;
   /**
-   * REQ-041: the percentage informed in the act of transmission. With a
-   * parcelled CT, the CT of the first installment (REQ-228).
+   * The CT of the proposal (REQ-212). With a parcelled CT, the CT of the
+   * first installment (REQ-228).
    */
   readonly workedCommission: Percentage | null;
   /** REQ-228: with a parcelled CT, the CT of the subsequent installments too. */

@@ -380,7 +380,7 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
 
   it('notifies the broker with the five fields when the issuance is recognised (CA-029)', async () => {
     // IN-01 gives the three references a name; the other two fields are the
-    // worked percentage of REQ-041 and the net premium of REQ-022.
+    // worked percentage of REQ-212 and the net premium of REQ-202.
     for (const reference of [
       { kind: 'CLIENT', id: 'client-notified', name: 'Maria Souza' },
       { kind: 'BROKER', id: 'broker-notified', name: 'Corretora Alfa' },

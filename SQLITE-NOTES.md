@@ -19,10 +19,9 @@ no adapter correspondente — não em uma camada genérica.
 | Concorrência | Um escritor por vez; lock no banco inteiro | MVCC, lock por linha | **Ainda não exercitado.** Nenhum requisito atual depende de escrita concorrente |
 | Transação / isolamento | Sem `SERIALIZABLE` real por transação | Níveis de isolamento configuráveis | Atomicidade **exercitada**: `SqliteTransaction` usa `SAVEPOINT` (aninhável, ao contrário de `BEGIN`) e há teste de rollback. Níveis de isolamento continuam não exercitados — ver abaixo |
 | Data de calendário | Não existe tipo nativo | `date` | `AAAA-MM-DD` em `TEXT`; `CalendarDate` no domínio evita fuso |
-| Vigência do acordo comercial | Ordenação de `TEXT` | Ordenação de `date` | `effective_from <= ? ORDER BY ... DESC LIMIT 1`. ISO-8601 ordena lexicograficamente igual a cronologicamente, então a mesma expressão vale nos dois (`REQ-065`) |
-| Lista de propostas | Ordenação de `TEXT` | Ordenação de `timestamptz` | `ORDER BY registered_at DESC, id DESC`. Mesmo argumento da vigência: o instante é ISO-8601 UTC, então a ordem lexicográfica é a cronológica (`REQ-043`, `OUT-01`). O `id` é desempate para que a lista não se reordene entre duas leituras |
+| Lista de propostas | Ordenação de `TEXT` | Ordenação de `timestamptz` | `ORDER BY registered_at DESC, id DESC`. O instante é ISO-8601 UTC, e ISO-8601 ordena lexicograficamente igual a cronologicamente, então a mesma expressão vale nos dois (`REQ-043`, `OUT-01`). O `id` é desempate para que a lista não se reordene entre duas leituras |
 | Percentual de comissão | Mesmo problema de `REAL` | `NUMERIC` | `TEXT` com a escala informada (`REQ-121`). A aritmética não acontece no banco: `Money.applyRate` opera em `bigint` no domínio |
-| Listagem de cadastro (`IN-01`, `IN-02`, `IN-05`, `IN-06`) | `ORDER BY` de `TEXT` usa a collation `BINARY` (ordem de bytes) | `ORDER BY` de `text` usa a collation do banco/coluna, dependente de locale | As listagens ordenam por identificador de negócio (`insurer_id`, `broker_id`, `payment_method_id`) e, no caso de `reference`, pelo **nome** (`ORDER BY kind, name, id`), que é o que um humano procura. O adapter InMemory compara por unidade de código (`a < b`) em vez de `localeCompare`, para responder a mesma ordem que o SQLite — há teste de integração que compara as duas implementações sob a mesma carga. **Em PostgreSQL a ordem pode diferir** com identificador acentuado ou de caixa mista: quando o adapter existir, ou a coluna recebe `COLLATE "C"`, ou a ordem passa a ser explicitamente a do locale e o InMemory acompanha |
+| Listagem de cadastro (`IN-01`) | `ORDER BY` de `TEXT` usa a collation `BINARY` (ordem de bytes) | `ORDER BY` de `text` usa a collation do banco/coluna, dependente de locale | A listagem de `reference` ordena pelo **nome** (`ORDER BY kind, name, id`), que é o que um humano procura. O adapter InMemory compara por unidade de código (`a < b`) em vez de `localeCompare`, para responder a mesma ordem que o SQLite — há teste de integração que compara as duas implementações sob a mesma carga. **Em PostgreSQL a ordem pode diferir** com identificador acentuado ou de caixa mista: quando o adapter existir, ou a coluna recebe `COLLATE "C"`, ou a ordem passa a ser explicitamente a do locale e o InMemory acompanha |
 | Lista de notificações (`OUT-10`) | Ordenação de `TEXT` | Ordenação de `timestamptz` | `ORDER BY occurred_at DESC, id`. Mesmo argumento da lista de propostas: o instante é ISO-8601 UTC, então a ordem lexicográfica é a cronológica (`REQ-105`). O `id` é o desempate entre duas notificações produzidas no mesmo milissegundo, e o adapter InMemory aplica exatamente o mesmo critério |
 | Documento anexo (`REQ-219`) | `BLOB` na mesma tabela, sem limite prático além do tamanho do arquivo do banco | `bytea` (ou *large object* acima de ~1 GB) | A tabela `document` guarda os bytes em `BLOB` e a `proposal` guarda só a identidade do anexo. `node:sqlite` aceita e devolve `Uint8Array`, então o adapter não converte nada; o teste de integração confere `typeof(content) = 'blob'`, pelo mesmo motivo que os valores monetários conferem `'text'` — em coluna de texto, qualquer byte fora do ASCII voltaria alterado. **Em PostgreSQL** a coluna vira `bytea` e o driver troca `Uint8Array` por `Buffer`; nada no núcleo muda, porque o contrato `SourceDocumentStorage` fala em `Uint8Array` |
 | Enum | Não existe | `enum` / `CHECK` | `CHECK (... IN (...))` explícito em modo da CT, estado da comissão de repasse e evento de notificação |
@@ -32,7 +31,7 @@ no adapter correspondente — não em uma camada genérica.
 Concorrência e **níveis de isolamento** continuam não cobertos porque nenhum requisito
 implementado até aqui escreve de forma concorrente. O que está coberto é a atomicidade
 de uma unidade de trabalho: registrar a apólice grava proposta, apólice e comissão
-acordada juntas (`REQ-111`, `FP-01` passo 7) e a importação do relatório aplica o
+acordada juntas (`REQ-240`) e a importação do relatório aplica o
 arquivo inteiro ou nada — em ambos os casos o savepoint garante que uma falha no meio
 não deixe metade escrita, e há teste de rollback para os dois.
 
@@ -44,12 +43,9 @@ comportamento de negócio. Ainda assim, **essa constraint precisa ser validada e
 PostgreSQL** quando o adapter existir: é a diferença entre um domínio correto e um
 domínio correto *sob concorrência*, que é justamente o que não foi exercitado.
 
-O mesmo vale para as outras unicidades que o caso de uso decide e o schema garante:
-`policy.policy_number` e `proposal.proposal_number` (as chaves de `REQ-082`) e
-`reconciliation_pendency (competence, proposal_number)` (`CA-021`). Nos dois bancos um
-`UNIQUE` sobre coluna anulável trata `NULL`s como distintos, então uma proposta ainda em
-`DRAFT`, sem número, não colide com outra — mas isso também precisa ser conferido no
-adapter PostgreSQL.
+O mesmo vale para a outra unicidade que o caso de uso decide e o schema garante:
+`reconciliation_pendency (competence, proposal_number)` (`CA-021`). O número da proposta
+e o da apólice **não** são únicos (`DEC-207`), e o schema não os restringe.
 
 ## `node:sqlite`
 

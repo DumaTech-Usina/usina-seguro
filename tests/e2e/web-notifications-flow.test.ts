@@ -16,8 +16,8 @@ import { createHttpServer } from '../../src/interfaces/http/server.ts';
  *
  * That is the whole point of this file. The notification is not something a
  * user sends — there is no route that creates one — so the only honest way to
- * prove OUT-10 is to walk the journey that produces it: proposal, transmission,
- * policy, and then the screen where the broker reads what he was told.
+ * prove OUT-10 is to walk the journey that produces it: proposal, recognition
+ * of the issuance (REQ-209), policy, and then the screen where the broker reads what he was told.
  *
  * Nothing here is a mock. The server is the real one, listening on an ephemeral
  * port over SQLite on disk, and the modules under test are the same files the
@@ -182,7 +182,7 @@ interface Emission {
 
 /**
  * FP-01 as the operator walks it, up to the act that produces the
- * notification: register, transmit, register the policy.
+ * notification: register the proposal, recognise the issuance.
  */
 async function issuePolicy(
   proposalNumber: string,

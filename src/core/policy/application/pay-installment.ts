@@ -22,13 +22,12 @@ export interface PayInstallmentDependencies {
 }
 
 /**
- * IN-13, REQ-092, FP-03 step 3: a user of the Usina confirms the client paid
- * an installment. REQ-123 requires the record to say who did it and when.
+ * REQ-269: on a policy with integral CT, a user of the Usina confirms the
+ * client paid an installment. REQ-123 requires the record to say who did it
+ * and when.
  *
  * It lives in the policy module because the schedule belongs to the policy
- * (REQ-020). The settlement module reads the outcome through the policy
- * repository; nothing here knows a transfer exists, which keeps the direction
- * `settlement -> policy`.
+ * (REQ-241).
  */
 export class PayInstallment {
   private readonly deps: PayInstallmentDependencies;

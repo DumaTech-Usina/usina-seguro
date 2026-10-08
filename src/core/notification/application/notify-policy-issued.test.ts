@@ -111,7 +111,7 @@ describe('NotifyPolicyIssued', () => {
       broker: { id: 'broker-1', name: 'Corretora Alfa' },
       product: { id: 'auto', name: 'Automovel' },
     });
-    // REQ-041 and REQ-022: the worked percentage and the net value.
+    // REQ-212 and REQ-202: the worked percentage and the net value.
     expect(recorded?.content.workedCommission?.toString()).toBe('32.5');
     expect(recorded?.content.netPremium.toString()).toBe('1200.00');
   });
