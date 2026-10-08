@@ -3,9 +3,7 @@
  * commission of FP-02 — the CR, its recalculation and the eligibility.
  *
  * Where FP-01 lands. The agreed commission shown here is the one calculated
- * when the policy was registered; the real one appears once a commission
- * report is conciliated, and the two sit side by side with the divergence
- * flagged.
+ * when the policy was registered (REQ-236).
  *
  * The page renders state and offers actions. Which action is admissible is the
  * domain's answer: a button that the domain refuses shows the refusal, it does
@@ -439,25 +437,12 @@ function commissionCard(policy, commission, parcelled) {
     (() => {
       const actions = element('div', 'card__header-actions');
       actions.append(statusChip('commission', commission.status));
-      if (commission.divergent) {
-        const flag = element('span', 'chip chip--danger', 'Acordado ≠ real');
-        actions.append(flag);
-      }
       return actions;
     })(),
   );
 
-  // The agreed and the real value side by side, which is the whole point of
-  // the panel; the divergence is signalled and blocks nothing.
   const comparison = element('div', 'comparison');
-  comparison.append(
-    metric('Acordado a receber', formatMoney(commission.effectiveReceivable)),
-    metric(
-      'Real a receber',
-      commission.realReceivable === null ? 'Não apurado' : formatMoney(commission.realReceivable),
-      commission.divergent,
-    ),
-  );
+  comparison.append(metric('Acordado a receber', formatMoney(commission.effectiveReceivable)));
   body.append(comparison);
 
   const basis = element('div', 'definitions');
@@ -465,7 +450,6 @@ function commissionCard(policy, commission, parcelled) {
     definition('Prêmio base', formatMoney(commission.basis.premium)),
     definition('% seguradora', formatPercentage(commission.basis.insurerRate)),
     definition('Valor da seguradora', formatMoney(commission.basis.insurerAmount)),
-    definition('Competência', commission.reconciledCompetence ?? '—'),
   );
   body.append(basis);
 
@@ -480,30 +464,10 @@ function commissionCard(policy, commission, parcelled) {
     );
   }
 
-  if (commission.resolution !== null) {
-    body.append(
-      auditNote(
-        'resolved',
-        'Divergência resolvida',
-        commission.resolution.justification,
-        commission.resolution,
-      ),
-    );
-  }
-
   const footer = element('div', 'card__footer');
   footer.append(
     button('Ajustar comissão', { iconName: 'tune', onClick: () => overrideCommission(policy) }),
   );
-  if (commission.status === 'DIVERGENT') {
-    footer.append(
-      button('Resolver divergência', {
-        variant: 'filled',
-        iconName: 'fact_check',
-        onClick: () => resolveDivergence(policy),
-      }),
-    );
-  }
 
   section.append(body, footer);
   return section;
@@ -517,7 +481,7 @@ function auditNote(kind, title, justification, record) {
     element('span', undefined, justification),
     element('span', 'text-muted', `${record.userId} · ${formatInstant(record.at)}`),
   );
-  note.append(icon(kind === 'resolved' ? 'fact_check' : 'tune'), body);
+  note.append(icon('tune'), body);
   return note;
 }
 
@@ -536,15 +500,6 @@ async function overrideCommission(policy) {
       }),
     'Ajuste aplicado.',
   );
-}
-
-async function resolveDivergence(policy) {
-  const answer = await ask('#dialog-resolution');
-  if (answer === null) {
-    return;
-  }
-
-  await perform(() => api.resolveDivergence(policy.id, answer), 'Resolução registrada.');
 }
 
 /* ------------------------------------------------------------- payout -- */

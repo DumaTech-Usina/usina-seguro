@@ -89,7 +89,7 @@ export function toPolicyView(policy: Policy, proposal: Proposal): PolicyView {
  * REQ-022 keeps.
  *
  * Each reference travels twice: as the identifier that is stored, which is
- * what the conciliation and every other record match on, and as the name IN-01
+ * what every other record matches on, and as the name IN-01
  * registered for it. The name is `null` when nobody registered one — nothing
  * refuses a business for that (REQ-002), so the absence is information for
  * whoever renders the line, not an error.

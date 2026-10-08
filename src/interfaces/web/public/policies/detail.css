@@ -34,10 +34,6 @@
   border-radius: 0 var(--radius-md) var(--radius-md) 0;
 }
 
-.audit-note--resolved {
-  border-left-color: var(--info);
-}
-
 .audit-note--override {
   border-left-color: var(--primary);
 }

@@ -24,27 +24,20 @@
           <div class="page-head__text">
             <h1 class="text-display">Comissões</h1>
             <p class="text-muted">
-              OUT-05: a comissão acordada e a comissão real de cada apólice, lado a lado,
-              com a divergência sinalizada. É daqui que o Financeiro encontra o que
-              precisa ser tratado depois da conciliação.
+              OUT-05: a comissão acordada de cada apólice, calculada pela CT da proposta,
+              com o ajuste quando houver.
             </p>
-          </div>
-          <div class="page-head__actions">
-            <a class="btn btn--outlined" href="/app/reconciliations/">
-              <span class="material-symbols-outlined">sync_alt</span>
-              Conciliação
-            </a>
           </div>
         </div>
 
-        <!-- Filtro por estado. Os estados são os da seção 10.5; o rótulo vem
-             de shared/status.js, que é o único vocabulário de domínio da tela. -->
+        <!-- Filtro por estado. O rótulo vem de shared/status.js, que é o único
+             vocabulário de domínio da tela. -->
         <div class="filters" id="filters" role="tablist" aria-label="Estado da comissão"></div>
 
         <section class="card">
           <div class="card__header">
             <span class="material-symbols-outlined">percent</span>
-            <h2 class="text-title">Acordado × real</h2>
+            <h2 class="text-title">Comissão acordada</h2>
             <div class="card__header-actions" id="summary"></div>
           </div>
           <div class="card__body card__body--flush" id="list">

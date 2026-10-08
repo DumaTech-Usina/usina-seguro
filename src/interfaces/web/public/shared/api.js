@@ -134,24 +134,15 @@ export const api = {
       body: { userId },
     }),
 
-  // FP-01 step 7 and the agreed-versus-real panel of REQ-076.
+  // REQ-236: the agreed commission of a policy.
   getCommission: (policyId) => request(`/policies/${encodeURIComponent(policyId)}/commission`),
-  /**
-   * OUT-05: the same comparison over every policy. `status` narrows it to one
-   * state of section 10.5 — `DIVERGENT` is the worklist of FP-02 step 5 — and
-   * nothing asks for the whole panel.
-   */
+  /** OUT-05: the agreed commission of every policy, optionally by state. */
   listCommissions: (status) =>
     request(
       status === undefined ? '/commissions' : `/commissions?status=${encodeURIComponent(status)}`,
     ),
   overrideCommission: (policyId, input) =>
     request(`/policies/${encodeURIComponent(policyId)}/commission/override`, {
-      method: 'POST',
-      body: input,
-    }),
-  resolveDivergence: (policyId, input) =>
-    request(`/policies/${encodeURIComponent(policyId)}/commission/divergence-resolution`, {
       method: 'POST',
       body: input,
     }),
@@ -213,17 +204,6 @@ export const api = {
     }),
   /** REQ-268: every policy with parcelled CT, with its situation. */
   listParcelledPolicies: () => request('/payouts/parcelled-policies'),
-
-  // FP-02 — the commission report the Financeiro imports.
-  //
-  // The endpoint takes lines already structured, not a file: the layout is
-  // DEC-001 and REQ-080..REQ-083 are not implementable without a real sample.
-  // Every confirmed rule over a line — the key of REQ-082, the pendency of
-  // REQ-083, the refusal to duplicate of REQ-086 — runs on what is sent here.
-  reconcileCommissionReport: (input) =>
-    request('/commission-reconciliations', { method: 'POST', body: input }),
-  /** OUT-06: the lines with no matching policy, waiting for a human. */
-  listReconciliationPendencies: () => request('/commission-reconciliations/pendencies'),
 
   /**
    * OUT-10, REQ-102, REQ-105: the notifications of effectuated emission —

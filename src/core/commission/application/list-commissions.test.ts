@@ -28,8 +28,6 @@ function basis(premium: string) {
 interface BusinessOptions {
   readonly suffix: string;
   readonly calculatedAt: string;
-  /** Absent means the report never reached this policy (REQ-075). */
-  readonly reported?: string;
 }
 
 async function business(
@@ -40,7 +38,7 @@ async function business(
   },
   options: BusinessOptions,
 ): Promise<void> {
-  const { suffix, calculatedAt, reported } = options;
+  const { suffix, calculatedAt } = options;
 
   await repositories.proposals.save(
     Proposal.register({
@@ -85,25 +83,18 @@ async function business(
     }),
   );
 
-  const forecast = Commission.forecast({
-    id: `commission-${suffix}`,
-    policyId: `policy-${suffix}`,
-    basis: basis('100.00'),
-    agreedReceivable: Money.fromString('40.00'),
-    calculatedAt: new Date(calculatedAt),
-  });
-
   await repositories.commissions.save(
-    reported === undefined
-      ? forecast
-      : forecast.reconcile('2026-10', Money.fromString(reported), new Date('2026-11-01T10:00:00Z')),
+    Commission.forecast({
+      id: `commission-${suffix}`,
+      policyId: `policy-${suffix}`,
+      basis: basis('100.00'),
+      agreedReceivable: Money.fromString('40.00'),
+      calculatedAt: new Date(calculatedAt),
+    }),
   );
 }
 
-/**
- * Three businesses in the state FP-02 leaves them in: one never reported, one
- * reported exactly as agreed, one reported short.
- */
+/** Three businesses, each with its agreed commission. */
 async function scenario() {
   const repositories = {
     proposals: new InMemoryProposalRepository(),
@@ -114,86 +105,36 @@ async function scenario() {
   };
 
   await business(repositories, { suffix: 'FORE', calculatedAt: '2026-09-15T12:00:00.000Z' });
-  await business(repositories, {
-    suffix: 'CONC',
-    calculatedAt: '2026-09-16T12:00:00.000Z',
-    reported: '40.00',
-  });
-  await business(repositories, {
-    suffix: 'DIV',
-    calculatedAt: '2026-09-18T12:00:00.000Z',
-    reported: '31.00',
-  });
+  await business(repositories, { suffix: 'CONC', calculatedAt: '2026-09-16T12:00:00.000Z' });
+  await business(repositories, { suffix: 'DIV', calculatedAt: '2026-09-18T12:00:00.000Z' });
 
   return { ...repositories, useCase: new ListCommissions(repositories) };
 }
 
 describe('ListCommissions', () => {
-  it('shows agreed and real side by side for every policy (OUT-05, CA-016)', async () => {
+  it('shows the agreed commission of every policy, newest calculation first (OUT-05)', async () => {
     const { useCase } = await scenario();
 
     const panel = await useCase.execute();
 
     // Newest calculation first, so the last business worked on leads.
     expect(panel.map((line) => line.policyNumber)).toEqual(['APL-DIV', 'APL-CONC', 'APL-FORE']);
-
-    const [divergent, reconciled, forecast] = panel;
-    expect(divergent?.effectiveReceivable).toBe('40.00');
-    expect(divergent?.realReceivable).toBe('31.00');
-    expect(divergent?.reconciledCompetence).toBe('2026-10');
-    expect(reconciled?.realReceivable).toBe('40.00');
-    // REQ-075: nothing was apurado for this one yet.
-    expect(forecast?.realReceivable).toBeNull();
-    expect(forecast?.reconciledCompetence).toBeNull();
+    expect(panel.map((line) => line.effectiveReceivable)).toEqual(['40.00', '40.00', '40.00']);
   });
 
-  it('flags the policies where agreed and real disagree (REQ-076, CA-017)', async () => {
+  it('lists the commissions of the state asked for', async () => {
     const { useCase } = await scenario();
 
-    const panel = await useCase.execute();
+    const forecast = await useCase.execute({ status: 'FORECAST' });
 
-    expect(panel.map((line) => line.divergent)).toEqual([true, false, false]);
-    // REQ-077: the divergent one is listed like any other, not held back.
-    expect(panel).toHaveLength(3);
-  });
-
-  it('lists only the divergences when asked for them (FP-02 step 5)', async () => {
-    const { useCase } = await scenario();
-
-    const divergent = await useCase.execute({ status: 'DIVERGENT' });
-
-    expect(divergent).toHaveLength(1);
-    expect(divergent[0]?.policyNumber).toBe('APL-DIV');
-    expect(divergent[0]?.status).toBe('DIVERGENT');
-  });
-
-  it('drops a divergence out of the worklist once a human closes it (REQ-085)', async () => {
-    const { commissions, useCase } = await scenario();
-    const divergent = await commissions.findByPolicyId('policy-DIV');
-
-    await commissions.save(
-      (divergent as Commission).resolveDivergence({
-        justification: 'seguradora confirmou o valor menor',
-        userId: 'financeiro-1',
-        at: new Date('2026-11-02T10:00:00.000Z'),
-      }),
-    );
-
-    await expect(useCase.execute({ status: 'DIVERGENT' })).resolves.toEqual([]);
-
-    // REQ-124, REJ-014: it left the worklist, not the panel, and the values
-    // that disagreed are still there.
-    const [resolved] = await useCase.execute({ status: 'RESOLVED' });
-    expect(resolved?.policyNumber).toBe('APL-DIV');
-    expect(resolved?.effectiveReceivable).toBe('40.00');
-    expect(resolved?.realReceivable).toBe('31.00');
-    expect(resolved?.divergent).toBe(true);
+    expect(forecast).toHaveLength(3);
+    expect(forecast.every((line) => line.status === 'FORECAST')).toBe(true);
   });
 
   it('identifies each line by the records that hold a readable reference', async () => {
     const { useCase } = await scenario();
 
-    const [line] = await useCase.execute({ status: 'DIVERGENT' });
+    const [line] = await useCase.execute();
 
     // REQ-050: both numbers; REQ-022: who the business is for. The registries
     // of IN-01 are not modelled, so the references travel as stored.
@@ -202,12 +143,6 @@ describe('ListCommissions', () => {
     expect(line?.clientId).toBe('client-DIV');
     expect(line?.insurerId).toBe('insurer-1');
     expect(line?.productId).toBe('auto');
-  });
-
-  it('answers an empty panel rather than failing when nothing matches', async () => {
-    const { useCase } = await scenario();
-
-    await expect(useCase.execute({ status: 'RECEIVED' })).resolves.toEqual([]);
   });
 
   it('refuses to answer a commission whose policy is gone', async () => {
@@ -251,13 +186,13 @@ describe('ListCommissions', () => {
       Reference.register({ kind: 'PRODUCT', id: 'auto', name: 'Automovel', registeredAt: at }),
     );
 
-    const [line] = await useCase.execute({ status: 'DIVERGENT' });
+    const [line] = await useCase.execute();
 
     expect(line?.clientName).toBe('Ana Lima');
     expect(line?.insurerName).toBe('Seguradora Norte');
     expect(line?.productName).toBe('Automovel');
-    // The identifier stays beside the name: it is what the conciliation of
-    // REQ-082 and every other record are matched on.
+    // The identifier stays beside the name: it is what every record is
+    // matched on.
     expect(line?.clientId).toBe('client-DIV');
   });
 
@@ -266,10 +201,8 @@ describe('ListCommissions', () => {
 
     const panel = await useCase.execute();
 
-    // REQ-002, REQ-077: an empty registry costs the panel its names, never a
-    // line and never the divergence it is there to show.
+    // REQ-002: an empty registry costs the panel its names, never a line.
     expect(panel).toHaveLength(3);
     expect(panel.every((line) => line.clientName === null)).toBe(true);
-    expect(panel.some((line) => line.divergent)).toBe(true);
   });
 });

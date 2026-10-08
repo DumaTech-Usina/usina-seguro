@@ -1,17 +1,9 @@
 /**
- * OUT-05: o painel acordado × real de todas as apólices.
+ * OUT-05: a comissão acordada de todas as apólices (REQ-236).
  *
- * The comparison itself is the one the policy screen already shows (REQ-076,
- * CA-016); here it is read as a list, which is what makes a divergence
- * findable after the import that produced it. FP-02 step 5 is manual work on
- * a worklist, and without this page the worklist only existed while the
- * import result was on screen.
- *
- * The page reads and filters; it decides nothing. Whether a commission
- * diverges is the backend's answer (`divergent`), never a subtraction done
- * here, and changing the filter is a new reading, not a slice of the previous
- * one. The line ends on the policy, where REQ-085 records who closed the
- * divergence and why.
+ * The page reads and filters; it decides nothing. Changing the filter is a new
+ * reading, not a slice of the previous one. The line ends on the policy, where
+ * the override of REQ-066 is recorded.
  */
 
 import { ApiError, api } from '/app/shared/api.js';
@@ -24,19 +16,10 @@ const list = document.querySelector('#list');
 const filters = document.querySelector('#filters');
 const summary = document.querySelector('#summary');
 
-/**
- * The tabs. `status: undefined` asks for every commission.
- *
- * `RECEBIDA` of section 10.5 has no tab because no operation reaches that
- * state: no requirement says who records the baixa de comissionamento, so a
- * tab for it would always be empty.
- */
+/** The tabs. `status: undefined` asks for every commission. */
 const TABS = [
   { id: 'all', label: 'Todas', status: undefined },
-  { id: 'divergent', label: 'Divergentes', status: 'DIVERGENT' },
   { id: 'forecast', label: 'Previstas', status: 'FORECAST' },
-  { id: 'reconciled', label: 'Conciliadas', status: 'RECONCILED' },
-  { id: 'resolved', label: 'Resolvidas', status: 'RESOLVED' },
 ];
 
 function element(tag, className, text) {
@@ -103,28 +86,13 @@ function row(commission) {
   }
   line.append(agreed);
 
-  const real = element(
-    'td',
-    // REQ-075: null is not zero — it is a report that never matched this policy.
-    commission.realReceivable === null
-      ? 'is-numeric not-apurado'
-      : `is-numeric${commission.divergent ? ' is-divergent' : ''}`,
-    commission.realReceivable === null ? 'Não apurado' : formatMoney(commission.realReceivable),
-  );
-  line.append(real);
-
-  line.append(element('td', undefined, commission.reconciledCompetence ?? '—'));
-
   const status = element('td');
   status.append(statusChip('commission', commission.status));
-  if (commission.divergent) {
-    status.append(element('div', 'chip chip--danger', 'Acordado ≠ real'));
-  }
   line.append(status);
 
   const action = element('td', 'is-action');
-  // Where the line lands next: the policy is where the override of REQ-066 and
-  // the resolution of REQ-085 are recorded, and where the transfer is opened.
+  // Where the line lands next: the policy is where the override of REQ-066 is
+  // recorded.
   const open = element('a', 'btn btn--sm btn--outlined', 'Abrir apólice');
   open.href = `/app/policies/detail.html?id=${encodeURIComponent(commission.policyId)}`;
   action.append(open);
@@ -141,8 +109,6 @@ function table(commissions) {
   for (const [label, className] of [
     ['Apólice', ''],
     ['Acordado a receber', 'is-numeric'],
-    ['Real a receber', 'is-numeric'],
-    ['Competência', ''],
     ['Situação', ''],
     ['', 'is-action'],
   ]) {
@@ -192,16 +158,9 @@ function loading() {
   list.replaceChildren(skeletons);
 }
 
-/** How many lines are on screen, and how many of them diverge (REQ-076). */
+/** How many lines are on screen. */
 function renderSummary(commissions) {
-  const divergent = commissions.filter((commission) => commission.divergent).length;
-  const chips = [element('span', 'chip', `${commissions.length} apólices`)];
-
-  if (divergent > 0) {
-    chips.push(element('span', 'chip chip--danger', `${divergent} com divergência`));
-  }
-
-  summary.replaceChildren(...chips);
+  summary.replaceChildren(element('span', 'chip', `${commissions.length} apólices`));
 }
 
 async function load() {
@@ -229,13 +188,9 @@ async function load() {
   if (commissions.length === 0) {
     list.replaceChildren(
       emptyState(
-        current.status === 'DIVERGENT' ? 'task_alt' : 'inbox',
-        current.status === 'DIVERGENT'
-          ? 'Nenhuma divergência a tratar'
-          : 'Nenhuma comissão neste estado',
-        current.status === 'DIVERGENT'
-          ? 'Toda comissão apurada até aqui bate com o valor previsto.'
-          : 'Troque o filtro ou concilie um relatório de comissionamento.',
+        'inbox',
+        'Nenhuma comissão neste estado',
+        'A comissão acordada nasce quando a emissão da proposta é reconhecida.',
       ),
     );
     return;

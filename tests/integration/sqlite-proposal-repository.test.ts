@@ -270,12 +270,12 @@ describe('SqliteProposalRepository', () => {
     expect((await repository.findById('proposal-1'))?.workedCommission.toString()).toBe('32.5');
   });
 
-  it('accepts two proposals with the same number (DEC-207); the first registered answers', async () => {
+  it('accepts two proposals with the same number (DEC-207)', async () => {
     await repository.save(proposal('later', '2026-09-23T12:00:00.000Z', 'PRP-SAME'));
     await repository.save(proposal('earlier', '2026-09-21T12:00:00.000Z', 'PRP-SAME'));
 
-    expect((await repository.findByProposalNumber('PRP-SAME'))?.id).toBe('earlier');
-    expect(await repository.findByProposalNumber('PRP-GHOST')).toBeNull();
+    expect((await repository.findById('later'))?.proposalNumber).toBe('PRP-SAME');
+    expect((await repository.findById('earlier'))?.proposalNumber).toBe('PRP-SAME');
   });
 
   it('lists newest first, filtered by state when asked', async () => {

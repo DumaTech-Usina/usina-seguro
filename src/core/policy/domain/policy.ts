@@ -6,19 +6,10 @@ import { POLICY_MESSAGES } from './errors.ts';
 import type { Installment, InstallmentPaymentConfirmation } from './installment.ts';
 
 /**
- * Documented policy states (section 10.3).
- *
- * ```
- * ACTIVE ──► RENEWED    (generates a new linked policy, REQ-056)
- *        ├─► CANCELLED  (final, REQ-053, REQ-113)
- *        └─► EXPIRED    (coverage ended without renewal)
- * ```
- *
- * Only `ACTIVE` is reachable here: renewal, cancellation and expiry are
- * separate operations (REQ-053..REQ-056) that this slice does not cover.
- * `SUSPENDED` is deliberately absent — DEC-012.
+ * State of a policy. `ACTIVE` is the only reachable one: renewal, endorsement
+ * and claims are out of scope (DEC-206).
  */
-export type PolicyStatus = 'ACTIVE' | 'RENEWED' | 'CANCELLED' | 'EXPIRED';
+export type PolicyStatus = 'ACTIVE';
 
 /**
  * REQ-247: the PDF of the policy. The bytes live in a document store; the
@@ -133,9 +124,7 @@ export class Policy {
       }
     });
 
-    // Stored trimmed because REQ-082 makes this the conciliation key: a report
-    // line is matched against it after the same trim, so a stray space here
-    // would make the policy unreachable.
+    // Stored trimmed, like the number of the proposal it inherits (REQ-241).
     return new Policy({ ...data, policyNumber: data.policyNumber.trim() }, 'ACTIVE');
   }
 

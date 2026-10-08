@@ -8,8 +8,7 @@ export interface GetCommissionDependencies {
 }
 
 /**
- * CA-016, REQ-076, OUT-05: the agreed and the real commission of a policy side
- * by side, with the divergence signalled.
+ * REQ-236: the agreed commission of a policy.
  */
 export class GetCommission {
   private readonly deps: GetCommissionDependencies;

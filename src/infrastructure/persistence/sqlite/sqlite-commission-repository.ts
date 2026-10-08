@@ -22,21 +22,14 @@ interface CommissionRow {
   override_justification: string | null;
   override_user_id: string | null;
   override_at: string | null;
-  real_receivable: string | null;
-  reconciled_competence: string | null;
-  reconciled_at: string | null;
-  resolution_justification: string | null;
-  resolution_user_id: string | null;
-  resolved_at: string | null;
 }
 
 /**
- * The commission is a single row: the basis, the agreed pair, the override and
- * the real value all belong to the same record and are never written apart.
+ * The commission is a single row: the basis, the agreed value and the
+ * override belong to the same record and are never written apart.
  *
- * Nothing is ever deleted (REQ-124): an override and a resolution are extra
- * columns on the record, next to the values they explain, not a replacement
- * of them.
+ * Nothing is ever deleted (REQ-124): an override is extra columns on the
+ * record, next to the values it explains, not a replacement of them.
  */
 export class SqliteCommissionRepository implements CommissionRepository {
   private readonly db: DatabaseSync;
@@ -46,7 +39,7 @@ export class SqliteCommissionRepository implements CommissionRepository {
   }
 
   async save(commission: Commission): Promise<void> {
-    const { basis, override, resolution } = commission;
+    const { basis, override } = commission;
 
     this.db
       .prepare(
@@ -55,22 +48,14 @@ export class SqliteCommissionRepository implements CommissionRepository {
            premium, insurer_rate, insurer_amount, intermediary_id, intermediary_rate,
            agreed_receivable,
            override_receivable, override_justification,
-           override_user_id, override_at,
-           real_receivable, reconciled_competence, reconciled_at,
-           resolution_justification, resolution_user_id, resolved_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           override_user_id, override_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            status                   = excluded.status,
            override_receivable      = excluded.override_receivable,
            override_justification   = excluded.override_justification,
            override_user_id         = excluded.override_user_id,
-           override_at              = excluded.override_at,
-           real_receivable          = excluded.real_receivable,
-           reconciled_competence    = excluded.reconciled_competence,
-           reconciled_at            = excluded.reconciled_at,
-           resolution_justification = excluded.resolution_justification,
-           resolution_user_id       = excluded.resolution_user_id,
-           resolved_at              = excluded.resolved_at`,
+           override_at              = excluded.override_at`,
       )
       .run(
         commission.id,
@@ -87,12 +72,6 @@ export class SqliteCommissionRepository implements CommissionRepository {
         override?.justification ?? null,
         override?.userId ?? null,
         override?.at.toISOString() ?? null,
-        commission.realReceivable?.toString() ?? null,
-        commission.reconciledCompetence,
-        commission.reconciledAt?.toISOString() ?? null,
-        resolution?.justification ?? null,
-        resolution?.userId ?? null,
-        resolution?.at.toISOString() ?? null,
       );
   }
 
@@ -142,17 +121,6 @@ function toCommission(row: CommissionRow): Commission {
               justification: row.override_justification ?? '',
               userId: row.override_user_id ?? '',
               at: new Date(row.override_at),
-            },
-      realReceivable: row.real_receivable === null ? null : Money.fromString(row.real_receivable),
-      reconciledCompetence: row.reconciled_competence,
-      reconciledAt: row.reconciled_at === null ? null : new Date(row.reconciled_at),
-      resolution:
-        row.resolved_at === null
-          ? null
-          : {
-              justification: row.resolution_justification ?? '',
-              userId: row.resolution_user_id ?? '',
-              at: new Date(row.resolved_at),
             },
     },
   );

@@ -12,10 +12,8 @@ import { createHttpServer } from '../../src/interfaces/http/server.ts';
 /**
  * The policy screen, driven the way an operator drives it.
  *
- * This is where FP-01 lands and where the V1 conciliation is finished by hand:
- * the agreed and the real commission side by side (REQ-076), the manual
- * resolution of a divergence (REQ-085), the override of REQ-066 and the
- * receipt confirmation of an installment (IN-13).
+ * This is where FP-01 lands: the agreed commission (REQ-236), the override of
+ * REQ-066 and the receipt confirmation of an installment (IN-13).
  *
  * Nothing here is a mock. The server is the real one over SQLite on disk, and
  * the module under test is the same file the browser downloads.
@@ -235,17 +233,6 @@ async function registeredPolicy(numbers: {
   return policy.id;
 }
 
-/** FP-02 as the import leaves it: the real value apurada for a competence. */
-async function reconciled(
-  numbers: { proposalNumber: string; policyNumber: string },
-  producerCommission: string,
-): Promise<void> {
-  await callApi('POST', '/commission-reconciliations', {
-    competence: '2026-10',
-    lines: [{ ...numbers, producerCommission }],
-  });
-}
-
 /* -------------------------------------------------------------- tests -- */
 
 describe('the policy screen', () => {
@@ -266,69 +253,10 @@ describe('the policy screen', () => {
     expect(card('Parcelas').querySelectorAll('tbody tr')).toHaveLength(2);
     expect(card('Parcelas').textContent).toContain('Pendente');
 
-    // CA-016: agreed and real side by side, with nothing apurado yet.
+    // REQ-236: the agreed commission, calculated from the CT of the proposal.
     const commission = card('Comissão');
     expect(commission.textContent).toContain('Prevista');
     expect(commission.textContent).toContain('R$ 40,00');
-    expect(commission.textContent).toContain('Não apurado');
-  });
-
-  it('shows agreed and real side by side and flags the divergence (REQ-076, CA-016, CA-017)', async () => {
-    const numbers = { proposalNumber: 'PRP-DIV-2', policyNumber: 'PRP-DIV-2' };
-    const policyId = await registeredPolicy(numbers);
-    // FP-02 step 3: the report paid less than the agreement foresaw.
-    await reconciled(numbers, '35.00');
-
-    await openPolicy(policyId);
-
-    const commission = card('Comissão');
-    expect(commission.textContent).toContain('Divergente');
-    expect(commission.textContent).toContain('Acordado ≠ real');
-    expect(commission.textContent).toContain('R$ 40,00');
-    expect(commission.textContent).toContain('R$ 35,00');
-    // REQ-086: the competence the real value came from.
-    expect(commission.textContent).toContain('2026-10');
-  });
-
-  it('refuses a resolution with no justification and records one with it (REQ-085, CA-026)', async () => {
-    const numbers = { proposalNumber: 'PRP-RES-1', policyNumber: 'PRP-RES-1' };
-    const policyId = await registeredPolicy(numbers);
-    await reconciled(numbers, '35.00');
-
-    await openPolicy(policyId);
-
-    // REQ-085: the justification is mandatory, and it is the domain that says so.
-    const beforeRefusal = snackbars().length;
-    clickIn('Comissão', 'Resolver divergência');
-    answerDialog('#dialog-resolution', { justification: '', userId: 'fin-1' });
-
-    await vi.waitFor(() => {
-      expect(snackbars().length).toBeGreaterThan(beforeRefusal);
-    });
-    expect(lastSnackbar()).toContain('Resolução de divergência exige justificativa.');
-    expect(lastSnackbar()).toContain('REQ-085');
-    expect((await callApi('GET', `/policies/${policyId}/commission`)).status).toBe('DIVERGENT');
-
-    clickIn('Comissão', 'Resolver divergência');
-    answerDialog('#dialog-resolution', {
-      justification: 'seguradora confirmou 35,00',
-      userId: 'fin-1',
-    });
-
-    await vi.waitFor(() => {
-      expect(card('Comissão').textContent).toContain('Divergência resolvida');
-    });
-
-    // REQ-124, REJ-014: the resolution is added, the divergent values stay.
-    const resolved = card('Comissão').textContent;
-    expect(resolved).toContain('seguradora confirmou 35,00');
-    expect(resolved).toContain('fin-1');
-    expect(resolved).toContain('R$ 35,00');
-
-    const commission = await callApi('GET', `/policies/${policyId}/commission`);
-    expect(commission.status).toBe('RESOLVED');
-    expect(commission.resolution.userId).toBe('fin-1');
-    expect(commission.realReceivable).toBe('35.00');
   });
 
   it('refuses an override with no justification and applies one with it (REQ-066, REQ-067, REJ-010)', async () => {

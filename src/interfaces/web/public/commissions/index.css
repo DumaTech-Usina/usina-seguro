@@ -32,13 +32,3 @@
   font-family: var(--font-mono);
   font-weight: 500;
 }
-
-/* REQ-076: o valor que não bate com o acordado é o que o olho tem de achar. */
-.is-divergent {
-  color: var(--danger);
-  font-weight: 500;
-}
-
-.not-apurado {
-  color: var(--on-surface-variant);
-}

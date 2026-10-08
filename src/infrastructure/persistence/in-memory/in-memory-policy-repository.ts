@@ -23,15 +23,6 @@ export class InMemoryPolicyRepository implements PolicyRepository {
     return this.records.get(id) ?? null;
   }
 
-  /** Same answer as the SQLite driver: the number may repeat (DEC-207), the first registered wins. */
-  async findByPolicyNumber(policyNumber: string): Promise<Policy | null> {
-    const matches = [...this.records.values()]
-      .filter((policy) => policy.policyNumber === policyNumber)
-      .sort((a, b) => a.registeredAt.getTime() - b.registeredAt.getTime());
-
-    return matches[0] ?? null;
-  }
-
   async findByProposalId(proposalId: string): Promise<Policy | null> {
     return this.find((policy) => policy.proposalId === proposalId);
   }

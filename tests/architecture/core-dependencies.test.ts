@@ -80,15 +80,6 @@ describe('core dependency rule', () => {
       // REQ-236: the agreed commission is calculated from the proposal's CT,
       // or CT then CTU (REQ-230, REQ-231), which live on the proposal.
       'commission -> proposal',
-      // FP-02 step 3: a matched line produces the real commission of REQ-075,
-      // so the reconciliation drives the commission through its own states.
-      'reconciliation -> commission',
-      // REQ-082: the conciliation key is the policy number, and the unit of
-      // work reuses the `Transaction` contract the policy module declares.
-      'reconciliation -> policy',
-      // REQ-082, CA-019: a line that brings only the proposal number reaches
-      // the policy through the link of REQ-050.
-      'reconciliation -> proposal',
       // IN-01 is a registry like any other: it throws the shared
       // `BusinessRuleViolation` and nothing else crosses this way. The arrow
       // points at the proposal, never back, which is what lets the three

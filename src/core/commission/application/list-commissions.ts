@@ -11,10 +11,6 @@ import { type CommissionListItemView, toCommissionListItemView } from './commiss
 export interface ListCommissionsInput {
   /**
    * When present, only commissions in that state are listed.
-   *
-   * The states are the ones section 10.5 documents. `DIVERGENT` is the
-   * worklist of FP-02 step 5 — what was apurado and disagrees with the
-   * agreement (REQ-076) and has not been closed by a human yet (REQ-085).
    */
   readonly status?: CommissionStatus;
 }
@@ -28,12 +24,10 @@ export interface ListCommissionsDependencies {
 }
 
 /**
- * OUT-05, REQ-076, CA-016, CA-017: the agreed and the real commission of every
- * policy side by side, with the divergences signalled.
+ * OUT-05: the agreed commission of every policy (REQ-236).
  *
- * `GetCommission` answers the same comparison for one policy; this is the same
- * pair read as a list, which is what makes a divergence findable after the
- * import that produced it (FP-02 steps 4 and 5).
+ * `GetCommission` answers it for one policy; this is the same reading as a
+ * list.
  *
  * Each line is completed with the policy and the proposal it belongs to,
  * because the commission holds the policy id and nothing a human recognises.

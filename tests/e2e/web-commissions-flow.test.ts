@@ -10,13 +10,8 @@ import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 
 /**
- * OUT-05 driven the way the Financeiro drives it: the panel of every policy,
- * and the path from a divergence to the policy where it is closed.
- *
- * FP-02 step 5 is manual work, and manual work needs a worklist that survives
- * the import that produced it. This file walks that whole loop — find the
- * divergence on the panel, open the policy it belongs to, resolve it with a
- * justification (REQ-085) and see the panel agree.
+ * OUT-05 driven the way the Financeiro drives it: the agreed commission of
+ * every policy (REQ-236), and the path from a line to its policy.
  *
  * Nothing here is a mock. The server is the real one, listening on an ephemeral
  * port over SQLite on disk, and the modules under test are the same files the
@@ -37,38 +32,6 @@ let baseUrl: string;
 
 /** Every request a page made, in order, as `METHOD path`. */
 const requests: string[] = [];
-
-/**
- * jsdom implements `<dialog>` as an element and nothing else. The policy screen
- * asks for the justification of REQ-085 through one, so the three behaviours
- * the standard defines are supplied here, exactly as `web-policy-flow.test.ts`
- * does. Nothing of the page is replaced.
- */
-function installDialogSupport(): void {
-  const proto = window.HTMLDialogElement.prototype;
-
-  proto.showModal = function showModal(this: Untyped) {
-    this.open = true;
-  };
-
-  proto.close = function close(this: Untyped, value?: string) {
-    if (value !== undefined) {
-      this.returnValue = value;
-    }
-    this.open = false;
-    this.dispatchEvent(new window.Event('close'));
-  };
-
-  document.addEventListener('click', (event: Untyped) => {
-    const button = event.target?.closest?.('button[value]');
-    const dialog = button?.closest('dialog');
-
-    if (button !== null && dialog != null && button.form?.getAttribute('method') === 'dialog') {
-      event.preventDefault();
-      dialog.close(button.value);
-    }
-  });
-}
 
 beforeAll(async () => {
   directory = mkdtempSync(path.join(tmpdir(), 'usina-e2e-commissions-'));
@@ -97,12 +60,9 @@ beforeAll(async () => {
   }) as typeof globalThis.fetch;
 
   window.scrollTo = () => {};
-  installDialogSupport();
 
-  // The three states FP-02 can leave a policy in: reported short, reported as
-  // agreed, and never reported at all.
-  await reconciled(await registeredPolicy('PRP-PANEL-DIV', 'PRP-PANEL-DIV'), '31.00');
-  await reconciled(await registeredPolicy('PRP-PANEL-OK', 'PRP-PANEL-OK'), '40.00');
+  await registeredPolicy('PRP-PANEL-A', 'PRP-PANEL-A');
+  await registeredPolicy('PRP-PANEL-B', 'PRP-PANEL-B');
   await registeredPolicy('PRP-PANEL-FORE', 'PRP-PANEL-FORE');
 });
 
@@ -183,56 +143,6 @@ function text(selector: string): string {
   return document.querySelector(selector)?.textContent ?? '';
 }
 
-/** Opens the policy screen the way the panel hands it over: by its link. */
-async function followToPolicy(row: Untyped): Promise<void> {
-  const href = row.querySelector('a.btn').getAttribute('href');
-  const [page, search] = href.split('?');
-
-  vi.resetModules();
-  openPage(page.replace('/app/', ''), `?${search}`);
-  await import('/app/policies/detail.js');
-
-  await vi.waitFor(() => {
-    expect(document.querySelector('#page .skeleton')).toBeNull();
-  });
-}
-
-function card(title: string): Untyped {
-  const found = [...document.querySelectorAll('#page section.card')].find((section: Untyped) =>
-    section.querySelector('.card__header .text-title')?.textContent?.includes(title),
-  );
-
-  if (found === undefined) {
-    throw new Error(`No card titled ${title} on screen.`);
-  }
-  return found;
-}
-
-function clickIn(title: string, label: string): void {
-  const button = [...card(title).querySelectorAll('button')].find((node: Untyped) =>
-    node.textContent?.includes(label),
-  );
-
-  if (button === undefined) {
-    throw new Error(`No button "${label}" in the card ${title}.`);
-  }
-  button.click();
-}
-
-function answerDialog(id: string, values: Record<string, string>): void {
-  const dialog = document.querySelector(id);
-  expect(dialog.open, `${id} should be open`).toBe(true);
-
-  for (const [name, value] of Object.entries(values)) {
-    dialog.querySelector(`[name="${name}"]`).value = value;
-  }
-
-  const confirm = [...dialog.querySelectorAll('button')].find(
-    (node: Untyped) => node.value === 'confirm',
-  );
-  confirm.click();
-}
-
 /* --------------------------------------------------------- the backend -- */
 
 async function callApi(method: string, apiPath: string, body?: unknown): Promise<Untyped> {
@@ -278,112 +188,45 @@ async function registeredPolicy(proposalNumber: string, policyNumber: string): P
   return { policyId: policy.id, proposalNumber, policyNumber };
 }
 
-/** FP-02 step 3: a line of the report matched this policy. */
-async function reconciled(business: Business, producerCommission: string): Promise<Business> {
-  await callApi('POST', '/commission-reconciliations', {
-    competence: '2026-10',
-    lines: [
-      {
-        policyNumber: business.policyNumber,
-        proposalNumber: business.proposalNumber,
-        producerCommission,
-      },
-    ],
-  });
-
-  return business;
-}
-
 /* -------------------------------------------------------------- tests -- */
 
-describe('the agreed versus real panel (OUT-05)', () => {
-  it('shows every policy with both values side by side (REQ-076, CA-016)', async () => {
+describe('the agreed commission panel (OUT-05)', () => {
+  it('shows every policy with its agreed commission (REQ-236)', async () => {
     await openPanel();
 
     expect(requests).toContain('GET /commissions');
     expect(rows()).toHaveLength(3);
 
-    // The one the report paid short: both values, and the flag of CA-017.
-    const divergent = rowOf('PRP-PANEL-DIV');
-    expect(divergent.textContent).toContain('R$ 40,00');
-    expect(divergent.textContent).toContain('R$ 31,00');
-    expect(divergent.textContent).toContain('Acordado ≠ real');
-    expect(divergent.textContent).toContain('Divergente');
-    // REQ-086: the competence the real value came from.
-    expect(divergent.textContent).toContain('2026-10');
+    const line = rowOf('PRP-PANEL-A');
+    expect(line.textContent).toContain('R$ 40,00');
+    expect(line.textContent).toContain('Prevista');
     // REQ-050, REQ-022: what identifies the business to a human.
-    expect(divergent.textContent).toContain('PRP-PANEL-DIV');
-    expect(divergent.textContent).toContain('client-1');
-
-    const agreed = rowOf('PRP-PANEL-OK');
-    expect(agreed.textContent).toContain('Conciliada');
-    expect(agreed.textContent).not.toContain('Acordado ≠ real');
-
-    // REQ-075: no report ever matched this one, which is not the same as zero.
-    const forecast = rowOf('PRP-PANEL-FORE');
-    expect(forecast.textContent).toContain('Não apurado');
-    expect(forecast.textContent).toContain('Prevista');
+    expect(line.textContent).toContain('PRP-PANEL-A');
+    expect(line.textContent).toContain('client-1');
 
     expect(text('#summary')).toContain('3 apólices');
-    expect(text('#summary')).toContain('1 com divergência');
   });
 
-  it('narrows to the divergences with a new reading, not a local slice', async () => {
+  it('narrows by state with a new reading, not a local slice', async () => {
     await openPanel();
 
-    await filterBy('Divergentes');
+    await filterBy('Previstas');
 
-    // FP-02 step 5: the worklist is asked of the backend by state.
-    expect(requests).toContain('GET /commissions?status=DIVERGENT');
-    expect(rows()).toHaveLength(1);
-    expect(rowOf('PRP-PANEL-DIV')).toBeDefined();
+    expect(requests).toContain('GET /commissions?status=FORECAST');
+    expect(rows()).toHaveLength(3);
 
-    // REQ-077: the divergence is signalled, and the other policies are still
-    // there — nothing was blocked or hidden.
     await filterBy('Todas');
     expect(rows()).toHaveLength(3);
   });
 
-  it('carries the operator from the divergence to the policy that holds it', async () => {
+  it('carries the operator from a line to the policy that holds it', async () => {
     await openPanel();
-    await filterBy('Divergentes');
 
-    const link = rowOf('PRP-PANEL-DIV').querySelector('a.btn');
-    const [divergent] = await callApi('GET', '/commissions?status=DIVERGENT');
+    const link = rowOf('PRP-PANEL-A').querySelector('a.btn');
+    const lines = await callApi('GET', '/commissions');
+    const line = lines.find((item: Untyped) => item.policyNumber === 'PRP-PANEL-A');
 
-    // Where the line lands next: the policy is where REQ-085 closes it.
-    expect(link.getAttribute('href')).toBe(`/app/policies/detail.html?id=${divergent.policyId}`);
-  });
-
-  it('closes the loop: the divergence resolved on the policy leaves the worklist', async () => {
-    await openPanel();
-    await filterBy('Divergentes');
-
-    // The operator follows the line to the policy and closes the divergence
-    // there, which is where REQ-085 records who did it and why.
-    await followToPolicy(rowOf('PRP-PANEL-DIV'));
-    clickIn('Comissão', 'Resolver divergência');
-    answerDialog('#dialog-resolution', {
-      justification: 'seguradora confirmou 31,00',
-      userId: 'fin-1',
-    });
-
-    await vi.waitFor(() => {
-      expect(card('Comissão').textContent).toContain('Divergência resolvida');
-    });
-
-    // Back to the panel: the worklist is empty and the record is not.
-    await openPanel();
-    await filterBy('Divergentes');
-    expect(rows()).toHaveLength(0);
-    expect(text('#list')).toContain('Nenhuma divergência a tratar');
-
-    await filterBy('Resolvidas');
-    const resolved = rowOf('PRP-PANEL-DIV');
-    expect(resolved.textContent).toContain('Resolvida');
-    // REQ-124, REJ-014: the values that disagreed are still side by side.
-    expect(resolved.textContent).toContain('R$ 40,00');
-    expect(resolved.textContent).toContain('R$ 31,00');
+    expect(link.getAttribute('href')).toBe(`/app/policies/detail.html?id=${line.policyId}`);
   });
 
   it('shows the adjusted value beside the calculated one (REQ-066, REQ-124)', async () => {

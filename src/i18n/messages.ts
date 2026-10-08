@@ -2,7 +2,6 @@ import type { CommissionMessageKey } from '../core/commission/domain/errors.ts';
 import type { NotificationMessageKey } from '../core/notification/domain/errors.ts';
 import type { PolicyMessageKey } from '../core/policy/domain/errors.ts';
 import type { ProposalMessageKey } from '../core/proposal/domain/errors.ts';
-import type { ReconciliationMessageKey } from '../core/reconciliation/domain/errors.ts';
 import type { RegistryMessageKey } from '../core/registry/domain/errors.ts';
 
 /**
@@ -22,7 +21,6 @@ export type MessageKey =
   | ProposalMessageKey
   | PolicyMessageKey
   | CommissionMessageKey
-  | ReconciliationMessageKey
   | RegistryMessageKey
   | NotificationMessageKey;
 
@@ -94,14 +92,6 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'commission.override_user_required':
       'Ajuste de comissão por apólice exige a identificação do usuário.',
     'commission.override_must_be_positive': 'Valor de ajuste de comissão deve ser positivo.',
-    'commission.only_divergent_can_be_resolved':
-      'Somente comissão divergente pode ser resolvida. Estado atual: {status}.',
-    'commission.resolution_justification_required': 'Resolução de divergência exige justificativa.',
-    'commission.resolution_user_required':
-      'Resolução de divergência exige a identificação do usuário.',
-    'commission.competence_required': 'Conciliação exige a competência do arquivo.',
-    'commission.already_reconciled_for_competence':
-      'Apólice já conciliada na competência {competence}.',
     'commission.payout_rate_too_precise':
       "A CR aceita no máximo duas casas decimais. Recebido: '{value}'.",
     'commission.payout_requires_integral_ct':
@@ -125,13 +115,6 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'commission.installment_already_eligible':
       'A parcela {number} já é elegível: a elegibilidade é definitiva.',
     'commission.installment_not_in_policy': 'A apólice não tem a parcela {number}.',
-
-    'reconciliation.competence_required':
-      'Importação do arquivo de comissionamento exige a competência.',
-    'reconciliation.report_must_have_lines':
-      'Importação do arquivo de comissionamento exige ao menos uma linha.',
-    'reconciliation.proposal_number_required':
-      'Linha do arquivo de comissionamento exige o número da proposta.',
 
     'notification.recipient_required':
       'Notificação de emissão efetivada exige a identificação do corretor destinatário.',

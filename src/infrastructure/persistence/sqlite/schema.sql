@@ -153,11 +153,10 @@ CREATE TABLE IF NOT EXISTS reference (
   PRIMARY KEY (kind, id)
 );
 
--- Commission of a policy, agreed and real side by side (REQ-075, CA-016).
+-- Agreed commission of a policy (REQ-236).
 CREATE TABLE IF NOT EXISTS commission (
   id                      TEXT PRIMARY KEY,
-  -- REQ-245: the base is the policy, and only one entry per
-  -- policy exists, which is also what REQ-086 relies on.
+  -- REQ-245: the base is the policy, and only one entry per policy exists.
   policy_id               TEXT NOT NULL UNIQUE REFERENCES policy (id),
   status                  TEXT NOT NULL,
   calculated_at           TEXT NOT NULL,
@@ -175,16 +174,7 @@ CREATE TABLE IF NOT EXISTS commission (
   override_receivable     TEXT,
   override_justification  TEXT,
   override_user_id        TEXT,
-  override_at             TEXT,
-  -- Apurado na conciliacao (REQ-075). The competence is what makes a second
-  -- import of the same file a no-op (REQ-086, REJ-012).
-  real_receivable         TEXT,
-  reconciled_competence   TEXT,
-  reconciled_at           TEXT,
-  -- Manual resolution of a divergence (REQ-085, CA-026, REQ-123).
-  resolution_justification TEXT,
-  resolution_user_id      TEXT,
-  resolved_at             TEXT
+  override_at             TEXT
 );
 
 -- Payout commission of a policy (V2 section 9A). At most one per policy
@@ -286,21 +276,6 @@ CREATE TABLE IF NOT EXISTS parcelled_installment_statement (
   eligible_by          TEXT    NOT NULL,
   eligible_at          TEXT    NOT NULL,
   PRIMARY KEY (parcelled_payout_id, installment_number)
-);
-
--- Report line with no matching policy (REQ-083, EX-01, OUT-06). It carries no
--- foreign key on purpose: the whole point is that no policy was found.
-CREATE TABLE IF NOT EXISTS reconciliation_pendency (
-  id                  TEXT PRIMARY KEY,
-  competence          TEXT NOT NULL,
-  proposal_number     TEXT NOT NULL,
-  policy_number       TEXT,
-  reported_commission TEXT NOT NULL,
-  registered_at       TEXT NOT NULL,
-  -- CA-021 / EX-05: importing the same report again must not duplicate what it
-  -- produced, the pendency included. The use case looks the line up before
-  -- opening a second one; the constraint is the storage-level guarantee.
-  UNIQUE (competence, proposal_number)
 );
 
 -- Attached document: the PDF a proposal was imported from (REQ-219) or the

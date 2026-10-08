@@ -112,17 +112,6 @@ export class SqlitePolicyRepository implements PolicyRepository {
     return this.load('SELECT * FROM policy WHERE id = ?', id);
   }
 
-  /**
-   * REQ-082, CA-018: the conciliation key is the policy number. It may repeat
-   * (DEC-207): the policy registered first answers.
-   */
-  async findByPolicyNumber(policyNumber: string): Promise<Policy | null> {
-    return this.load(
-      'SELECT * FROM policy WHERE policy_number = ? ORDER BY registered_at, id LIMIT 1',
-      policyNumber,
-    );
-  }
-
   /** REQ-082, CA-019: reached through the link of REQ-050. */
   async findByProposalId(proposalId: string): Promise<Policy | null> {
     return this.load('SELECT * FROM policy WHERE proposal_id = ?', proposalId);

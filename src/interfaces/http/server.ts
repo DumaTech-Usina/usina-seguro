@@ -9,7 +9,6 @@ import { registerNotificationRoutes } from './routes/notifications.ts';
 import { registerPayoutRoutes } from './routes/payouts.ts';
 import { registerPolicyRoutes } from './routes/policies.ts';
 import { registerProposalRoutes } from './routes/proposals.ts';
-import { registerReconciliationRoutes } from './routes/reconciliations.ts';
 import { registerReferenceRoutes } from './routes/references.ts';
 
 export interface HttpServerOptions {
@@ -85,7 +84,6 @@ export function createHttpServer(
   registerPolicyRoutes(app, useCases);
   registerCommissionRoutes(app, useCases);
   registerPayoutRoutes(app, useCases);
-  registerReconciliationRoutes(app, useCases);
   registerReferenceRoutes(app, useCases);
   registerNotificationRoutes(app, useCases);
 

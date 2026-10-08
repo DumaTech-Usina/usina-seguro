@@ -50,14 +50,6 @@ const NAV = [
         href: '/app/commissions/',
         ready: true,
       },
-      // FP-02 and OUT-06.
-      {
-        id: 'reconciliations',
-        label: 'Conciliação',
-        icon: 'sync_alt',
-        href: '/app/reconciliations/',
-        ready: true,
-      },
       // FP-02 of V2: policies without CR and eligible commissions.
       {
         id: 'payouts',

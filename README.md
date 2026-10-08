@@ -7,11 +7,11 @@ em construção. A V1, [`docs/requisitos_refinados.md`](./docs/requisitos_refina
 registro do entendimento anterior e não orienta decisões novas; onde as duas divergem, vale
 a V2. Identificadores da série `2xx` (`REQ-2xx`, `CA-2xx`, `DEC-2xx`…) no código
 referenciam a V2; os demais (`REQ-0xx`/`REQ-1xx`, `IN-xx`, `OUT-xx`) referenciam a V1 e
-descrevem o que a V2 ainda não revisou — conciliação, notificação, comissão acordada ×
-real e cadastros de referência.
+descrevem o que a V2 ainda não revisou — notificação, comissão acordada e cadastros de
+referência.
 
 > **Estado atual: `Proposta → Apólice → CR → Comissão elegível` (FP-01 e FP-02 da V2),
-> com a conciliação e a notificação da V1.**
+> com a notificação da V1.**
 > `FP-01` vai do registro da proposta — digitada ou lida do PDF (`REQ-201`–`REQ-219`) —,
 > com a CT, a intermediária e o valor esperado pela Usina (`REQ-212`–`REQ-232`), ao
 > reconhecimento da emissão, que cria a apólice (`REQ-209`, `REQ-240`–`REQ-247`), ou à
@@ -19,8 +19,7 @@ real e cadastros de referência.
 > (`REQ-236`) e o corretor é notificado (`REQ-100`, `REQ-228`). O `FP-02` vai da CR
 > informada na apólice à comissão elegível e ao extrato de elegibilidade
 > (`REQ-270`–`REQ-286`), e a CT parcelada segue o seu fluxo próprio (seções 6A e 9B da
-> V2); o sistema não paga nem movimenta dinheiro (`REQ-280`). A conciliação do relatório
-> de comissionamento contra as apólices (`REQ-082`, `REQ-083`, `REQ-086`) segue a V1.
+> V2); o sistema não paga nem movimenta dinheiro (`REQ-280`).
 >
 > O controle das apólices vendidas e das que estão a vencer (`REQ-055`, `OUT-03`,
 > `OUT-04`) é lido da mesma base.
@@ -28,9 +27,7 @@ real e cadastros de referência.
 > **Fora**: cotação, renovação, endosso, sinistro (`DEC-206`), cancelamento de apólice e
 > o que vem depois da elegibilidade (`DEC-211`). A entrega da notificação é interna (`REQ-102`): o contrato de
 > canal existe (`REQ-101`, `REQ-103`, `REQ-104`) e nenhum *adapter* externo está ligado.
-> O *parser* do arquivo de comissionamento também não existe —
-> `DEC-001` não definiu o layout; a conciliação recebe linhas já estruturadas. Ver
-> [Decisões em aberto](#decisões-de-negócio-em-aberto).
+> Ver [Decisões em aberto](#decisões-de-negócio-em-aberto).
 
 ## Idioma
 
@@ -169,7 +166,7 @@ curl 'http://127.0.0.1:3000/notifications?recipientId=broker-1'
 # corrigir um nome em IN-01 depois não reescreve o que já foi dito.
 ```
 
-Comissão acordada, conciliação e `FP-02`:
+Comissão acordada e `FP-02`:
 
 ```bash
 # 0a. Cadastros de referência (IN-01): dão nome a quem aparece na operação.
@@ -185,24 +182,10 @@ curl 'http://127.0.0.1:3000/references?kind=CLIENT'
 # 1. A comissão acordada nasce junto com a apólice, calculada pela CT (ou CT → CTU)
 #    da proposta (REQ-236): nada a chamar.
 curl http://127.0.0.1:3000/policies/<apolice>/commission
-# {"status":"FORECAST","agreedReceivable":"480.00",
-#  "realReceivable":null,"divergent":false,...}
+# {"status":"FORECAST","agreedReceivable":"480.00","effectiveReceivable":"480.00",...}
 
-# 2. Conciliação do relatório (V1). O arquivo em si é DEC-001: aqui entram
-#    linhas já estruturadas.
-curl -X POST http://127.0.0.1:3000/commission-reconciliations \
-  -H 'content-type: application/json' -d '{
-  "competence":"2026-10",
-  "lines":[{"policyNumber":"PRP-9001","proposalNumber":"PRP-9001","producerCommission":"480.00"}]
-}'
-# 201 {"reconciled":1,"divergent":0,"duplicated":0,"pending":0,"lines":[...]}
-
-curl http://127.0.0.1:3000/commission-reconciliations/pendencies   # OUT-06
-
-#    O painel acordado × real de todas as apólices (OUT-05). Sem filtro é o
-#    painel inteiro; por estado, a lista do que divergiu.
+# 2. O painel da comissão acordada de todas as apólices (OUT-05).
 curl http://127.0.0.1:3000/commissions
-curl 'http://127.0.0.1:3000/commissions?status=DIVERGENT'
 
 # 3. CR da apólice (FP-02 da V2, REQ-270–REQ-279). A base é o valor da Usina.
 curl http://127.0.0.1:3000/policies/<apolice>/payout
@@ -274,8 +257,7 @@ O que existe hoje:
 | Propostas, por estado (`OUT-01`, `OUT-02`) | `/app/proposals/` | Pronta |
 | Proposta: dados, correções e desfecho — o reconhecimento da emissão gera a apólice, a recusa exige motivo (`FP-01` passos 6–9) | `/app/proposals/detail.html?id=…` | Pronta |
 | Apólice: parcelas, comissão acordada × real, CR e elegibilidade (`FP-02`) | `/app/policies/detail.html?id=…` | Pronta |
-| Conciliação do comissionamento (`FP-02`, `OUT-06`) | `/app/reconciliations/` | Pronta — as linhas são digitadas; o arquivo é `DEC-001` |
-| Comissões: acordado × real de todas as apólices (`OUT-05`) | `/app/commissions/` | Pronta |
+| Comissões: a comissão acordada de todas as apólices (`OUT-05`) | `/app/commissions/` | Pronta |
 | Repasses: apólices sem CR e comissões elegíveis (`REQ-284`, `REQ-286`) | `/app/payouts/` | Pronta — o pagamento acontece fora do sistema (`REQ-280`) |
 | Cadastros de referência (`IN-01`) | `/app/settings/` | Pronta (cobertura fora) |
 | Apólices: vendidas e a vencer (`OUT-03`, `OUT-04`) | `/app/policies/` | Pronta — o corte por data de renovação é informado pelo operador (`CA-032` não define a janela) |
@@ -366,9 +348,6 @@ src/
 │   ├── commission/          # comissão acordada × real, CR e elegibilidade
 │   │   ├── domain/
 │   │   └── application/
-│   ├── reconciliation/      # casar o informado pelo terceiro com o que o sistema sabe
-│   │   ├── domain/
-│   │   └── application/
 │   ├── registry/            # IN-01: o nome de cada referência que o negócio guarda
 │   │   ├── domain/
 │   │   └── application/
@@ -415,7 +394,7 @@ justificativa, no mesmo teste — e um segundo teste faz a ordenação topológi
 então um ciclo quebra a suíte:
 
 ```
-proposal ◄── policy ◄── commission ◄── reconciliation
+proposal ◄── policy ◄── commission
 
 registry ──► proposal          ◄── policy, commission, notification
 notification ──► policy, proposal
@@ -468,8 +447,7 @@ Vigência, data de renovação e vencimento de parcela são **dias de calendári
 instantes: `CalendarDate` guarda `AAAA-MM-DD` sem fuso, para que um vencimento não mude
 de dia conforme onde o processo roda.
 
-O número da proposta — e, portanto, o da apólice — **não é único** (`DEC-207`): quando a
-conciliação encontra um número repetido, vale a apólice registrada primeiro.
+O número da proposta — e, portanto, o da apólice — **não é único** (`DEC-207`).
 
 Registrar a apólice altera três registros por um único fato de negócio (a proposta vira
 `ISSUED`, a apólice nasce e a comissão acordada é calculada). O reconhecimento da emissão
@@ -478,10 +456,6 @@ e a criação da apólice são o mesmo ato (`REQ-240`) e a proposta emitida fica
 conserta. Daí o contrato
 `Transaction` (`core/policy/application/transaction.ts`): savepoint no SQLite, transação
 no PostgreSQL, execução direta no InMemory.
-
-A importação do relatório de comissionamento reusa **o mesmo contrato**, sem alteração:
-um arquivo aplicado pela metade deixaria parte das apólices conciliadas na competência e,
-na reimportação, `REQ-086` recusaria justamente essa parte.
 
 Não há framework de migration (decisão da foundation): o `schema.sql` usa
 `CREATE TABLE IF NOT EXISTS`, então um arquivo SQLite criado **antes** deste slice não
@@ -508,14 +482,8 @@ ganha as colunas novas. Em desenvolvimento, apague `./data/usina.sqlite` e deixe
 ## Decisões de negócio em aberto
 
 As decisões pendentes da V2 estão na seção 13 de
-[`docs/requisitos_refinados_v2.md`](./docs/requisitos_refinados_v2.md). Fora dela, a
-conciliação ainda depende de uma decisão da V1:
+[`docs/requisitos_refinados_v2.md`](./docs/requisitos_refinados_v2.md).
 
-| ID | Pendência | Efeito neste slice |
-|----|-----------|--------------------|
-| `DEC-001` | Layout do arquivo de comissionamento | **Bloqueia o parser.** `POST /commission-reconciliations` recebe linhas já estruturadas; tudo o que `REQ-082`, `REQ-083` e `REQ-086` fazem com uma linha está implementado e testado |
-
-Também ficaram de fora, por serem outras capacidades e não decisões pendentes: cotação e
-`RECEBIDA` da comissão (a *baixa* de `REQ-075` — nenhum requisito diz quem a registra). O
+Também ficou de fora, por ser outra capacidade e não decisão pendente: cotação. O
 relatório de repasse, o recibo e o registro do pagamento (`REQ-094`–`REQ-096` da V1) estão
 suspensos até `DEC-211`.

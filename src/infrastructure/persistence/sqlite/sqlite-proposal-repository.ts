@@ -184,17 +184,6 @@ export class SqliteProposalRepository implements ProposalRepository {
     return row === undefined ? null : this.toProposal(row);
   }
 
-  /** The number is not unique (DEC-207): the first registered answers. */
-  async findByProposalNumber(proposalNumber: string): Promise<Proposal | null> {
-    const row = this.db
-      .prepare(
-        'SELECT * FROM proposal WHERE proposal_number = ? ORDER BY registered_at, id LIMIT 1',
-      )
-      .get(proposalNumber) as ProposalRow | undefined;
-
-    return row === undefined ? null : this.toProposal(row);
-  }
-
   /**
    * `registered_at` is an ISO-8601 UTC string, so ordering it as text orders
    * it chronologically; the id breaks a tie so two proposals registered in the

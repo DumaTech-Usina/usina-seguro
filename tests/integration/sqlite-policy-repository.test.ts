@@ -185,7 +185,7 @@ describe('SqlitePolicyRepository', () => {
     ).toThrow(/UNIQUE constraint failed/);
   });
 
-  it('stores two policies with the same number (DEC-207); the first registered answers', async () => {
+  it('stores two policies with the same number (DEC-207)', async () => {
     await proposals.save(transmittedProposal('proposal-2', 'PRP-9001'));
     await policies.save(
       Policy.restore(
@@ -200,7 +200,8 @@ describe('SqlitePolicyRepository', () => {
       ),
     );
 
-    expect((await policies.findByPolicyNumber('APL-4711'))?.id).toBe('earlier');
+    expect((await policies.findById('later'))?.policyNumber).toBe('APL-4711');
+    expect((await policies.findById('earlier'))?.policyNumber).toBe('APL-4711');
   });
 
   it('keeps an installment with no due date, as inherited from the proposal (REQ-204, CA-208)', async () => {

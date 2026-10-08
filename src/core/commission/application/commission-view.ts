@@ -6,9 +6,8 @@ import type { Commission } from '../domain/commission.ts';
 /**
  * Representation of a commission at the core boundary.
  *
- * CA-016 and REQ-076 ask for the agreed and the real value **side by side**
- * with the divergence signalled, so the view carries both and the flag, rather
- * than leaving the comparison to whoever renders it.
+ * The agreed commission (REQ-236), with the override that may replace it
+ * (REQ-066) and the basis it was calculated with.
  */
 export interface CommissionBasisView {
   readonly premium: string;
@@ -27,17 +26,8 @@ export interface CommissionView {
   readonly agreedReceivable: string;
   /** Agreed value actually in use, override included (REQ-066). */
   readonly effectiveReceivable: string;
-  /** Apurada na conciliacao (REQ-075); null until a report matches. */
-  readonly realReceivable: string | null;
-  readonly divergent: boolean;
-  readonly reconciledCompetence: string | null;
   readonly override: {
     readonly receivable: string;
-    readonly justification: string;
-    readonly userId: string;
-    readonly at: string;
-  } | null;
-  readonly resolution: {
     readonly justification: string;
     readonly userId: string;
     readonly at: string;
@@ -46,7 +36,7 @@ export interface CommissionView {
 }
 
 export function toCommissionView(commission: Commission): CommissionView {
-  const { basis, override, resolution } = commission;
+  const { basis, override } = commission;
 
   return {
     id: commission.id,
@@ -55,9 +45,6 @@ export function toCommissionView(commission: Commission): CommissionView {
     calculatedAt: commission.calculatedAt.toISOString(),
     agreedReceivable: commission.agreedReceivable.toString(),
     effectiveReceivable: commission.effectiveReceivable.toString(),
-    realReceivable: commission.realReceivable?.toString() ?? null,
-    divergent: commission.isDivergent,
-    reconciledCompetence: commission.reconciledCompetence,
     override:
       override === null
         ? null
@@ -66,14 +53,6 @@ export function toCommissionView(commission: Commission): CommissionView {
             justification: override.justification,
             userId: override.userId,
             at: override.at.toISOString(),
-          },
-    resolution:
-      resolution === null
-        ? null
-        : {
-            justification: resolution.justification,
-            userId: resolution.userId,
-            at: resolution.at.toISOString(),
           },
     basis: {
       premium: basis.premium.toString(),
@@ -88,10 +67,8 @@ export function toCommissionView(commission: Commission): CommissionView {
 /**
  * One line of the consolidated panel of OUT-05.
  *
- * It answers the question the panel exists for — which policies agree with
- * what was reported and which do not (REQ-076, CA-016, CA-017) — so it carries
- * the pair and the flag, like `CommissionView`, and drops the basis, which is
- * detail of a single policy.
+ * It carries the agreed values, like `CommissionView`, and drops the basis,
+ * which is detail of a single policy.
  *
  * The commission knows the policy by id and nothing else, so what identifies
  * the business to a human comes from the records that hold it: the number the
@@ -117,10 +94,6 @@ export interface CommissionListItemView {
   readonly agreedReceivable: string;
   /** Agreed value actually in use, override included (REQ-066). */
   readonly effectiveReceivable: string;
-  /** Apurada na conciliacao (REQ-075); null until a report matches. */
-  readonly realReceivable: string | null;
-  readonly divergent: boolean;
-  readonly reconciledCompetence: string | null;
 }
 
 export function toCommissionListItemView(
@@ -143,8 +116,5 @@ export function toCommissionListItemView(
     calculatedAt: commission.calculatedAt.toISOString(),
     agreedReceivable: commission.agreedReceivable.toString(),
     effectiveReceivable: commission.effectiveReceivable.toString(),
-    realReceivable: commission.realReceivable?.toString() ?? null,
-    divergent: commission.isDivergent,
-    reconciledCompetence: commission.reconciledCompetence,
   };
 }

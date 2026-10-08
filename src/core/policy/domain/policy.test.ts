@@ -107,9 +107,9 @@ describe('Policy.register', () => {
   });
 
   it('restores a persisted policy in the state it was stored in (REQ-124)', () => {
-    const policy = Policy.restore(validData(), 'CANCELLED');
+    const policy = Policy.restore(validData(), 'ACTIVE');
 
-    expect(policy.status).toBe('CANCELLED');
+    expect(policy.status).toBe('ACTIVE');
   });
 });
 

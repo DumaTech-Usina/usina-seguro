@@ -4,22 +4,11 @@ import type { Money } from '../../proposal/domain/money.ts';
 import { POLICY_MESSAGES } from './errors.ts';
 
 /**
- * Documented installment states (section 10.4).
- *
- * ```
- * PENDING ──► PAID
- *         ├─► OVERDUE ──► PAID
- *         └─► CANCELLED
- * ```
- *
- * `PENDING` and `PAID` are reachable: the confirmation of the client's payment
- * is a manual act by a user of the Usina, kept as it is for a policy with
- * integral CT (REQ-269). `OVERDUE` depends
- * on a rule nobody has stated (who marks it, against which clock) and
- * `CANCELLED` on the policy cancellation of REQ-053, which is not modelled.
- * Both stay in the union because they are part of the documented machine.
+ * State of an installment: `PENDING ──► PAID`. The confirmation of the
+ * client's payment is a manual act by a user of the Usina, on a policy with
+ * integral CT (REQ-269).
  */
-export type InstallmentStatus = 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+export type InstallmentStatus = 'PENDING' | 'PAID';
 
 /**
  * REQ-123: the manual confirmation that the client paid (REQ-269) records who
