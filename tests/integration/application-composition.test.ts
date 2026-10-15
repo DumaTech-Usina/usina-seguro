@@ -27,7 +27,7 @@ describe('application composition', () => {
     });
 
     const output = await application.useCases.registerProposal.execute({
-      clientId: 'client-1',
+      client: { name: 'Maria Souza', cpf: cpfOf(101) },
       brokerId: broker.id,
       insurerId: 'insurer-1',
       productId: 'product-1',
@@ -58,7 +58,7 @@ describe('application composition', () => {
       userId: 'operator',
     });
     const output = await first.useCases.registerProposal.execute({
-      clientId: 'client-1',
+      client: { name: 'Maria Souza', cpf: cpfOf(101) },
       brokerId: broker.id,
       insurerId: 'insurer-1',
       productId: 'product-1',
@@ -78,7 +78,7 @@ describe('application composition', () => {
     // New composition, same file: the data must still be there.
     const second = composeApplication(config);
     const repeated = await second.useCases.registerProposal.execute({
-      clientId: 'client-2',
+      client: { name: 'Bruno Lima', cpf: cpfOf(102) },
       brokerId: broker.id,
       insurerId: 'insurer-1',
       productId: 'product-1',

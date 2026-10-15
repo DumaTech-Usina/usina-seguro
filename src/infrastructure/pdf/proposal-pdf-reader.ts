@@ -1,6 +1,7 @@
 import { extractText, getDocumentProxy } from 'unpdf';
 import { CalendarDate } from '../../core/proposal/domain/calendar-date.ts';
 import { Money } from '../../core/proposal/domain/money.ts';
+import { Cpf } from '../../core/registry/domain/cpf.ts';
 import { categoryOfLineOfBusiness } from './line-of-business-dictionary.ts';
 
 /**
@@ -22,6 +23,7 @@ import { categoryOfLineOfBusiness } from './line-of-business-dictionary.ts';
 export const PROPOSAL_PDF_FIELDS = [
   'proposalNumber',
   'clientId',
+  'clientCpf',
   'brokerId',
   'insurerId',
   'productId',
@@ -37,6 +39,8 @@ export type ProposalPdfField = (typeof PROPOSAL_PDF_FIELDS)[number];
 export interface ProposalPdfFields {
   proposalNumber?: string;
   clientId?: string;
+  /** REQ-321: the 11 digits, only when the document prints a valid CPF. */
+  clientCpf?: string;
   brokerId?: string;
   insurerId?: string;
   productId?: string;
@@ -130,6 +134,7 @@ export function readAllianzProposalText(
   }
 
   const client = firstMatch(text, /SUAS INFORMAÇÕES\nNome: ([^\n]+)/);
+  const clientDocument = firstMatch(text, /SUAS INFORMAÇÕES\nNome: [^\n]+\nCPF\/CNPJ: ([\d.\-/]+)/);
   const broker = firstMatch(text, /SEU CORRETOR\n([^\n]+)/);
   const paymentMethod = firstMatch(text, /\n([^\n]+?)\*?\nem \d+ parcelas/);
   const coverage =
@@ -139,6 +144,7 @@ export function readAllianzProposalText(
   const candidates: { [Field in ProposalPdfField]: ProposalPdfFields[Field] | undefined } = {
     proposalNumber: agreed(allMatches(text, /N[º°] (?:da )?Proposta: (\d+)/g)),
     clientId: client === undefined ? undefined : identify('CLIENT', client),
+    clientCpf: cpf(clientDocument),
     brokerId: broker === undefined ? undefined : identify('BROKER', broker),
     insurerId: 'ALLIANZ',
     productId:
@@ -186,6 +192,22 @@ function money(printed: string | undefined): string | undefined {
   }
   try {
     return Money.fromString(printed.replaceAll('.', '').replace(',', '.')).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * REQ-321: '529.982.247-25' as printed -> '52998224725', checked by the
+ * domain's own parser (REQ-312). The field is `CPF/CNPJ`: a CNPJ, or anything
+ * that is not a valid CPF, is left absent rather than guessed.
+ */
+function cpf(printed: string | undefined): string | undefined {
+  if (printed === undefined) {
+    return undefined;
+  }
+  try {
+    return Cpf.parse(printed, 'CLIENT').digits;
   } catch {
     return undefined;
   }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ImmediateTransaction } from '../../../infrastructure/persistence/in-memory/immediate-transaction.ts';
 import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../domain/errors.ts';
@@ -15,10 +16,15 @@ async function scenario(mode: 'INTEGRAL' | 'PARCELLED' = 'INTEGRAL') {
     proposals,
     documents: new InMemoryDocumentStorage(),
     brokers: { isRegistered: async () => true },
+    clients: {
+      resolve: async () => 'client-1',
+      matching: async () => new Set<string>(),
+    },
+    transaction: new ImmediateTransaction(),
     newId: () => 'proposal-1',
     now: () => REGISTERED_AT,
   }).execute({
-    clientId: 'client-1',
+    client: { name: 'Maria Souza', cpf: '52998224725' },
     brokerId: 'broker-1',
     insurerId: 'insurer-1',
     productId: 'product-1',

@@ -40,6 +40,14 @@ function sendToLogin() {
   navigateTo(`/app/login/?next=${encodeURIComponent(here)}`);
 }
 
+/** `?a=1&b=2` from the filters that have a value; blank ones are left out. */
+function query(filters) {
+  const present = Object.entries(filters).filter(
+    ([, value]) => value !== undefined && value.trim() !== '',
+  );
+  return present.length === 0 ? '' : `?${new URLSearchParams(present).toString()}`;
+}
+
 async function request(path, { method = 'GET', body } = {}) {
   const response = await fetch(path, {
     method,
@@ -137,11 +145,9 @@ export const api = {
     }),
 
   // The proposals being followed. `status` is the state of REQ-250 to filter
-  // by, or nothing for all of them.
-  listProposals: (status) =>
-    request(
-      status === undefined ? '/proposals' : `/proposals?status=${encodeURIComponent(status)}`,
-    ),
+  // by, or nothing for all of them; `client` is part of the client's name or
+  // CPF (REQ-319), or nothing.
+  listProposals: (status, client) => request(`/proposals${query({ status, client })}`),
   getProposal: (id) => request(`/proposals/${encodeURIComponent(id)}`),
   /** The policy this proposal originated, at most one (REQ-049, REQ-050). */
   getPolicyByProposal: (id) => request(`/proposals/${encodeURIComponent(id)}/policy`),
@@ -171,12 +177,7 @@ export const api = {
    * The day is informed by the operator: no requirement says how near
    * "proxima" is, so nothing here picks a window.
    */
-  listPolicies: (renewalUntil) =>
-    request(
-      renewalUntil === undefined
-        ? '/policies'
-        : `/policies?renewalUntil=${encodeURIComponent(renewalUntil)}`,
-    ),
+  listPolicies: (renewalUntil, client) => request(`/policies${query({ renewalUntil, client })}`),
   /** IN-13: who confirms is the session user (REQ-216); the act carries no data. */
   payInstallment: (policyId, number) =>
     request(`/policies/${encodeURIComponent(policyId)}/installments/${number}/payment`, {
@@ -280,6 +281,22 @@ export const api = {
       query === undefined || query.trim() === ''
         ? '/brokers'
         : `/brokers?q=${encodeURIComponent(query.trim())}`,
+    ),
+
+  /**
+   * V2 section 9E: the clients. Registering and changing are signed by the
+   * session (REQ-314); `query` searches by name or CPF (REQ-316). There is no
+   * removal (REQ-315). A proposal registers its client by itself (REQ-317).
+   */
+  registerClient: (input) => request('/clients', { method: 'POST', body: input }),
+  changeClient: (id, input) =>
+    request(`/clients/${encodeURIComponent(id)}/revision`, { method: 'POST', body: input }),
+  getClient: (id) => request(`/clients/${encodeURIComponent(id)}`),
+  listClients: (query) =>
+    request(
+      query === undefined || query.trim() === ''
+        ? '/clients'
+        : `/clients?q=${encodeURIComponent(query.trim())}`,
     ),
 
   /**

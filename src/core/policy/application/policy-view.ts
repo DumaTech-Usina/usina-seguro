@@ -32,6 +32,12 @@ export interface PolicyView {
    * or the text of a proposal registered before the registry (REQ-309).
    */
   readonly brokerId: string;
+  /**
+   * REQ-318: the client of the proposal the policy came from (REQ-241) — read
+   * from it, never stored again on the policy. The id of a registered client,
+   * or the text of a proposal registered before the registry (REQ-320).
+   */
+  readonly clientId: string;
   readonly status: string;
   readonly premium: string;
   readonly coverageStart: string;
@@ -56,6 +62,7 @@ export function toPolicyView(policy: Policy, proposal: Proposal): PolicyView {
     proposalId: policy.proposalId,
     proposalNumber: proposal.proposalNumber,
     brokerId: proposal.brokerId,
+    clientId: proposal.clientId,
     status: policy.status,
     premium: policy.premium.toString(),
     coverageStart: policy.coverageStart.toString(),
@@ -107,7 +114,8 @@ export interface PolicyListItemView {
   readonly proposalId: string;
   readonly proposalNumber: string | null;
   readonly clientId: string;
-  readonly clientName: string | null;
+  /** REQ-318: the client's current name, or the text of an older proposal (REQ-320). */
+  readonly clientName: string;
   readonly insurerId: string;
   readonly insurerName: string | null;
   readonly productId: string;
@@ -125,6 +133,7 @@ export function toPolicyListItemView(
   policy: Policy,
   proposal: Proposal,
   names: ReferenceNames,
+  clientName: string,
 ): PolicyListItemView {
   return {
     id: policy.id,
@@ -132,7 +141,7 @@ export function toPolicyListItemView(
     proposalId: policy.proposalId,
     proposalNumber: proposal.proposalNumber,
     clientId: proposal.clientId,
-    clientName: names.of('CLIENT', proposal.clientId),
+    clientName,
     insurerId: proposal.insurerId,
     insurerName: names.of('INSURER', proposal.insurerId),
     productId: proposal.productId,

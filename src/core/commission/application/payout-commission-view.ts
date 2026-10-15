@@ -120,6 +120,7 @@ export interface EligiblePayoutView extends EligibilityStatementView {
 export interface PolicyWithoutPayoutRateView {
   readonly policyId: string;
   readonly policyNumber: string;
+  /** REQ-318: the client's current name, or the text of an older proposal (REQ-320). */
   readonly client: string;
   readonly broker: string;
   readonly usinaValue: string;
@@ -130,11 +131,12 @@ export function toPolicyWithoutPayoutRateView(
   policy: Policy,
   proposal: Proposal,
   usinaValue: string,
+  clientName: string,
 ): PolicyWithoutPayoutRateView {
   return {
     policyId: policy.id,
     policyNumber: policy.policyNumber,
-    client: proposal.clientId,
+    client: clientName,
     broker: proposal.brokerId,
     usinaValue,
     renewalDate: policy.renewalDate.toString(),

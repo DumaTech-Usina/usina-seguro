@@ -95,6 +95,12 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
       'CPF inválido: informe os 11 dígitos, com dígitos verificadores válidos.',
     'registry.broker_cpf_taken': 'Já existe um corretor cadastrado com este CPF.',
     'registry.broker_not_found': "Corretor não encontrado: '{id}'.",
+    'registry.client_name_required': 'O cliente precisa de um nome.',
+    'registry.client_cpf_required': 'O cliente precisa de um CPF.',
+    'registry.client_cpf_invalid':
+      'CPF do cliente inválido: informe os 11 dígitos, com dígitos verificadores válidos.',
+    'registry.client_cpf_taken': 'Já existe um cliente cadastrado com este CPF.',
+    'registry.client_not_found': "Cliente não encontrado: '{id}'.",
     'commission.not_found': "Apólice '{policyId}' não possui comissão calculada.",
     'commission.override_justification_required':
       'Ajuste de comissão por apólice exige justificativa.',

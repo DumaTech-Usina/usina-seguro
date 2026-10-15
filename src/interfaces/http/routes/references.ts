@@ -5,9 +5,10 @@ import type { RegisterReferenceInput } from '../../../core/registry/application/
 
 /**
  * The kinds of IN-01. Shape only: what a record must carry is REQ-096. The
- * broker has its own registry (V2 section 9D, `/brokers`).
+ * broker and the client have their own registries (V2 sections 9D and 9E,
+ * `/brokers` and `/clients`).
  */
-const KINDS = ['CLIENT', 'INSURER', 'INTERMEDIARY', 'PRODUCT'] as const;
+const KINDS = ['INSURER', 'INTERMEDIARY', 'PRODUCT'] as const;
 
 const registerReferenceSchema: FastifySchema = {
   body: {

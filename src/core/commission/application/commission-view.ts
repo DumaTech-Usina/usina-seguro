@@ -82,7 +82,8 @@ export interface CommissionListItemView {
   readonly policyNumber: string;
   readonly proposalNumber: string | null;
   readonly clientId: string;
-  readonly clientName: string | null;
+  /** REQ-318: the client's current name, or the text of an older proposal (REQ-320). */
+  readonly clientName: string;
   readonly insurerId: string;
   readonly insurerName: string | null;
   readonly productId: string;
@@ -101,13 +102,14 @@ export function toCommissionListItemView(
   policy: Policy,
   proposal: Proposal,
   names: ReferenceNames,
+  clientName: string,
 ): CommissionListItemView {
   return {
     policyId: commission.policyId,
     policyNumber: policy.policyNumber,
     proposalNumber: proposal.proposalNumber,
     clientId: proposal.clientId,
-    clientName: names.of('CLIENT', proposal.clientId),
+    clientName,
     insurerId: proposal.insurerId,
     insurerName: names.of('INSURER', proposal.insurerId),
     productId: proposal.productId,

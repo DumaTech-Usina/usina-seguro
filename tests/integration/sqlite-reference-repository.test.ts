@@ -39,8 +39,8 @@ function reference(kind: ReferenceKind, id: string, name: string): Reference {
 }
 
 async function seedReferences(repository: ReferenceRepository): Promise<void> {
-  await repository.save(reference('CLIENT', 'client-2', 'Maria Souza'));
-  await repository.save(reference('CLIENT', 'client-1', 'Ana Lima'));
+  await repository.save(reference('INSURER', 'insurer-2', 'Seguradora Sul'));
+  await repository.save(reference('INSURER', 'insurer-1', 'Seguradora Norte'));
   await repository.save(reference('PRODUCT', 'auto', 'Automovel'));
   await repository.save(reference('INTERMEDIARY', 'mega', 'Mega Intermediacao'));
 }
@@ -52,8 +52,8 @@ describe('the reference registry on SQLite (IN-01)', () => {
     const listed = await new ListReferences({ references }).execute();
 
     expect(listed.map((line) => `${line.kind}:${line.id}`)).toEqual([
-      'CLIENT:client-1',
-      'CLIENT:client-2',
+      'INSURER:insurer-1',
+      'INSURER:insurer-2',
       'INTERMEDIARY:mega',
       'PRODUCT:auto',
     ]);
@@ -62,24 +62,24 @@ describe('the reference registry on SQLite (IN-01)', () => {
   it('answers one kind at a time when asked', async () => {
     await seedReferences(references);
 
-    const clients = await new ListReferences({ references }).execute({ kind: 'CLIENT' });
+    const insurers = await new ListReferences({ references }).execute({ kind: 'INSURER' });
 
-    expect(clients.map((line) => line.name)).toEqual(['Ana Lima', 'Maria Souza']);
+    expect(insurers.map((line) => line.name)).toEqual(['Seguradora Norte', 'Seguradora Sul']);
   });
 
   it('replaces the name of a record registered again', async () => {
     await seedReferences(references);
-    await references.save(reference('CLIENT', 'client-1', 'Ana Lima Souza'));
+    await references.save(reference('INSURER', 'insurer-1', 'Seguradora Norte Ltda'));
 
-    const clients = await new ListReferences({ references }).execute({ kind: 'CLIENT' });
+    const insurers = await new ListReferences({ references }).execute({ kind: 'INSURER' });
 
     // PRIMARY KEY (kind, id): a correction of the name, not a second record.
-    expect(clients).toHaveLength(2);
-    expect(clients.find((line) => line.id === 'client-1')?.name).toBe('Ana Lima Souza');
+    expect(insurers).toHaveLength(2);
+    expect(insurers.find((line) => line.id === 'insurer-1')?.name).toBe('Seguradora Norte Ltda');
   });
 
   it('keeps the same identifier of two different kinds apart', async () => {
-    await references.save(reference('CLIENT', 'alfa', 'Alfa Transportes'));
+    await references.save(reference('INTERMEDIARY', 'alfa', 'Alfa Intermediacao'));
     await references.save(reference('INSURER', 'alfa', 'Seguradora Alfa'));
 
     const listed = await new ListReferences({ references }).execute();

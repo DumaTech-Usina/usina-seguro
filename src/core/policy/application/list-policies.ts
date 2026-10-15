@@ -1,6 +1,9 @@
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
 import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
+import { clientNameOf } from '../../registry/application/client-name.ts';
+import type { ClientRepository } from '../../registry/application/client-repository.ts';
+import { searchClients } from '../../registry/application/list-clients.ts';
 import { ReferenceNames } from '../../registry/application/reference-names.ts';
 import type { ReferenceRepository } from '../../registry/application/reference-repository.ts';
 import type { PolicyListFilter, PolicyRepository } from './policy-repository.ts';
@@ -18,6 +21,12 @@ export interface ListPoliciesInput {
    * answer the whole listing to a question that was never understood.
    */
   readonly renewalUntil?: string;
+  /**
+   * REQ-319: part of the client's name or digits of its CPF. Absent or blank
+   * means no filter. Matched through the client registry, so a policy whose
+   * proposal holds a typed text from before it is not found (REQ-320).
+   */
+  readonly client?: string | undefined;
 }
 
 export interface ListPoliciesDependencies {
@@ -25,6 +34,8 @@ export interface ListPoliciesDependencies {
   readonly proposals: ProposalRepository;
   /** IN-01: the names the line is identified by (REQ-096). */
   readonly references: ReferenceRepository;
+  /** V2 section 9E: the client's name, and the search by client (REQ-318, REQ-319). */
+  readonly clients: ClientRepository;
 }
 
 /**
@@ -55,12 +66,18 @@ export class ListPolicies {
         ? {}
         : { renewalUntil: CalendarDate.fromString(input.renewalUntil) };
 
+    const query = input.client?.trim() ?? '';
+    const clientIds =
+      query === ''
+        ? null
+        : new Set((await searchClients(this.deps.clients, query)).map((client) => client.id));
+
     const policies = await this.deps.policies.list(filter);
     // Read once for the whole listing, not once per line: the registry is the
     // counterparties of the brokerage, not a table that grows with volume.
     const names = await ReferenceNames.load(this.deps.references);
 
-    return Promise.all(
+    const lines = await Promise.all(
       policies.map(async (policy) => {
         const proposal = await this.deps.proposals.findById(policy.proposalId);
 
@@ -70,8 +87,20 @@ export class ListPolicies {
           throw new RecordNotFound(PROPOSAL_MESSAGES.NOT_FOUND, { id: policy.proposalId });
         }
 
-        return toPolicyListItemView(policy, proposal, names);
+        // REQ-241, REQ-319: the policy's client is its proposal's.
+        if (clientIds !== null && !clientIds.has(proposal.clientId)) {
+          return null;
+        }
+
+        return toPolicyListItemView(
+          policy,
+          proposal,
+          names,
+          await clientNameOf(this.deps.clients, proposal.clientId),
+        );
       }),
     );
+
+    return lines.filter((line) => line !== null);
   }
 }

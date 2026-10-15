@@ -41,6 +41,14 @@
              de shared/status.js, que é o único vocabulário de domínio da tela. -->
         <div class="filters" id="filters" role="tablist" aria-label="Estado da proposta"></div>
 
+        <!-- REQ-319: busca pelo cliente cadastrado, por nome ou CPF, junto com o estado. -->
+        <form class="client-search" id="form-client-search">
+          <div class="field">
+            <input class="field__input" name="client" type="search" placeholder=" " />
+            <label class="field__label">Cliente (nome ou CPF)</label>
+          </div>
+        </form>
+
         <section class="card">
           <div class="card__body card__body--flush" id="list">
             <div class="card__body stack">

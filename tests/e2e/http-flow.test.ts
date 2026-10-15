@@ -7,6 +7,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { registerBroker } from './support/brokers.ts';
+import { clientNamed } from './support/clients.ts';
 import { type SignedIn, signIn } from './support/sign-in.ts';
 
 /**
@@ -53,7 +54,7 @@ afterAll(async () => {
 });
 
 const validProposal = {
-  clientId: 'client-1',
+  client: clientNamed('client-1'),
   brokerId: 'broker-1',
   insurerId: 'insurer-1',
   productId: 'product-1',
@@ -132,18 +133,38 @@ describe('HTTP application', () => {
   });
 
   it('interpolates message parameters in the rendered text', async () => {
-    const response = await post({ ...validProposal, clientId: '   ' });
+    const response = await post({ ...validProposal, insurerId: '   ' });
 
     expect(response.status).toBe(422);
     const body = (await response.json()) as ErrorBody;
-    expect(body.message).toBe('Proposta exige o campo clientId.');
+    expect(body.message).toBe('Proposta exige o campo insurerId.');
+  });
+
+  it('refuses a client without name or with an invalid CPF with 422, in Portuguese (REJ-310, REJ-311)', async () => {
+    const nameless = await post({ ...validProposal, client: { name: ' ', cpf: '529.982.247-25' } });
+    expect(nameless.status).toBe(422);
+    expect(((await nameless.json()) as ErrorBody).message).toBe('O cliente precisa de um nome.');
+
+    const invalid = await post({
+      ...validProposal,
+      client: { name: 'Ana', cpf: '529.982.247-24' },
+    });
+    expect(invalid.status).toBe(422);
+    expect(((await invalid.json()) as ErrorBody).message).toBe(
+      'CPF do cliente inválido: informe os 11 dígitos, com dígitos verificadores válidos.',
+    );
   });
 
   it('rejects a malformed body with 400 before reaching the domain', async () => {
-    const response = await post({ clientId: 'client-1' });
+    const response = await post({ insurerId: 'insurer-1' });
 
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: 'invalid_request' });
+  });
+
+  it('rejects a client without its CPF field, or sent as a text, with 400 (REQ-317)', async () => {
+    expect((await post({ ...validProposal, client: { name: 'Ana' } })).status).toBe(400);
+    expect((await post({ ...validProposal, client: 'Ana' })).status).toBe(400);
   });
 
   it('rejects a net premium sent as a number (REQ-120)', async () => {

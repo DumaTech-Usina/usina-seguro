@@ -2,6 +2,8 @@ import { Authorship } from '../../proposal/domain/authorship.ts';
 import { BusinessRuleViolation } from '../../proposal/domain/errors.ts';
 import { brokerNameOf } from '../../registry/application/broker-name.ts';
 import type { BrokerRepository } from '../../registry/application/broker-repository.ts';
+import { clientNameOf } from '../../registry/application/client-name.ts';
+import type { ClientRepository } from '../../registry/application/client-repository.ts';
 import { COMMISSION_MESSAGES } from '../domain/errors.ts';
 import {
   type ParcelledPayoutDependencies,
@@ -28,6 +30,8 @@ export interface DeclareInstallmentEligibilityInput {
 export interface DeclareInstallmentEligibilityDependencies extends ParcelledPayoutDependencies {
   /** REQ-308: the statement keeps the broker's name as it is at eligibility. */
   readonly brokers: BrokerRepository;
+  /** REQ-318: the statement keeps the client's name as it is at eligibility. */
+  readonly clients: ClientRepository;
 }
 
 export class DeclareInstallmentEligibility {
@@ -55,11 +59,12 @@ export class DeclareInstallmentEligibility {
       input.number,
       {
         policyNumber: policy.policyNumber,
-        // REQ-308: the broker's name now, kept as it is. DEC-208 is still open
-        // for the insurer and the client: they are what the proposal carries.
+        // REQ-308, REQ-318: the broker's and the client's names now, kept as
+        // they are. DEC-208 is still open for the insurer: it is what the
+        // proposal carries.
         broker: await brokerNameOf(this.deps.brokers, proposal.brokerId),
         insurer: proposal.insurerId,
-        client: proposal.clientId,
+        client: await clientNameOf(this.deps.clients, proposal.clientId),
       },
       signed,
     );

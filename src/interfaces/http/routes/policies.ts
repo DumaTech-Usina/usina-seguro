@@ -77,7 +77,11 @@ const listPoliciesSchema: FastifySchema = {
   querystring: {
     type: 'object',
     additionalProperties: false,
-    properties: { renewalUntil: { type: 'string' } },
+    properties: {
+      renewalUntil: { type: 'string' },
+      // REQ-319: part of the client's name or of its CPF.
+      client: { type: 'string' },
+    },
   },
 };
 

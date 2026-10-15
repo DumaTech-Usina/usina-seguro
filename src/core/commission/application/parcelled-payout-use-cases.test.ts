@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ImmediateTransaction } from '../../../infrastructure/persistence/in-memory/immediate-transaction.ts';
 import { InMemoryBrokerRepository } from '../../../infrastructure/persistence/in-memory/in-memory-broker-repository.ts';
+import { InMemoryClientRepository } from '../../../infrastructure/persistence/in-memory/in-memory-client-repository.ts';
 import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryParcelledPayoutRepository } from '../../../infrastructure/persistence/in-memory/in-memory-parcelled-payout-repository.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
@@ -44,7 +45,8 @@ function scenario() {
   });
 
   const brokers = new InMemoryBrokerRepository();
-  const deps = { proposals, policies, parcelledPayouts, brokers, newId, now };
+  const clients = new InMemoryClientRepository();
+  const deps = { proposals, policies, parcelledPayouts, brokers, clients, newId, now };
 
   return {
     setClock: (iso: string) => {

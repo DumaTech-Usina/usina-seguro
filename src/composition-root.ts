@@ -67,12 +67,18 @@ import { ReviseWorkedCommission } from './core/proposal/application/revise-worke
 import type { SourceDocumentStorage } from './core/proposal/application/source-document-storage.ts';
 import type { BrokerRepository } from './core/registry/application/broker-repository.ts';
 import { ChangeBroker } from './core/registry/application/change-broker.ts';
+import { ChangeClient } from './core/registry/application/change-client.ts';
+import type { ClientRepository } from './core/registry/application/client-repository.ts';
 import { GetBroker } from './core/registry/application/get-broker.ts';
+import { GetClient } from './core/registry/application/get-client.ts';
 import { ListBrokers } from './core/registry/application/list-brokers.ts';
+import { ListClients, searchClients } from './core/registry/application/list-clients.ts';
 import { ListReferences } from './core/registry/application/list-references.ts';
 import type { ReferenceRepository } from './core/registry/application/reference-repository.ts';
 import { RegisterBroker } from './core/registry/application/register-broker.ts';
+import { RegisterClient } from './core/registry/application/register-client.ts';
 import { RegisterReference } from './core/registry/application/register-reference.ts';
+import { ResolveClient } from './core/registry/application/resolve-client.ts';
 import {
   InMemoryAccessMailer,
   type SentAccessMail,
@@ -82,6 +88,7 @@ import { SmtpAccessMailer } from './infrastructure/email/smtp-access-mailer.ts';
 import { ProposalPdfReader, identifyByText } from './infrastructure/pdf/proposal-pdf-reader.ts';
 import { ImmediateTransaction } from './infrastructure/persistence/in-memory/immediate-transaction.ts';
 import { InMemoryBrokerRepository } from './infrastructure/persistence/in-memory/in-memory-broker-repository.ts';
+import { InMemoryClientRepository } from './infrastructure/persistence/in-memory/in-memory-client-repository.ts';
 import { InMemoryCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
 import { InMemoryDocumentStorage } from './infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryInvitationRepository } from './infrastructure/persistence/in-memory/in-memory-invitation-repository.ts';
@@ -96,6 +103,7 @@ import { InMemoryRoleChangeRepository } from './infrastructure/persistence/in-me
 import { InMemorySessionRepository } from './infrastructure/persistence/in-memory/in-memory-session-repository.ts';
 import { InMemoryUserRepository } from './infrastructure/persistence/in-memory/in-memory-user-repository.ts';
 import { SqliteBrokerRepository } from './infrastructure/persistence/sqlite/sqlite-broker-repository.ts';
+import { SqliteClientRepository } from './infrastructure/persistence/sqlite/sqlite-client-repository.ts';
 import { SqliteCommissionRepository } from './infrastructure/persistence/sqlite/sqlite-commission-repository.ts';
 import { openSqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.ts';
 import { SqliteDocumentStorage } from './infrastructure/persistence/sqlite/sqlite-document-storage.ts';
@@ -164,6 +172,11 @@ export interface UseCases {
   readonly changeBroker: ChangeBroker;
   readonly getBroker: GetBroker;
   readonly listBrokers: ListBrokers;
+  /** V2 section 9E: the clients. There is no removal (REQ-315). */
+  readonly registerClient: RegisterClient;
+  readonly changeClient: ChangeClient;
+  readonly getClient: GetClient;
+  readonly listClients: ListClients;
   readonly listNotifications: ListNotifications;
   /**
    * V2 section 9C: access to the system. `issueFirstAdministratorInvitation`
@@ -214,6 +227,7 @@ export function composeApplication(config: Config): Application {
     parcelledPayouts,
     references,
     brokers,
+    clients,
     documents,
     notifications,
     users,
@@ -254,6 +268,7 @@ export function composeApplication(config: Config): Application {
     proposals,
     references,
     brokers,
+    clients,
     channels: [] as readonly NotificationChannel[],
     newId,
   });
@@ -264,6 +279,16 @@ export function composeApplication(config: Config): Application {
     isRegistered: async (brokerId: string) => (await brokers.findById(brokerId)) !== null,
   };
 
+  // REQ-317, REQ-319: the proposal module asks for the client of a CPF and for
+  // the clients a search term matches; the registry answers both here.
+  const resolveClient = new ResolveClient({ clients, newId, now });
+  const proposalClients = {
+    resolve: (client: { name: string; cpf: string }, author: string) =>
+      resolveClient.execute({ name: client.name, cpf: client.cpf, userId: author }),
+    matching: async (query: string) =>
+      new Set((await searchClients(clients, query)).map((client) => client.id)),
+  };
+
   return {
     useCases: {
       // REQ-219: the imported PDF is kept with the proposal.
@@ -271,6 +296,8 @@ export function composeApplication(config: Config): Application {
         proposals,
         documents,
         brokers: registeredBrokers,
+        clients: proposalClients,
+        transaction,
         newId,
         now,
       }),
@@ -283,7 +310,7 @@ export function composeApplication(config: Config): Application {
       readProposalPdf: new ProposalPdfReader({ identify: identifyByText }),
       getProposal: new GetProposal({ proposals }),
       getProposalSourceDocument: new GetProposalSourceDocument({ proposals, documents }),
-      listProposals: new ListProposals({ proposals }),
+      listProposals: new ListProposals({ proposals, clients: proposalClients }),
       registerPolicy: new RegisterPolicy({
         proposals,
         policies,
@@ -304,10 +331,16 @@ export function composeApplication(config: Config): Application {
         now,
       }),
       getPolicyDocument: new GetPolicyDocument({ policies, documents }),
-      listPolicies: new ListPolicies({ policies, proposals, references }),
+      listPolicies: new ListPolicies({ policies, proposals, references, clients }),
       payInstallment: new PayInstallment({ proposals, policies, now }),
       getCommission: new GetCommission({ commissions }),
-      listCommissions: new ListCommissions({ commissions, policies, proposals, references }),
+      listCommissions: new ListCommissions({
+        commissions,
+        policies,
+        proposals,
+        references,
+        clients,
+      }),
       overrideCommission: new OverrideCommission({ commissions, now }),
       getPolicyPayout: new GetPolicyPayout({ policies, proposals, payouts }),
       informPayoutRate: new InformPayoutRate({ policies, proposals, payouts, newId, now }),
@@ -317,6 +350,7 @@ export function composeApplication(config: Config): Application {
         proposals,
         payouts,
         brokers,
+        clients,
         newId,
         now,
       }),
@@ -325,6 +359,7 @@ export function composeApplication(config: Config): Application {
         policies,
         proposals,
         payouts,
+        clients,
       }),
       // V2 section 9B: the payout of a policy with parcelled CT.
       getParcelledPayout: new GetParcelledPayout({ policies, proposals, parcelledPayouts }),
@@ -347,10 +382,16 @@ export function composeApplication(config: Config): Application {
         proposals,
         parcelledPayouts,
         brokers,
+        clients,
         newId,
         now,
       }),
-      listParcelledPolicies: new ListParcelledPolicies({ policies, proposals, parcelledPayouts }),
+      listParcelledPolicies: new ListParcelledPolicies({
+        policies,
+        proposals,
+        parcelledPayouts,
+        clients,
+      }),
       // IN-01: the reference records every listing above resolves names from.
       registerReference: new RegisterReference({ references, now }),
       listReferences: new ListReferences({ references }),
@@ -359,6 +400,11 @@ export function composeApplication(config: Config): Application {
       changeBroker: new ChangeBroker({ brokers, now }),
       getBroker: new GetBroker({ brokers }),
       listBrokers: new ListBrokers({ brokers }),
+      // V2 section 9E: the clients, signed by the session's user (REQ-314).
+      registerClient: new RegisterClient({ clients, newId, now }),
+      changeClient: new ChangeClient({ clients, now }),
+      getClient: new GetClient({ clients }),
+      listClients: new ListClients({ clients }),
       // OUT-10, REQ-105: what was notified, to whom and when.
       listNotifications: new ListNotifications({ notifications }),
       // V2 section 9C: access to the system.
@@ -419,6 +465,7 @@ interface Persistence {
   readonly parcelledPayouts: ParcelledPayoutRepository;
   readonly references: ReferenceRepository;
   readonly brokers: BrokerRepository;
+  readonly clients: ClientRepository;
   readonly documents: SourceDocumentStorage;
   readonly notifications: NotificationRepository;
   readonly users: UserRepository;
@@ -441,6 +488,7 @@ function composePersistence(config: Config): Persistence {
         parcelledPayouts: new InMemoryParcelledPayoutRepository(),
         references: new InMemoryReferenceRepository(),
         brokers: new InMemoryBrokerRepository(),
+        clients: new InMemoryClientRepository(),
         documents: new InMemoryDocumentStorage(),
         notifications: new InMemoryNotificationRepository(),
         users: new InMemoryUserRepository(),
@@ -462,6 +510,7 @@ function composePersistence(config: Config): Persistence {
         parcelledPayouts: new SqliteParcelledPayoutRepository(db),
         references: new SqliteReferenceRepository(db),
         brokers: new SqliteBrokerRepository(db),
+        clients: new SqliteClientRepository(db),
         documents: new SqliteDocumentStorage(db),
         notifications: new SqliteNotificationRepository(db),
         users: new SqliteUserRepository(db),

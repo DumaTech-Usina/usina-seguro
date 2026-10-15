@@ -5,10 +5,12 @@ import { Percentage } from '../domain/percentage.ts';
 import { Proposal } from '../domain/proposal.ts';
 import { declareReceipt } from '../domain/receipt.ts';
 import type { WorkedCommissionMode } from '../domain/worked-commission.ts';
+import type { ProposalClientInput, ProposalClients } from './proposal-clients.ts';
 import type { ProposalRepository } from './proposal-repository.ts';
 import { type ProposalView, toProposalView } from './proposal-view.ts';
 import type { RegisteredBrokers } from './registered-brokers.ts';
 import type { SourceDocumentStorage } from './source-document-storage.ts';
+import type { Transaction } from './transaction.ts';
 
 /** REQ-221: an intermediary and its CTU, as the user declared them. */
 export interface IntermediaryDeclarationInput {
@@ -29,7 +31,8 @@ export interface RegisterProposalInstallmentInput {
  * become value objects in here.
  */
 export interface RegisterProposalInput {
-  readonly clientId: string;
+  /** REQ-317: name and CPF, both mandatory; the proposal keeps the client's id. */
+  readonly client: ProposalClientInput;
   /** REQ-307: the id of a registered broker. */
   readonly brokerId: string;
   readonly insurerId: string;
@@ -67,6 +70,8 @@ export interface RegisterProposalDependencies {
   readonly proposals: ProposalRepository;
   readonly documents: SourceDocumentStorage;
   readonly brokers: RegisteredBrokers;
+  readonly clients: ProposalClients;
+  readonly transaction: Transaction;
   readonly newId: () => string;
   readonly now: () => Date;
 }
@@ -77,6 +82,10 @@ export interface RegisterProposalDependencies {
  * issuance with the expected value visible (REQ-232).
  *
  * The use case only converts and orchestrates — the rules live in the domain.
+ *
+ * The client is resolved by its CPF (REQ-317) in the same transaction as the
+ * proposal is saved: a registration refused after the client was created
+ * leaves no client behind (CA-314).
  */
 export class RegisterProposal {
   private readonly deps: RegisterProposalDependencies;
@@ -86,13 +95,18 @@ export class RegisterProposal {
   }
 
   async execute(input: RegisterProposalInput): Promise<ProposalView> {
+    return this.deps.transaction.run(() => this.register(input));
+  }
+
+  private async register(input: RegisterProposalInput): Promise<ProposalView> {
     const id = this.deps.newId();
+    const clientId = await this.deps.clients.resolve(input.client, input.author);
     const source = input.sourceDocument ?? null;
     const documentId = source === null ? null : this.deps.newId();
 
     const proposal = Proposal.register({
       id,
-      clientId: input.clientId,
+      clientId,
       brokerId: input.brokerId,
       insurerId: input.insurerId,
       productId: input.productId,

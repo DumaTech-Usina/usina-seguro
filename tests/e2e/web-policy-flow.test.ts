@@ -9,6 +9,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { registerBroker } from './support/brokers.ts';
+import { clientNamed } from './support/clients.ts';
 import { type SignedIn, TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
@@ -215,7 +216,7 @@ async function registeredPolicy(numbers: {
   policyNumber: string;
 }): Promise<string> {
   const proposal = await callApi('POST', '/proposals', {
-    clientId: 'client-1',
+    client: clientNamed('client-1'),
     brokerId,
     insurerId: 'insurer-1',
     productId: 'auto',

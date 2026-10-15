@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ImmediateTransaction } from '../../../infrastructure/persistence/in-memory/immediate-transaction.ts';
 import { InMemoryBrokerRepository } from '../../../infrastructure/persistence/in-memory/in-memory-broker-repository.ts';
+import { InMemoryClientRepository } from '../../../infrastructure/persistence/in-memory/in-memory-client-repository.ts';
 import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryPayoutCommissionRepository } from '../../../infrastructure/persistence/in-memory/in-memory-payout-commission-repository.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
@@ -15,6 +16,7 @@ import { Proposal } from '../../proposal/domain/proposal.ts';
 import type { Receipt } from '../../proposal/domain/receipt.ts';
 import type { WorkedCommissionMode } from '../../proposal/domain/worked-commission.ts';
 import { Broker } from '../../registry/domain/broker.ts';
+import { Client } from '../../registry/domain/client.ts';
 import { COMMISSION_MESSAGES } from '../domain/errors.ts';
 import { DeclarePayoutEligibility } from './declare-payout-eligibility.ts';
 import { GetPolicyPayout } from './get-policy-payout.ts';
@@ -56,10 +58,12 @@ function scenario() {
   });
 
   const brokers = new InMemoryBrokerRepository();
-  const deps = { proposals, policies, payouts, brokers, newId, now };
+  const clients = new InMemoryClientRepository();
+  const deps = { proposals, policies, payouts, brokers, clients, newId, now };
 
   return {
     brokers,
+    clients,
     setClock: (iso: string) => {
       clock = new Date(iso);
     },
@@ -327,6 +331,37 @@ describe('DeclarePayoutEligibility (REQ-281 to REQ-283)', () => {
     expect((await s.listEligible.execute({ broker: 'gama' })).map((line) => line.broker)).toEqual([
       'Corretora Gama',
     ]);
+  });
+
+  it('keeps the name the registered client has at eligibility, not a later one (REQ-318, CA-315)', async () => {
+    const s = scenario();
+    const client = Client.register({
+      id: 'client-7',
+      name: 'Maria Souza',
+      cpf: '52998224725',
+      signed: Authorship.of('ana', new Date('2026-09-01T12:00:00.000Z')),
+    });
+    await s.clients.save(client);
+    const policyId = await s.policy({ proposalId: 'p1', clientId: 'client-7' });
+
+    // Before the eligibility, the list without CR shows the current name.
+    expect((await s.listWithoutRate.execute()).map((line) => line.client)).toEqual(['Maria Souza']);
+
+    await s.inform.execute({ policyId, rate: '60', userId: 'ana' });
+    await s.declareEligible.execute({ policyId, userId: 'carla' });
+    await s.clients.save(
+      client.change({
+        name: 'Maria Souza Lima',
+        cpf: '52998224725',
+        signed: Authorship.of('ana', new Date('2026-12-01T12:00:00.000Z')),
+      }),
+    );
+
+    expect((await s.get.execute(policyId)).commission?.statement?.client).toBe('Maria Souza');
+    expect((await s.listEligible.execute({ client: 'souza' })).map((line) => line.client)).toEqual([
+      'Maria Souza',
+    ]);
+    expect(await s.listEligible.execute({ client: 'lima' })).toEqual([]);
   });
 
   it('signs the eligibility and generates the statement, nothing typed (CA-232, CA-233, CA-237)', async () => {

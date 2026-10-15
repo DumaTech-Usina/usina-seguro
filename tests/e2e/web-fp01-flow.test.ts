@@ -9,6 +9,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { chooseBroker, registerBroker } from './support/brokers.ts';
+import { clientNamed } from './support/clients.ts';
 import { type SignedIn, TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
@@ -152,7 +153,7 @@ async function callApi(method: string, apiPath: string, body?: unknown): Promise
 /** The registration body of a V2 proposal awaiting issuance, over the API. */
 function proposalBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    clientId: 'client-1',
+    client: clientNamed('client-1'),
     brokerId,
     insurerId: 'insurer-1',
     productId: 'auto',
@@ -179,7 +180,9 @@ async function awaitingProposal(overrides: Record<string, unknown> = {}): Promis
  */
 async function fillRegistration(): Promise<void> {
   await chooseBroker(document, window, 'alfa', 'Corretora Alfa');
-  field('#form-proposal', 'clientId').value = 'client-web';
+  // REQ-317: name and CPF of the client, typed; a new CPF registers the client.
+  field('#form-proposal', 'clientName').value = 'Maria Web';
+  field('#form-proposal', 'clientCpf').value = '529.982.247-25';
   field('#form-proposal', 'insurerId').value = 'insurer-1';
   field('#form-proposal', 'productId').value = 'auto';
   field('#form-proposal', 'paymentMethodId').value = 'bank-slip';
@@ -240,7 +243,6 @@ describe('FP-01 through the web interface', () => {
     const [stored] = await callApi('GET', '/proposals?status=AWAITING_ISSUANCE');
     expect(stored).toMatchObject({
       proposalNumber: 'PRP-WEB-1',
-      clientId: 'client-web',
       coverageEnd: '2027-10-01',
       renewalDate: '2027-10-01',
       installments: [{ number: 1, amount: '100.00', dueDate: null }],
@@ -251,6 +253,11 @@ describe('FP-01 through the web interface', () => {
       expectedReceipt: { intermediary: '20.00', usina: '10.00' },
     });
     expect(stored.workedCommissionHistory[0].informedBy).toBe(signedIn.user.id);
+    expect(await callApi('GET', `/clients/${stored.clientId}`)).toMatchObject({
+      name: 'Maria Web',
+      cpf: '52998224725',
+      history: [{ signedBy: signedIn.user.id }],
+    });
 
     const link = document.querySelector('#done-body a.btn--filled');
     expect(link?.href).toContain(`/app/proposals/detail.html?id=${stored.id}`);
@@ -745,7 +752,11 @@ describe('filling the proposal from its PDF (REQ-218)', () => {
       expect(requests).not.toContain('POST /proposals');
 
       expect(field('#form-proposal', 'proposalNumber').value).toBe('140839725');
-      expect(field('#form-proposal', 'clientId').value).toBe('JOSE WENDSON GOMES DE QUEIROZ COSTA');
+      // REQ-321: the name and the CPF of the client, the CPF as its digits.
+      expect(field('#form-proposal', 'clientName').value).toBe(
+        'JOSE WENDSON GOMES DE QUEIROZ COSTA',
+      );
+      expect(field('#form-proposal', 'clientCpf').value).toMatch(/^\d{11}$/);
       expect(field('#form-proposal', 'insurerId').value).toBe('ALLIANZ');
       expect(field('#form-proposal', 'productId').value).toBe('Auto');
       expect(field('#form-proposal', 'netPremium').value).toBe('643.85');
@@ -818,6 +829,50 @@ describe('filling the proposal from its PDF (REQ-218)', () => {
     expect(field('#form-proposal', 'proposalNumber').value).toBe('555');
     // Not found is not erased: what the user had stays for them to review.
     expect(field('#form-proposal', 'netPremium').value).toBe('100.00');
+  });
+
+  it('fills the client name and CPF read from the PDF, and lists a CPF not found (REQ-321)', async () => {
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+
+    const realFetch = globalThis.fetch;
+    const readings = [
+      {
+        status: 'PARTIAL',
+        fields: { clientId: 'MARIA DA SILVA', clientCpf: '52998224725' },
+        missing: ['netPremium'],
+      },
+      // A document whose CPF/CNPJ is not a valid CPF: the reader leaves it out.
+      { status: 'PARTIAL', fields: { clientId: 'EMPRESA EXEMPLO' }, missing: ['clientCpf'] },
+    ];
+    globalThis.fetch = (async (input: Untyped, init: Untyped) =>
+      String(input).endsWith('/proposals/pdf-reading')
+        ? new Response(JSON.stringify(readings.shift()), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          })
+        : realFetch(input, init)) as typeof globalThis.fetch;
+
+    try {
+      sendPdf(new Uint8Array([1, 2, 3]));
+      await vi.waitFor(() => {
+        expect(field('#form-proposal', 'clientCpf').value).toBe('52998224725');
+      });
+      expect(field('#form-proposal', 'clientName').value).toBe('MARIA DA SILVA');
+      expect(text('#pdf-found')).toContain('CPF do cliente');
+
+      sendPdf(new Uint8Array([4, 5, 6]));
+      await vi.waitFor(() => {
+        expect(field('#form-proposal', 'clientName').value).toBe('EMPRESA EXEMPLO');
+      });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+
+    expect(text('#pdf-missing')).toContain('CPF do cliente');
+    // Not found is not erased: the CPF stays for the user to review.
+    expect(field('#form-proposal', 'clientCpf').value).toBe('52998224725');
+    expect(requests).not.toContain('POST /proposals');
   });
 
   it('puts the broker read from the PDF in the search, and chooses nothing (REQ-310)', async () => {

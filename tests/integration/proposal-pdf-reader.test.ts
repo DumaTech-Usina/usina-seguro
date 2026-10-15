@@ -29,6 +29,8 @@ describe('ProposalPdfReader', () => {
       expect(reading.fields).toMatchObject({
         proposalNumber: '140839725',
         clientId: 'JOSE WENDSON GOMES DE QUEIROZ COSTA',
+        // REQ-321: the digits of a valid CPF (the value is personal data).
+        clientCpf: expect.stringMatching(/^\d{11}$/),
         brokerId: 'PAISSANDU CORRETORA DE SEGUROS LTDA',
         insurerId: 'ALLIANZ',
         productId: 'Auto',

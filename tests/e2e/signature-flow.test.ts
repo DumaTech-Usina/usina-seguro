@@ -7,6 +7,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { registerBroker } from './support/brokers.ts';
+import { clientNamed } from './support/clients.ts';
 import { type SignedIn, signIn } from './support/sign-in.ts';
 
 /**
@@ -62,7 +63,7 @@ afterAll(async () => {
 const PDF = Buffer.from('%PDF-1.4\n%fake\n').toString('base64');
 
 const PROPOSAL = {
-  clientId: 'client-1',
+  client: clientNamed('client-1'),
   brokerId: 'broker-1',
   insurerId: 'insurer-1',
   productId: 'product-1',

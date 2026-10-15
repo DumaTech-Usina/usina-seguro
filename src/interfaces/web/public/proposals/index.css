@@ -28,6 +28,10 @@
   color: var(--on-primary-container);
 }
 
+.client-search {
+  max-width: 360px;
+}
+
 .proposal-number {
   font-family: var(--font-mono);
   font-weight: 500;

@@ -244,7 +244,7 @@ describe('requests from another site (REQ-417)', () => {
 
     const response = await post(
       '/references',
-      { kind: 'CLIENT', id: 'c-1', name: 'Ana' },
+      { kind: 'INSURER', id: 'i-1', name: 'Seguradora' },
       { cookie, origin: 'https://evil.example' },
     );
 
@@ -273,7 +273,7 @@ describe('requests from another site (REQ-417)', () => {
 
     const response = await post(
       '/references',
-      { kind: 'CLIENT', id: 'c-1', name: 'Ana' },
+      { kind: 'INSURER', id: 'i-1', name: 'Seguradora' },
       { cookie, origin: baseUrl },
     );
 

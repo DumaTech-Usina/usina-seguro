@@ -25,6 +25,7 @@ import { statusChip } from '/app/shared/status.js';
 const list = document.querySelector('#list');
 const summary = document.querySelector('#summary');
 const renewalUntil = document.querySelector('#renewal-until');
+const clientSearch = document.querySelector('#client-search');
 const clear = document.querySelector('#clear');
 
 function element(tag, className, text) {
@@ -150,25 +151,37 @@ function loading() {
 }
 
 /** Quantas apólices estão em tela, e sob qual corte de renovação. */
-function renderSummary(policies, until) {
+function renderSummary(policies, until, client) {
   const chips = [element('span', 'chip', `${policies.length} apólices`)];
 
   if (until !== undefined) {
     chips.push(element('span', 'chip chip--warning', `Renovam até ${formatDate(until)}`));
   }
 
+  if (client !== undefined) {
+    chips.push(element('span', 'chip', `Cliente: ${client}`));
+  }
+
   summary.replaceChildren(...chips);
 }
 
+let listRequest = 0;
+
 async function load() {
+  const request = ++listRequest;
   const until = renewalUntil.value === '' ? undefined : renewalUntil.value;
-  clear.hidden = until === undefined;
+  const client = clientSearch.value.trim() === '' ? undefined : clientSearch.value.trim();
+  clear.hidden = until === undefined && client === undefined;
   loading();
 
   let policies;
   try {
-    policies = await api.listPolicies(until);
+    // REQ-319: the client is matched by the server, through the client registry.
+    policies = await api.listPolicies(until, client);
   } catch (error) {
+    if (request !== listRequest) {
+      return;
+    }
     if (error instanceof ApiError) {
       reportError(error);
     }
@@ -183,21 +196,28 @@ async function load() {
     return;
   }
 
-  renderSummary(policies, until);
+  // Only the latest answer is shown: typing in the search fires one reading per key.
+  if (request !== listRequest) {
+    return;
+  }
+
+  renderSummary(policies, until, client);
 
   if (policies.length === 0) {
     list.replaceChildren(
-      until === undefined
-        ? emptyState(
-            'shield',
-            'Nenhuma apólice registrada',
-            'A apólice nasce do reconhecimento da emissão, registrado na proposta.',
-          )
-        : emptyState(
-            'event_available',
-            'Nenhuma apólice renova até essa data',
-            'Escolha uma data mais distante ou volte à lista completa.',
-          ),
+      client !== undefined
+        ? emptyState('search_off', 'Nenhuma apólice desse cliente', 'Busque por outro nome ou CPF.')
+        : until === undefined
+          ? emptyState(
+              'shield',
+              'Nenhuma apólice registrada',
+              'A apólice nasce do reconhecimento da emissão, registrado na proposta.',
+            )
+          : emptyState(
+              'event_available',
+              'Nenhuma apólice renova até essa data',
+              'Escolha uma data mais distante ou volte à lista completa.',
+            ),
     );
     return;
   }
@@ -206,8 +226,10 @@ async function load() {
 }
 
 renewalUntil.addEventListener('change', load);
+clientSearch.addEventListener('input', load);
 clear.addEventListener('click', () => {
   renewalUntil.value = '';
+  clientSearch.value = '';
   load();
 });
 

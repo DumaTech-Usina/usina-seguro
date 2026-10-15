@@ -64,24 +64,24 @@
               <div class="banner">
                 <span class="material-symbols-outlined">info</span>
                 <div class="banner__text">
-                  Cliente, seguradora e produto são informados por identificador. Os que já
-                  estão em <strong>Cadastros</strong> aparecem como sugestão; um identificador
-                  novo continua sendo aceito. O corretor é escolhido entre os
-                  <a href="/app/brokers/">corretores cadastrados</a>.
+                  O cliente é informado por nome e CPF: um CPF já cadastrado usa o
+                  <a href="/app/clients/">cliente cadastrado</a>, sem alterá-lo; um CPF novo
+                  cadastra o cliente. Seguradora e produto são informados por identificador; os
+                  que já estão em <strong>Cadastros</strong> aparecem como sugestão. O corretor é
+                  escolhido entre os <a href="/app/brokers/">corretores cadastrados</a>.
                 </div>
               </div>
 
               <div class="form-grid">
+                <!-- REQ-317: nome e CPF do cliente, ambos obrigatórios. -->
                 <div class="field">
-                  <input
-                    class="field__input"
-                    name="clientId"
-                    placeholder=" "
-                    list="client-options"
-                    required
-                  />
-                  <datalist id="client-options"></datalist>
-                  <label class="field__label">Cliente</label>
+                  <input class="field__input" name="clientName" placeholder=" " required />
+                  <label class="field__label">Cliente — nome</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="clientCpf" placeholder=" " required />
+                  <label class="field__label">Cliente — CPF</label>
+                  <span class="field__hint">Com ou sem pontuação.</span>
                 </div>
                 <!-- REQ-306, REQ-307: busca por nome ou CPF; guarda o id do escolhido. -->
                 <div class="field">

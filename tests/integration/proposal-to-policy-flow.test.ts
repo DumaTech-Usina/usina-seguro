@@ -40,7 +40,7 @@ function open(): Application {
 
 async function registerProposal(proposalNumber = 'PRP-9001'): Promise<string> {
   const proposal = await application.useCases.registerProposal.execute({
-    clientId: 'client-1',
+    client: { name: 'Maria Souza', cpf: cpfOf(301) },
     brokerId: brokers['broker-1'],
     insurerId: 'insurer-1',
     productId: 'auto',
@@ -141,12 +141,8 @@ describe('proposal to policy flow on SQLite', () => {
   });
 
   it('notifies the broker in the same unit of work (FP-01 step 7, REQ-100)', async () => {
-    await application.useCases.registerReference.execute({
-      kind: 'CLIENT',
-      id: 'client-1',
-      name: 'Maria Souza',
-    });
     const proposalId = await registerProposal();
+    const { clientId } = await application.useCases.getProposal.execute(proposalId);
 
     const policy = await registerPolicy(proposalId);
 
@@ -157,7 +153,8 @@ describe('proposal to policy flow on SQLite', () => {
       event: 'POLICY_ISSUED',
       policyId: policy.id,
       policyNumber: 'PRP-9001',
-      client: { id: 'client-1', name: 'Maria Souza' },
+      // REQ-318: the client registered with the proposal (REQ-317).
+      client: { id: clientId, name: 'Maria Souza' },
       // REQ-212: the CT informed on the proposal, with its scale (REQ-121).
       workedCommission: '32.5',
       netPremium: '1200.00',
@@ -175,7 +172,7 @@ describe('proposal to policy flow on SQLite', () => {
 
     for (const [broker, proposalNumber] of emissions) {
       const proposal = await application.useCases.registerProposal.execute({
-        clientId: 'client-1',
+        client: { name: 'Maria Souza', cpf: cpfOf(301) },
         brokerId: brokers[broker],
         insurerId: 'insurer-1',
         productId: 'auto',

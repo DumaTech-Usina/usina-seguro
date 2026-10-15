@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ImmediateTransaction } from '../../../infrastructure/persistence/in-memory/immediate-transaction.ts';
 import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { RecordNotFound } from '../domain/errors.ts';
@@ -15,6 +16,11 @@ function scenario() {
     proposals,
     documents,
     brokers: { isRegistered: async () => true },
+    clients: {
+      resolve: async () => 'client-1',
+      matching: async () => new Set<string>(),
+    },
+    transaction: new ImmediateTransaction(),
     newId: () => `id-${++sequence}`,
     now: () => new Date('2026-09-22T12:00:00.000Z'),
   });
@@ -23,7 +29,7 @@ function scenario() {
 
 function input(overrides: Partial<RegisterProposalInput> = {}): RegisterProposalInput {
   return {
-    clientId: 'client-1',
+    client: { name: 'Maria Souza', cpf: '52998224725' },
     brokerId: 'broker-1',
     insurerId: 'insurer-1',
     productId: 'product-1',

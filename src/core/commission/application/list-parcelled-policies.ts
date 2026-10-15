@@ -1,6 +1,8 @@
 import type { PolicyRepository } from '../../policy/application/policy-repository.ts';
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
 import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
+import { clientNameOf } from '../../registry/application/client-name.ts';
+import type { ClientRepository } from '../../registry/application/client-repository.ts';
 import { parcelledSituationOf } from '../domain/parcelled-payout.ts';
 import type { ParcelledPayoutRepository } from './parcelled-payout-repository.ts';
 import type { ParcelledPolicyLineView } from './parcelled-payout-view.ts';
@@ -9,6 +11,8 @@ export interface ListParcelledPoliciesDependencies {
   readonly policies: PolicyRepository;
   readonly proposals: ProposalRepository;
   readonly parcelledPayouts: ParcelledPayoutRepository;
+  /** REQ-318: each line shows the client's current name. */
+  readonly clients: ClientRepository;
 }
 
 /**
@@ -43,7 +47,7 @@ export class ListParcelledPolicies {
       lines.push({
         policyId: policy.id,
         policyNumber: policy.policyNumber,
-        client: proposal.clientId,
+        client: await clientNameOf(this.deps.clients, proposal.clientId),
         broker: proposal.brokerId,
         renewalDate: policy.renewalDate.toString(),
         situation: parcelledSituationOf(payouts.get(policy.id) ?? null),

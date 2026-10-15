@@ -32,7 +32,6 @@ import { bindWorkedCommissionFields, workedCommissionOf } from '/app/shared/work
  */
 async function offerRegisteredReferences() {
   const fields = [
-    ['CLIENT', 'client-options'],
     ['INSURER', 'insurer-options'],
     ['PRODUCT', 'product-options'],
   ];
@@ -157,6 +156,7 @@ document
 const PDF_FIELD_LABEL = {
   proposalNumber: 'Número da proposta',
   clientId: 'Cliente',
+  clientCpf: 'CPF do cliente',
   brokerId: 'Corretor',
   insurerId: 'Seguradora',
   productId: 'Produto / ramo',
@@ -188,6 +188,16 @@ const pdfResult = document.querySelector('#pdf-result');
  */
 function fillFromPdf(fields) {
   for (const [name, value] of Object.entries(fields)) {
+    // REQ-321: the client's name in the PDF fills the name (the CPF fills its
+    // own field below); the client is resolved only at the registration
+    // (REQ-317).
+    if (name === 'clientId') {
+      const input = form.querySelector('[name="clientName"]');
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+      continue;
+    }
+
     // REQ-310: the broker's name in the PDF only fills the search; the user
     // chooses the broker.
     if (name === 'brokerId') {
@@ -330,7 +340,8 @@ form.addEventListener('submit', (event) => {
 
   submitting(async () => {
     const proposal = await api.registerProposal({
-      clientId: value('clientId'),
+      // REQ-317: the server uses the client of this CPF, or registers it.
+      client: { name: value('clientName'), cpf: value('clientCpf') },
       brokerId: value('brokerId'),
       insurerId: value('insurerId'),
       productId: value('productId'),

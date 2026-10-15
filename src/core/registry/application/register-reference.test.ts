@@ -15,15 +15,15 @@ describe('RegisterReference', () => {
     const { register } = useCase();
 
     const registered = await register.execute({
-      kind: 'CLIENT',
-      id: 'client-1',
-      name: 'Ana Lima',
+      kind: 'INSURER',
+      id: 'insurer-1',
+      name: 'Seguradora Norte',
     });
 
     expect(registered).toEqual({
-      kind: 'CLIENT',
-      id: 'client-1',
-      name: 'Ana Lima',
+      kind: 'INSURER',
+      id: 'insurer-1',
+      name: 'Seguradora Norte',
       registeredAt: '2026-09-21T12:00:00.000Z',
     });
   });
@@ -45,7 +45,7 @@ describe('RegisterReference', () => {
     const { references, register } = useCase();
 
     await expect(
-      register.execute({ kind: 'CLIENT', id: 'client-1', name: '   ' }),
+      register.execute({ kind: 'INSURER', id: 'insurer-1', name: '   ' }),
     ).rejects.toBeInstanceOf(BusinessRuleViolation);
 
     // Nothing was written: a refusal leaves the registry as it was.

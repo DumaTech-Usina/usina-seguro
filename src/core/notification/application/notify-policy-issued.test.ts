@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryBrokerRepository } from '../../../infrastructure/persistence/in-memory/in-memory-broker-repository.ts';
+import { InMemoryClientRepository } from '../../../infrastructure/persistence/in-memory/in-memory-client-repository.ts';
 import { InMemoryNotificationRepository } from '../../../infrastructure/persistence/in-memory/in-memory-notification-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { InMemoryReferenceRepository } from '../../../infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
@@ -11,6 +12,7 @@ import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal, type ProposalRegistration } from '../../proposal/domain/proposal.ts';
 import { Broker } from '../../registry/domain/broker.ts';
+import { Client } from '../../registry/domain/client.ts';
 import { Reference, type ReferenceKind } from '../../registry/domain/reference.ts';
 import type { NotificationChannel } from './notification-channel.ts';
 import type { NotificationView } from './notification-view.ts';
@@ -41,6 +43,7 @@ function scenario(channels: readonly NotificationChannel[] = []) {
   const proposals = new InMemoryProposalRepository();
   const references = new InMemoryReferenceRepository();
   const brokers = new InMemoryBrokerRepository();
+  const clients = new InMemoryClientRepository();
   let sequence = 0;
 
   const useCase = new NotifyPolicyIssued({
@@ -48,11 +51,12 @@ function scenario(channels: readonly NotificationChannel[] = []) {
     proposals,
     references,
     brokers,
+    clients,
     channels,
     newId: () => `notification-${++sequence}`,
   });
 
-  return { notifications, proposals, references, brokers, useCase };
+  return { notifications, proposals, references, brokers, clients, useCase };
 }
 
 function transmitted(overrides: Partial<ProposalRegistration> = {}): Proposal {
@@ -80,7 +84,18 @@ function transmitted(overrides: Partial<ProposalRegistration> = {}): Proposal {
 async function registerNames(
   references: InMemoryReferenceRepository,
   brokers: InMemoryBrokerRepository,
+  clients: InMemoryClientRepository,
 ): Promise<void> {
+  // REQ-318: the client's name comes from the client registry (V2 section 9E).
+  await clients.save(
+    Client.register({
+      id: 'client-1',
+      name: 'Maria Souza',
+      cpf: '52998224725',
+      signed: Authorship.of('operator', new Date('2026-09-01T00:00:00.000Z')),
+    }),
+  );
+
   // REQ-308: the broker's name comes from the broker registry (V2 section 9D).
   await brokers.save(
     Broker.register({
@@ -91,10 +106,7 @@ async function registerNames(
     }),
   );
 
-  const named: readonly [ReferenceKind, string, string][] = [
-    ['CLIENT', 'client-1', 'Maria Souza'],
-    ['PRODUCT', 'auto', 'Automovel'],
-  ];
+  const named: readonly [ReferenceKind, string, string][] = [['PRODUCT', 'auto', 'Automovel']];
 
   for (const [kind, id, name] of named) {
     await references.save(
@@ -115,9 +127,9 @@ function event(overrides: Partial<PolicyIssuedEvent> = {}): PolicyIssuedEvent {
 
 describe('NotifyPolicyIssued', () => {
   it('notifies the broker with the five fields of REQ-100 (CA-029)', async () => {
-    const { notifications, proposals, references, brokers, useCase } = scenario();
+    const { notifications, proposals, references, brokers, clients, useCase } = scenario();
     await proposals.save(transmitted());
-    await registerNames(references, brokers);
+    await registerNames(references, brokers, clients);
 
     await useCase.notify(event());
 
@@ -134,9 +146,9 @@ describe('NotifyPolicyIssued', () => {
   });
 
   it('records what was notified, to whom and when (REQ-105)', async () => {
-    const { notifications, proposals, references, brokers, useCase } = scenario();
+    const { notifications, proposals, references, brokers, clients, useCase } = scenario();
     await proposals.save(transmitted());
-    await registerNames(references, brokers);
+    await registerNames(references, brokers, clients);
 
     await useCase.notify(event());
 
@@ -152,20 +164,20 @@ describe('NotifyPolicyIssued', () => {
   });
 
   it('copies the names instead of joining them later (REQ-105, REJ-011)', async () => {
-    const { notifications, proposals, references, brokers, useCase } = scenario();
+    const { notifications, proposals, references, brokers, clients, useCase } = scenario();
     await proposals.save(transmitted());
-    await registerNames(references, brokers);
+    await registerNames(references, brokers, clients);
 
     await useCase.notify(event());
 
     // The registry is corrected afterwards. What the broker was told does not
     // change, for the same reason a calculated commission keeps its rates.
-    await references.save(
-      Reference.register({
-        kind: 'CLIENT',
-        id: 'client-1',
+    const client = await clients.findById('client-1');
+    await clients.save(
+      (client as Client).change({
         name: 'Maria Souza Lima',
-        registeredAt: new Date('2026-09-22T00:00:00.000Z'),
+        cpf: '52998224725',
+        signed: Authorship.of('operator', new Date('2026-09-22T00:00:00.000Z')),
       }),
     );
 
@@ -186,9 +198,9 @@ describe('NotifyPolicyIssued', () => {
 
   it('publishes through the single contract, whatever the channel (REQ-101)', async () => {
     const email = new RecordingChannel('email');
-    const { proposals, references, brokers, useCase } = scenario([email]);
+    const { proposals, references, brokers, clients, useCase } = scenario([email]);
     await proposals.save(transmitted());
-    await registerNames(references, brokers);
+    await registerNames(references, brokers, clients);
 
     await useCase.notify(event());
 

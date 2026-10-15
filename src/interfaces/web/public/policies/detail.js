@@ -13,6 +13,7 @@
 import { ApiError, api } from '/app/shared/api.js';
 import { authorName, loadAuthors } from '/app/shared/authors.js';
 import { brokerName, loadBrokers } from '/app/shared/brokers.js';
+import { clientLabel, loadClients } from '/app/shared/clients.js';
 import { closeOnBackdropClick } from '/app/shared/dialog.js';
 import { base64Of } from '/app/shared/file.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
@@ -160,6 +161,8 @@ function policyCard(policy) {
 
   const details = element('div', 'definitions');
   details.append(
+    // REQ-318: the client of the proposal the policy came from (REQ-241).
+    definition('Cliente', clientLabel(policy.clientId)),
     // REQ-308: the broker of the proposal the policy came from (REQ-241).
     definition('Corretor', brokerName(policy.brokerId)),
     definition('Prêmio', formatMoney(policy.premium)),
@@ -912,7 +915,12 @@ async function render() {
   try {
     // REQ-216: the signatures keep ids; the directory gives the names to show.
     // REQ-308: likewise the broker of its proposal and its name.
-    [policy] = await Promise.all([api.getPolicy(policyId), loadAuthors(), loadBrokers()]);
+    [policy] = await Promise.all([
+      api.getPolicy(policyId),
+      loadAuthors(),
+      loadBrokers(),
+      loadClients(),
+    ]);
   } catch (error) {
     notFound(error instanceof ApiError ? error.message : 'Falha ao consultar a apólice.');
     return;

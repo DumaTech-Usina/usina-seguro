@@ -1,15 +1,18 @@
 import { describe, expect, it } from 'vitest';
+import { InMemoryClientRepository } from '../../../infrastructure/persistence/in-memory/in-memory-client-repository.ts';
 import { InMemoryCommissionRepository } from '../../../infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { InMemoryReferenceRepository } from '../../../infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
 import { Installment } from '../../policy/domain/installment.ts';
 import { Policy } from '../../policy/domain/policy.ts';
+import { Authorship } from '../../proposal/domain/authorship.ts';
 import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal } from '../../proposal/domain/proposal.ts';
+import { Client } from '../../registry/domain/client.ts';
 import { Reference } from '../../registry/domain/reference.ts';
 import { Commission } from '../domain/commission.ts';
 import { ListCommissions } from './list-commissions.ts';
@@ -102,6 +105,8 @@ async function scenario() {
     commissions: new InMemoryCommissionRepository(),
     // IN-01 is empty unless a test registers a name.
     references: new InMemoryReferenceRepository(),
+    // V2 section 9E: empty unless a test registers a client.
+    clients: new InMemoryClientRepository(),
   };
 
   await business(repositories, { suffix: 'FORE', calculatedAt: '2026-09-15T12:00:00.000Z' });
@@ -162,17 +167,23 @@ describe('ListCommissions', () => {
       policies: new InMemoryPolicyRepository(),
       proposals: new InMemoryProposalRepository(),
       references: new InMemoryReferenceRepository(),
+      clients: new InMemoryClientRepository(),
     });
 
     await expect(useCase.execute()).rejects.toBeInstanceOf(RecordNotFound);
   });
 
-  it('identifies each line by the name IN-01 registered (REQ-096)', async () => {
-    const { references, useCase } = await scenario();
+  it('identifies each line by the name IN-01 registered, and the client by its registry (REQ-096, REQ-318)', async () => {
+    const { references, clients, useCase } = await scenario();
     const at = new Date('2026-09-20T12:00:00.000Z');
 
-    await references.save(
-      Reference.register({ kind: 'CLIENT', id: 'client-DIV', name: 'Ana Lima', registeredAt: at }),
+    await clients.save(
+      Client.register({
+        id: 'client-DIV',
+        name: 'Ana Lima',
+        cpf: '52998224725',
+        signed: Authorship.of('user-1', at),
+      }),
     );
     await references.save(
       Reference.register({
@@ -203,6 +214,8 @@ describe('ListCommissions', () => {
 
     // REQ-002: an empty registry costs the panel its names, never a line.
     expect(panel).toHaveLength(3);
-    expect(panel.every((line) => line.clientName === null)).toBe(true);
+    expect(panel.every((line) => line.insurerName === null)).toBe(true);
+    // REQ-320: a client that is no registered client is the text, as it is.
+    expect(panel.every((line) => line.clientName === line.clientId)).toBe(true);
   });
 });

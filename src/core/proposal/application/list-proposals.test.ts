@@ -7,10 +7,14 @@ import { Percentage } from '../domain/percentage.ts';
 import { Proposal } from '../domain/proposal.ts';
 import { ListProposals } from './list-proposals.ts';
 
-function proposal(id = 'proposal-1', registeredAt = '2026-09-22T12:00:00.000Z'): Proposal {
+function proposal(
+  id = 'proposal-1',
+  registeredAt = '2026-09-22T12:00:00.000Z',
+  clientId = 'client-1',
+): Proposal {
   return Proposal.register({
     id,
-    clientId: 'client-1',
+    clientId,
     brokerId: 'broker-1',
     insurerId: 'insurer-1',
     productId: 'product-1',
@@ -41,7 +45,17 @@ async function scenario() {
     ),
   );
 
-  return { proposals, useCase: new ListProposals({ proposals }) };
+  return { proposals, useCase: new ListProposals({ proposals, clients: clientsMatching({}) }) };
+}
+
+/** REQ-319: the registry's answer to a search term, as the port gives it. */
+function clientsMatching(answers: Record<string, readonly string[]>) {
+  return {
+    resolve: async () => {
+      throw new Error('not used');
+    },
+    matching: async (query: string) => new Set(answers[query] ?? []),
+  };
 }
 
 describe('ListProposals', () => {
@@ -78,5 +92,49 @@ describe('ListProposals', () => {
     const [first] = await useCase.execute({ status: 'AWAITING_ISSUANCE' });
 
     expect(first?.netPremium).toBe('100.00');
+  });
+});
+
+describe('ListProposals by client (REQ-319, REQ-320)', () => {
+  async function byClient() {
+    const proposals = new InMemoryProposalRepository();
+    await proposals.save(proposal('maria-1', '2026-09-16T12:00:00.000Z', 'client-maria'));
+    await proposals.save(proposal('bruno-1', '2026-09-17T12:00:00.000Z', 'client-bruno'));
+    await proposals.save(
+      proposal('maria-2', '2026-09-18T12:00:00.000Z', 'client-maria').reject('perfil'),
+    );
+    // Registered before the client registry: the typed text, no client (REQ-320).
+    await proposals.save(proposal('legacy-1', '2026-09-19T12:00:00.000Z', 'Maria Antiga'));
+
+    const clients = clientsMatching({ maria: ['client-maria'], '529.982': ['client-maria'] });
+    return new ListProposals({ proposals, clients });
+  }
+
+  it('keeps only the proposals of the clients the term matches, by name or CPF (CA-316)', async () => {
+    const useCase = await byClient();
+
+    const ids = async (client: string) =>
+      (await useCase.execute({ client })).map((view) => view.id);
+
+    expect(await ids('maria')).toEqual(['maria-2', 'maria-1']);
+    expect(await ids('529.982')).toEqual(['maria-2', 'maria-1']);
+    expect(await ids('carlos')).toEqual([]);
+  });
+
+  it('does not find a proposal by the text it held before the registry (REQ-320)', async () => {
+    const useCase = await byClient();
+
+    expect((await useCase.execute({ client: 'maria' })).map((view) => view.id)).not.toContain(
+      'legacy-1',
+    );
+  });
+
+  it('combines with the state filter, and a blank term is no filter', async () => {
+    const useCase = await byClient();
+
+    expect(
+      (await useCase.execute({ status: 'AWAITING_ISSUANCE', client: 'maria' })).map((v) => v.id),
+    ).toEqual(['maria-1']);
+    expect(await useCase.execute({ client: '  ' })).toHaveLength(4);
   });
 });

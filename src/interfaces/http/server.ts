@@ -10,6 +10,7 @@ import { registerWebInterface } from '../web/web.ts';
 import { registerAuthentication, requireRole } from './authentication.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerBrokerRoutes } from './routes/brokers.ts';
+import { registerClientRoutes } from './routes/clients.ts';
 import { registerCommissionRoutes } from './routes/commissions.ts';
 import { registerHealthRoute } from './routes/health.ts';
 import { registerNotificationRoutes } from './routes/notifications.ts';
@@ -111,6 +112,7 @@ export function createHttpServer(
     registerPayoutRoutes(business, useCases);
     registerReferenceRoutes(business, useCases);
     registerBrokerRoutes(business, useCases);
+    registerClientRoutes(business, useCases);
     registerNotificationRoutes(business, useCases);
     registerUserRoutes(business, useCases, options.publicUrl ?? '');
   });

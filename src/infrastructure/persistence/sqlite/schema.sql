@@ -146,8 +146,8 @@ CREATE TABLE IF NOT EXISTS installment (
 -- invalid business.
 CREATE TABLE IF NOT EXISTS reference (
   kind           TEXT NOT NULL
-    -- The broker has its own tables (V2 section 9D).
-    CHECK (kind IN ('CLIENT', 'INSURER', 'INTERMEDIARY', 'PRODUCT')),
+    -- The broker and the client have their own tables (V2 sections 9D, 9E).
+    CHECK (kind IN ('INSURER', 'INTERMEDIARY', 'PRODUCT')),
   id             TEXT NOT NULL,
   name           TEXT NOT NULL,
   registered_at  TEXT NOT NULL,
@@ -176,6 +176,32 @@ CREATE TABLE IF NOT EXISTS broker_record (
   signed_by  TEXT    NOT NULL,
   signed_at  TEXT    NOT NULL,
   PRIMARY KEY (broker_id, sequence)
+);
+
+-- Clients (V2 section 9E), the same shape as the broker. The row is the
+-- client's current name and CPF -- the last of its records -- so that REQ-312
+-- (one client per CPF) is also a constraint: two registrations of the same new
+-- CPF at the same time leave one client (REQ-317). The proposal's client_id
+-- holds a client's id, or, on a proposal registered before this table, the
+-- text that was typed (REQ-320): that is why there is no foreign key from it.
+-- There is no removal (REQ-315).
+CREATE TABLE IF NOT EXISTS client (
+  id    TEXT PRIMARY KEY,
+  name  TEXT NOT NULL,
+  -- The 11 digits, no punctuation (REQ-312).
+  cpf   TEXT NOT NULL UNIQUE
+);
+
+-- REQ-314: the signed history of each client, append-only. The first record
+-- is the registration.
+CREATE TABLE IF NOT EXISTS client_record (
+  client_id  TEXT    NOT NULL REFERENCES client (id),
+  sequence   INTEGER NOT NULL CHECK (sequence >= 1),
+  name       TEXT    NOT NULL,
+  cpf        TEXT    NOT NULL,
+  signed_by  TEXT    NOT NULL,
+  signed_at  TEXT    NOT NULL,
+  PRIMARY KEY (client_id, sequence)
 );
 
 -- Agreed commission of a policy (REQ-236).

@@ -9,6 +9,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { registerBroker } from './support/brokers.ts';
+import { clientNamed } from './support/clients.ts';
 import { signIn } from './support/sign-in.ts';
 
 /**
@@ -75,15 +76,11 @@ beforeAll(async () => {
   window.scrollTo = () => {};
 
   // The three names REQ-100 asks the notification to carry: the broker's from
-  // the broker registry (REQ-308), the others from IN-01.
+  // the broker registry (REQ-308), the client's from the client registry —
+  // registered with the first proposal (REQ-317) — and the product's from IN-01.
   brokers.alfa = await registerBroker(baseUrl, 'Corretora Alfa', 1);
   brokers.beta = await registerBroker(baseUrl, 'Corretora Beta', 2);
-  for (const reference of [
-    { kind: 'CLIENT', id: 'client-1', name: 'Maria Souza' },
-    { kind: 'PRODUCT', id: 'auto', name: 'Automovel' },
-  ]) {
-    await callApi('POST', '/references', reference);
-  }
+  await callApi('POST', '/references', { kind: 'PRODUCT', id: 'auto', name: 'Automovel' });
 });
 
 afterAll(async () => {
@@ -199,7 +196,7 @@ async function issuePolicy(
   brokerId = brokers.alfa,
 ): Promise<Emission> {
   const proposal = await callApi('POST', '/proposals', {
-    clientId: 'client-1',
+    client: clientNamed('Maria Souza'),
     brokerId,
     insurerId: 'insurer-1',
     productId: 'auto',
@@ -247,12 +244,12 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
   });
 
   it('shows what the backend recorded, not a reading of the registry today', async () => {
-    // REQ-105: the record says what was notified. Correcting the name in
-    // IN-01 afterwards must not rewrite what the broker was told.
-    await callApi('POST', '/references', {
-      kind: 'CLIENT',
-      id: 'client-1',
+    // REQ-105: the record says what was notified. Correcting the client's
+    // name afterwards (REQ-313) must not rewrite what the broker was told.
+    const [client] = await callApi('GET', '/clients?q=Maria%20Souza');
+    await callApi('POST', `/clients/${client.id}/revision`, {
       name: 'Maria Souza Lima',
+      cpf: client.cpf,
     });
 
     await openNotifications();
@@ -333,7 +330,7 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
 describe('the notification of a parcelled policy', () => {
   it('shows both CTs of a parcelled policy (REQ-228)', async () => {
     const proposal = await callApi('POST', '/proposals', {
-      clientId: 'client-1',
+      client: clientNamed('Maria Souza'),
       brokerId: brokers.alfa,
       insurerId: 'insurer-1',
       productId: 'auto',

@@ -8,12 +8,15 @@
 
 import { ApiError, api } from '/app/shared/api.js';
 import { brokerName, loadBrokers } from '/app/shared/brokers.js';
+import { clientName, loadClients } from '/app/shared/clients.js';
 import { formatDate, formatMoney, formatPercentage } from '/app/shared/money.js';
 import { reportError } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
 
 const list = document.querySelector('#list');
 const filters = document.querySelector('#filters');
+const clientSearchForm = document.querySelector('#form-client-search');
+const clientSearch = clientSearchForm.querySelector('[name="client"]');
 
 /** The tabs, in the order of REQ-250. `status: undefined` asks for every proposal. */
 const TABS = [
@@ -67,7 +70,7 @@ function row(proposal) {
     element(
       'div',
       'text-muted',
-      `Cliente ${proposal.clientId} · Corretor ${brokerName(proposal.brokerId)}`,
+      `Cliente ${clientName(proposal.clientId)} · Corretor ${brokerName(proposal.brokerId)}`,
     ),
   );
   line.append(number);
@@ -160,14 +163,26 @@ function loading() {
   list.replaceChildren(skeletons);
 }
 
+let listRequest = 0;
+
 async function load() {
+  const request = ++listRequest;
+  const client = clientSearch.value.trim();
   loading();
 
   let proposals;
   try {
-    // REQ-308: the proposal keeps the broker's id; the registry gives the name.
-    [proposals] = await Promise.all([api.listProposals(current.status), loadBrokers()]);
+    // REQ-308, REQ-318: the proposal keeps the broker's and the client's ids;
+    // the registries give the names. REQ-319: the server matches the client.
+    [proposals] = await Promise.all([
+      api.listProposals(current.status, client),
+      loadBrokers(),
+      loadClients(),
+    ]);
   } catch (error) {
+    if (request !== listRequest) {
+      return;
+    }
     if (error instanceof ApiError) {
       reportError(error);
     }
@@ -181,19 +196,36 @@ async function load() {
     return;
   }
 
+  // Only the latest answer is shown: typing in the search fires one reading per key.
+  if (request !== listRequest) {
+    return;
+  }
+
   if (proposals.length === 0) {
     list.replaceChildren(
-      emptyState(
-        'inbox',
-        'Nenhuma proposta nesta etapa',
-        EMPTY_NOTE[current.id] ?? 'Troque o filtro ou registre um novo negócio.',
-      ),
+      client !== ''
+        ? emptyState(
+            'search_off',
+            'Nenhuma proposta desse cliente',
+            'Busque por outro nome ou CPF.',
+          )
+        : emptyState(
+            'inbox',
+            'Nenhuma proposta nesta etapa',
+            EMPTY_NOTE[current.id] ?? 'Troque o filtro ou registre um novo negócio.',
+          ),
     );
     return;
   }
 
   list.replaceChildren(table(proposals));
 }
+
+clientSearchForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  load();
+});
+clientSearch.addEventListener('input', () => load());
 
 renderFilters();
 load();

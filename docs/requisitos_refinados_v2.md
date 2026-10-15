@@ -62,6 +62,10 @@
 > o identifica **pelo id** (seção 9D). O CPF é validado e único; nome e CPF podem ser
 > alterados; todo cadastro e toda alteração são assinados e ficam no histórico; o corretor não é
 > excluído. O corretor da proposta continua **não alterável** depois do registro (`REQ-252`).
+> Na mesma data respondeu `DEC-215` e, quanto ao cliente, `DEC-208`: o **cliente passa a ser
+> cadastrado**, com **nome e CPF**, no modelo do corretor (seção 9E). No registro da proposta o
+> usuário informa nome e CPF do cliente; o sistema usa o cliente que já tem aquele CPF ou cadastra
+> um novo, no mesmo ato. Propostas e apólices passam a ser buscadas pelo nome ou CPF do cliente.
 > A V1 (`requisitos_refinados.md`) é preservada como registro do entendimento anterior e
 > **não é fonte da verdade** para o que está escrito aqui. Onde as duas divergem, **vale a
 > V2** — o mapa da seção 12 diz o que foi mantido, alterado ou descartado.
@@ -71,7 +75,8 @@
 > seção 13.
 >
 > **Convenções de identificadores** — a série `2xx` é da V2 e não colide com a V1. A série
-> `4xx` é a do acesso ao sistema (seção 9C), e a `3xx` a do cadastro de corretores (seção 9D).
+> `4xx` é a do acesso ao sistema (seção 9C), e a `3xx` a dos cadastros de corretores (seção 9D)
+> e de clientes (seção 9E).
 >
 > | Prefixo   | Significado                         |
 > | --------- | ----------------------------------- |
@@ -145,6 +150,9 @@ existe primeiro nela.
 
 O **corretor** é identificado pelo **id** de um corretor cadastrado (`REQ-307`, 2026-10-15).
 
+O **cliente** é identificado pelo **id** de um cliente cadastrado, resolvido pelo CPF informado
+no registro (`REQ-317`, 2026-10-15).
+
 O **aceite do cliente não é dado da proposta** (2026-09-28): no momento do cadastro, o
 usuário da Usina não tem essa informação, e nenhuma regra o consome.
 
@@ -213,7 +221,8 @@ que quiser, completa o que faltou e registra a proposta pelo fluxo normal. Ler o
   | Campo                | De onde vem no PDF                                   | Normalização                                  |
   | -------------------- | ---------------------------------------------------- | --------------------------------------------- |
   | Número da proposta   | `Nº Proposta`                                        | como está                                     |
-  | Cliente              | `Nome` em "Suas informações"                         | o texto do PDF (ver `DEC-208`)                |
+  | Cliente              | `Nome` em "Suas informações"                         | o texto do PDF **preenche o nome** do cliente (`REQ-321`) |
+  | CPF do cliente       | `CPF/CNPJ` em "Suas informações"                     | só os dígitos; preenchido **apenas** se for um CPF válido (`REQ-321`) |
   | Corretor             | nome em "Seu corretor"                               | o texto do PDF **preenche a busca**; o usuário escolhe o corretor (`REQ-310`) |
   | Seguradora           | o layout reconhecido                                 | `ALLIANZ`                                     |
   | Produto / ramo       | `Ramo`, pelo **dicionário de ramos**                 | a categoria (ex.: Moto → Auto)                |
@@ -1188,6 +1197,78 @@ do corretor. A leitura **nunca escolhe nem cadastra** um corretor: quem escolhe 
 
 ---
 
+## 9E. Cadastro de clientes
+
+> Definido em **2026-10-15**, respondendo `DEC-215` e, para o cliente, `DEC-208`. O cliente segue
+> o modelo do corretor (seção 9D), com uma diferença: ele **é cadastrado no próprio registro da
+> proposta**, sem etapa prévia. O cliente é **apenas referenciado** — não há carteira nem "dono"
+> do cliente. Esta seção **não muda** o cálculo, os estados nem a editabilidade das seções 3 a
+> 9B: muda **como o cliente é identificado** e permite **buscar** propostas e apólices por ele. A
+> forma de pagamento continua como está (`DEC-208` segue aberta para ela).
+
+`REQ-311` **Cliente.** O cliente é **cadastrado** por um usuário da Usina — Usuário ou
+Administrador (`REQ-401`). O cadastro tem **nome** e **CPF**, ambos **obrigatórios**. O cliente é
+identificado por um **id** que o sistema atribui.
+
+`REQ-312` **CPF.** O CPF do cliente segue a regra do CPF do corretor (`REQ-301`): **11 dígitos**,
+**dígitos verificadores válidos**, informado com ou sem pontuação e guardado só com os dígitos.
+Dois clientes **não** têm o mesmo CPF — no cadastro e na alteração. A unicidade é **de cada
+cadastro**: um cliente pode ter o mesmo CPF de um corretor.
+
+`REQ-313` **Alteração.** O **nome** e o **CPF** de um cliente podem ser alterados, com as mesmas
+regras do cadastro (`REQ-311`, `REQ-312`).
+
+`REQ-314` **Histórico assinado.** O cadastro e cada alteração são **assinados** (`REQ-216`) e
+ficam no **histórico** do cliente: **quem**, **quando**, o **nome** e o **CPF** daquele registro.
+O histórico não é apagado nem reescrito.
+
+`REQ-315` **Sem exclusão.** O cliente **não é excluído**: as propostas o referenciam.
+
+`REQ-316` **Busca e lista.** Os clientes são listados e buscados **por nome ou por CPF**, com o
+critério de `REQ-306`: o nome casa **por trecho**, sem diferenciar maiúsculas de minúsculas; o CPF
+casa pelos **dígitos**, por trecho, com ou sem pontuação. Todo usuário autenticado vê o nome e o
+CPF dos clientes (`REQ-401`).
+
+`REQ-317` **O cliente da proposta.** No registro da proposta, o usuário informa o **nome** e o
+**CPF** do cliente, ambos **obrigatórios**, sem precisar cadastrá-lo antes:
+
+- se **já existe** um cliente com aquele CPF (pelos dígitos), a proposta usa **esse** cliente, e
+  o cadastro dele **não é alterado** — nem o nome, ainda que o nome informado seja outro. A
+  proposta exibe o nome cadastrado;
+- se **não existe**, um cliente é **cadastrado** com o nome e o CPF informados, assinado por quem
+  registra a proposta (`REQ-216`, `REQ-314`).
+
+Resolver o cliente e registrar a proposta são **um só ato**: uma proposta recusada no registro
+**não deixa** cliente cadastrado, e dois registros simultâneos com o mesmo CPF não criam dois
+clientes. A proposta guarda o **id** do cliente. Depois do registro, o cliente da proposta **não é
+alterado** (`REQ-252`, `REQ-261`).
+
+`REQ-318` **O cliente da apólice e a exibição.** A apólice tem o cliente **da sua proposta**
+(`REQ-241`): ele não é informado nem guardado de novo na apólice. Proposta e apólice exibem o
+**nome atual** do cliente. O **extrato de elegibilidade** guarda o nome **como estava no momento
+da elegibilidade** (`REQ-283`, `REQ-266`), e é esse nome que o filtro por cliente das comissões
+elegíveis consulta (`REQ-284`).
+
+`REQ-319` **Busca de propostas e de apólices pelo cliente.** A lista de propostas e a lista de
+apólices podem ser filtradas por **um termo** que casa com o **nome** ou com o **CPF** do cliente
+cadastrado, com o critério de `REQ-316`, junto com os filtros que essas listas já têm. A busca
+segue a **ligação com o cadastro de clientes**, não um texto copiado na proposta.
+
+`REQ-320` **Proposta registrada antes do cadastro.** Uma proposta registrada antes deste cadastro
+guarda o texto que foi digitado ou lido como cliente. Esse texto é **mantido e exibido como
+está**, sem ligação a um cliente cadastrado; **nenhum cliente é criado** a partir dele, e a busca
+de `REQ-319` não o encontra. O cliente **deixa de ser** um cadastro de referência (IN-01).
+
+`REQ-321` **PDF da proposta.** O nome e o CPF lidos em "Suas informações" (`REQ-218`)
+**preenchem o nome e o CPF** do cliente no formulário (o CPF passou a ser lido em 2026-10-15).
+O CPF é preenchido **só com os dígitos** e **só quando** o documento traz um CPF com 11 dígitos
+e dígitos verificadores válidos (`REQ-312`); um CNPJ, um número mascarado ou inválido deixa o
+campo **ausente**, como qualquer campo que a leitura não identifica. O usuário revisa os dois
+antes de registrar. A leitura **nunca cadastra** um cliente: ele é resolvido no registro da
+proposta (`REQ-317`).
+
+---
+
 ## 10. Fluxo principal
 
 > Os dois fluxos abaixo são os da **CT integral**, **validados**. O fluxo da **CT parcelada**
@@ -1374,7 +1455,7 @@ do corretor. A leitura **nunca escolhe nem cadastra** um corretor: quem escolhe 
 | `CA-216` | Uma proposta sem parcelas é aceita; sem qualquer outro dado de `REQ-202` ou sem o modo da CT, é recusada                           | `REQ-202`            |
 | `CA-217` | O modo da CT pode ser corrigido antes da emissão, com autor e data                                                                 | `REQ-214`, `REQ-215` |
 | `CA-218` | Proposta com prêmio líquido 0,00 ou negativo é recusada                                                                            | `REQ-217`            |
-| `CA-220` | O PDF de referência preenche número, cliente, corretor, seguradora, ramo, forma de pagamento, prêmio líquido, vigência e parcelas, sem registrar a proposta | `REQ-218`            |
+| `CA-220` | O PDF de referência preenche número, cliente (nome e CPF), corretor, seguradora, ramo, forma de pagamento, prêmio líquido, vigência e parcelas, sem registrar a proposta | `REQ-218`            |
 | `CA-221` | Um PDF legível sem algum desses dados resulta em `PARTIAL`; o dado ausente fica vazio, não estimado                                | `REQ-218`            |
 | `CA-222` | Um arquivo que não é PDF, ou PDF sem conteúdo utilizável, resulta em `FAILED`                                                      | `REQ-218`            |
 | `CA-219` | Prêmio 100,00, CT 20% e CTU 50%: a comissão acordada da apólice é 10,00 a receber; nenhuma parte do corretor vem de tabela         | `REQ-236`            |
@@ -1447,6 +1528,14 @@ do corretor. A leitura **nunca escolhe nem cadastra** um corretor: quem escolhe 
 | `CA-304` | A proposta registrada com um corretor escolhido guarda o id dele; a apólice criada dela exibe o nome atual do mesmo corretor | `REQ-307`, `REQ-308` |
 | `CA-305` | Renomear o corretor depois da elegibilidade não muda o nome no extrato | `REQ-308` |
 | `CA-306` | Pelas telas: cadastrar, buscar e alterar um corretor; escolhê-lo na proposta; vê-lo na apólice | `REQ-300`–`REQ-310` |
+| `CA-310` | Um cliente com nome e CPF `529.982.247-25` é cadastrado; o CPF é guardado como `52998224725` | `REQ-311`, `REQ-312` |
+| `CA-311` | Um segundo cliente com o mesmo CPF é recusado, no cadastro e na alteração; um corretor com o mesmo CPF não impede o cliente | `REQ-312`, `REQ-313` |
+| `CA-312` | Alterar o nome de um cliente guarda um novo registro no histórico, com o autor da sessão; o anterior continua lá | `REQ-313`, `REQ-314` |
+| `CA-313` | Registrar uma proposta com um CPF novo cadastra o cliente, assinado por quem registrou; com um CPF já cadastrado (com ou sem pontuação), usa o mesmo cliente sem mudar o nome dele | `REQ-317` |
+| `CA-314` | Uma proposta recusada no registro não deixa cliente cadastrado; dois registros simultâneos com o mesmo CPF deixam um só cliente | `REQ-317` |
+| `CA-315` | A apólice criada da proposta exibe o nome atual do mesmo cliente; renomear o cliente depois da elegibilidade não muda o nome no extrato | `REQ-318` |
+| `CA-316` | A busca por `silva` ou por `529.982` acha as propostas e as apólices daquele cliente, e não as de uma proposta antiga cujo texto é "Silva" | `REQ-319`, `REQ-320` |
+| `CA-317` | Pelas telas: registrar uma proposta com nome e CPF do cliente; buscar e alterar o cliente; buscar propostas e apólices pelo cliente | `REQ-311`–`REQ-321` |
 
 ### 11.4 Casos que devem ser rejeitados
 
@@ -1512,6 +1601,13 @@ do corretor. A leitura **nunca escolhe nem cadastra** um corretor: quem escolhe 
 | `REJ-304` | Proposta com corretor não cadastrado                                      | `REQ-307`                                                       |
 | `REJ-305` | Alterar o corretor da proposta                                            | `REQ-252`, `REQ-307`                                            |
 | `REJ-306` | Escolher ou criar um corretor a partir do texto do PDF ou de uma proposta antiga | `REQ-309`, `REQ-310`                                     |
+| `REJ-310` | Cliente sem nome ou sem CPF, no cadastro ou no registro da proposta        | `REQ-311`, `REQ-317`                                            |
+| `REJ-311` | CPF do cliente com dígitos verificadores inválidos ou sem 11 dígitos      | `REQ-312`                                                       |
+| `REJ-312` | Dois clientes com o mesmo CPF                                             | `REQ-312`, `REQ-317`                                            |
+| `REJ-313` | Excluir um cliente                                                        | `REQ-315`                                                       |
+| `REJ-314` | Sobrescrever o cadastro de um cliente existente com o nome informado na proposta | `REQ-317`                                                |
+| `REJ-315` | Alterar o cliente da proposta                                             | `REQ-252`, `REQ-317`                                            |
+| `REJ-316` | Criar um cliente a partir do texto do PDF ou de uma proposta antiga       | `REQ-320`, `REQ-321`                                            |
 
 ---
 
@@ -1585,7 +1681,7 @@ apólice; os dois números seguem consultáveis) · `REQ-120`, `REQ-121` (precis
 | `DEC-204` | **Layouts de PDF** — de quais outras seguradoras além da Allianz (`REQ-218`)                                                                                                         | Cada novo layout precisa de amostra                         |
 | `DEC-205` | **Correção de registro errado** — como um registro com dado incorreto é encerrado e se o número volta a ficar disponível                                                               | `REQ-262`; deixado em aberto por decisão do negócio         |
 | `DEC-206` | **Endosso, sinistro e renovação** sobre a apólice                                                                                                                                      | `REQ-246`; fora desta entrega                               |
-| `DEC-208` | **Governança de dados dos cadastros** — hoje cliente e forma de pagamento lidos do PDF entram como o texto do documento. No futuro haverá cadastro formal (prévio ou não) e busca de identificadores já conhecidos (ex.: renovação, cliente recorrente). A identificação deve ficar desacoplada da leitura. **Respondida para o corretor em 2026-10-15**: ele é identificado por id (seção 9D) | Os identificadores de cliente e forma de pagamento lidos do PDF são provisórios |
+| `DEC-208` | **Governança de dados dos cadastros** — hoje cliente e forma de pagamento lidos do PDF entram como o texto do documento. No futuro haverá cadastro formal (prévio ou não) e busca de identificadores já conhecidos (ex.: renovação, cliente recorrente). A identificação deve ficar desacoplada da leitura. **Respondida para o corretor e para o cliente em 2026-10-15**: são identificados por id (seções 9D e 9E) | O identificador da forma de pagamento lido do PDF é provisório |
 | `DEC-210` | **Repasse e elegibilidade com CT parcelada** — **respondida** em 2026-10-05 e 2026-10-07 (seção 9B). O que resta está em `DEC-216` e `DEC-217` | — |
 | `DEC-216` | **Faixa dos CTs da parcelada** — como funciona de fato: o negócio citou 0–200% e precisa levantar mais. **Provisório**, explícito: acima de 100% e sem limite superior (`REQ-295`). As CRs da parcelada não dependem disto: cada uma é limitada pelo seu CT (`REQ-263`) | Só a parcelada; a faixa da CT integral não muda |
 | `DEC-217` | **Alterar a CT ou a CR de uma parcela no momento da elegibilidade** — hipótese ainda não levantada | Por ora o ato só **exibe** a CT e a CR da parcela (`REQ-288`) |
@@ -1593,7 +1689,7 @@ apólice; os dois números seguem consultáveis) · `REQ-120`, `REQ-121` (precis
 | `DEC-212` | **Valor efetivamente recebido diferente do valor da Usina** — a CR incide sobre o valor da Usina calculado da apólice (`REQ-274`); o que acontece se a Usina receber outro valor **não foi discutido** | Nenhuma regra: a elegibilidade não registra o valor efetivamente recebido |
 | `DEC-213` | **Conteúdo do PDF da apólice** — quais informações o PDF da apólice deve conter, e se o sistema deve ler, extrair ou conferir algum dado dele. Deixado em aberto para uma rodada futura de levantamento de requisitos | `REQ-247`: o arquivo é guardado como enviado; nenhum conteúdo é lido nem validado |
 | `DEC-214` | **Cadastro manual de corretores** — **respondida** em 2026-10-15 (seção 9D) | — |
-| `DEC-215` | **CPF do cliente na proposta** — se o CPF do cliente poderá ser informado no cadastro da proposta. Objetivo: avaliar se essa informação será necessária para permitir, posteriormente, o **controle, a busca e a filtragem** de informações relacionadas aos clientes e às propostas pelos usuários da Usina. **Não definidos**: a obrigatoriedade, o formato e a validação, a etapa do fluxo em que é informado, os filtros, as regras de privacidade e de acesso, e se a decisão depende ou não de `DEC-214` | Nenhuma regra: a proposta não tem CPF do cliente |
+| `DEC-215` | **CPF do cliente na proposta** — **respondida** em 2026-10-15 (seção 9E) | — |
 | `DEC-401` | **Assinatura da recusa** — com login, se a recusa da proposta (`REQ-253`) passa a registrar **quem** recusou e quando. Hoje não registra, e `REQ-216` não a inclui. Deixada para uma rodada futura (`Q-409`, 2026-10-14) | A recusa continua sem autor, só com o motivo |
 | `DEC-207` | **Unicidade do número da proposta** — se dois registros podem ter o mesmo número. **Por ora, sem restrição**; relacionada a `DEC-205` (o número "voltar a ficar disponível")          | Nenhuma unicidade é validada no registro. Confirmado: quando a conciliação busca pelo número e há repetição, vale a proposta **registrada primeiro**. Como o número da apólice é o da proposta (`REQ-241`), ele **também não é validado como único** por ora |
 
@@ -1655,6 +1751,7 @@ o restante em `Q-219`), `Q-213` (`REQ-269`), `Q-214` (`REQ-237`, `REQ-298`).
 | Limite do sistema no financeiro declarado                   | ✅ `REQ-280`          |
 | Acesso ao sistema, papéis e autoria definidos               | ✅ seção 9C, `REQ-216` (pendentes: `DEC-401`, `Q-415`) |
 | Cadastro de corretores e corretor da proposta por id        | ✅ seção 9D           |
+| Cadastro de clientes, cliente da proposta e busca por cliente | ✅ seção 9E         |
 | Dúvidas restantes registradas como pendências               | ✅ seções 13.1 e 13.2 |
 
 **Não foi escrito nenhum código.** A comparação desta especificação com o sistema existente

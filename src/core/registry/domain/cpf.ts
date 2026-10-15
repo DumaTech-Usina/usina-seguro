@@ -1,8 +1,23 @@
 import { BusinessRuleViolation } from '../../proposal/domain/errors.ts';
 import { REGISTRY_MESSAGES } from './errors.ts';
 
+/** Whose CPF it is: the refusal names the broker (REQ-300) or the client (REQ-311). */
+export type CpfHolder = 'BROKER' | 'CLIENT';
+
+const REFUSALS = {
+  BROKER: {
+    required: () => new BusinessRuleViolation('REQ-300', REGISTRY_MESSAGES.BROKER_CPF_REQUIRED),
+    invalid: () => new BusinessRuleViolation('REQ-301', REGISTRY_MESSAGES.BROKER_CPF_INVALID),
+  },
+  CLIENT: {
+    required: () => new BusinessRuleViolation('REQ-311', REGISTRY_MESSAGES.CLIENT_CPF_REQUIRED),
+    invalid: () => new BusinessRuleViolation('REQ-312', REGISTRY_MESSAGES.CLIENT_CPF_INVALID),
+  },
+} as const;
+
 /**
- * The CPF of a broker (REQ-301): 11 digits whose two check digits are valid.
+ * The CPF of a broker (REQ-301) or of a client (REQ-312, same rule): 11 digits
+ * whose two check digits are valid.
  *
  * Informed with or without punctuation; only the digits are kept. Nothing
  * beyond the check digits is validated: V2 states no other rule.
@@ -14,17 +29,17 @@ export class Cpf {
     this.digits = digits;
   }
 
-  static parse(text: string): Cpf {
+  static parse(text: string, holder: CpfHolder): Cpf {
     const trimmed = text.trim();
 
     if (trimmed === '') {
-      throw new BusinessRuleViolation('REQ-300', REGISTRY_MESSAGES.BROKER_CPF_REQUIRED);
+      throw REFUSALS[holder].required();
     }
 
     const digits = trimmed.replace(/[.-]/g, '');
 
     if (!/^\d{11}$/.test(digits) || !hasValidCheckDigits(digits)) {
-      throw new BusinessRuleViolation('REQ-301', REGISTRY_MESSAGES.BROKER_CPF_INVALID);
+      throw REFUSALS[holder].invalid();
     }
 
     return new Cpf(digits);

@@ -4,30 +4,25 @@ import { REGISTRY_MESSAGES } from './errors.ts';
 /**
  * The kinds of record IN-01 asks to be maintained.
  *
- * These are the entities the input names one by one — client, insurer,
- * intermediary, product — so the set is the requirement's, not a shape chosen
- * here. The broker left this registry: it has a CPF and a signed history of its
- * own (`Broker`, V2 section 9D). Two kinds the document also lists are absent
- * on purpose:
+ * These are the entities the input names one by one — insurer, intermediary,
+ * product — so the set is the requirement's, not a shape chosen here. The
+ * broker and the client left this registry: each has a CPF and a signed
+ * history of its own (`Broker`, V2 section 9D; `Client`, section 9E, REQ-320).
+ * Two kinds the document also lists are absent on purpose:
  *
  * - **cobertura**: no confirmed rule reads a coverage anywhere in the system,
  *   so registering one would write rows nothing consumes;
  * - **forma de pagamento**: it is not in IN-01.
  */
-export type ReferenceKind = 'CLIENT' | 'INSURER' | 'INTERMEDIARY' | 'PRODUCT';
+export type ReferenceKind = 'INSURER' | 'INTERMEDIARY' | 'PRODUCT';
 
-export const REFERENCE_KINDS: readonly ReferenceKind[] = [
-  'CLIENT',
-  'INSURER',
-  'INTERMEDIARY',
-  'PRODUCT',
-];
+export const REFERENCE_KINDS: readonly ReferenceKind[] = ['INSURER', 'INTERMEDIARY', 'PRODUCT'];
 
 export interface ReferenceData {
   readonly kind: ReferenceKind;
   /**
    * The identifier the rest of the system already stores (REQ-022): the same
-   * string a proposal carries in `clientId`, `insurerId` or `productId`, and an agreement carries in `intermediaryId`.
+   * string a proposal carries in `insurerId` or `productId`, and an agreement carries in `intermediaryId`.
    *
    * The registry does not hand out identifiers and nothing validates a
    * proposal against it. No requirement says a reference must exist before it

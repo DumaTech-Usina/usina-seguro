@@ -85,5 +85,5 @@ function recordOf(input: BrokerChange): BrokerRecord {
     throw new BusinessRuleViolation('REQ-300', REGISTRY_MESSAGES.BROKER_NAME_REQUIRED);
   }
 
-  return { name, cpf: Cpf.parse(input.cpf), signed: input.signed };
+  return { name, cpf: Cpf.parse(input.cpf, 'BROKER'), signed: input.signed };
 }

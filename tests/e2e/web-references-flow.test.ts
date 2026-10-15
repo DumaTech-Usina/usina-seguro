@@ -9,6 +9,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { registerBroker } from './support/brokers.ts';
+import { clientNamed } from './support/clients.ts';
 import { signIn } from './support/sign-in.ts';
 
 /**
@@ -81,12 +82,13 @@ beforeAll(async () => {
   // Two businesses already sold, the way FP-01 leaves them, before anybody
   // maintains IN-01: this is the state the registry is introduced into.
   await registeredPolicy({
-    clientId: 'client-1',
+    clientName: 'Ana Lima',
     proposalNumber: 'PRP-A',
     policyNumber: 'PRP-A',
   });
   await registeredPolicy({
-    clientId: 'cliente-sem-cadastro',
+    clientName: 'Bruno Souza',
+    insurerId: 'seguradora-sem-cadastro',
     proposalNumber: 'PRP-B',
     policyNumber: 'PRP-B',
   });
@@ -188,14 +190,15 @@ async function callApi(method: string, apiPath: string, body?: unknown): Promise
 }
 
 async function registeredPolicy(options: {
-  clientId: string;
+  clientName: string;
+  insurerId?: string;
   proposalNumber: string;
   policyNumber: string;
 }): Promise<void> {
   const proposal = await callApi('POST', '/proposals', {
-    clientId: options.clientId,
+    client: clientNamed(options.clientName),
     brokerId,
-    insurerId: 'insurer-1',
+    insurerId: options.insurerId ?? 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'credit',
     proposalNumber: options.proposalNumber,
@@ -220,7 +223,6 @@ describe('the reference registry (IN-01)', () => {
     // This is the state REQ-096 was blocked by: a listing that can only name a
     // business by the code somebody typed on the proposal.
     const line = rowContaining('#list', 'PRP-A');
-    expect(line.textContent).toContain('client-1');
     expect(line.textContent).toContain('insurer-1');
     expect(line.textContent).toContain('auto');
   });
@@ -232,7 +234,6 @@ describe('the reference registry (IN-01)', () => {
     expect(text('#list-references')).toContain('Nenhum cadastro registrado');
 
     for (const [kind, id, name] of [
-      ['CLIENT', 'client-1', 'Ana Lima'],
       ['INSURER', 'insurer-1', 'Seguradora Norte'],
       ['PRODUCT', 'auto', 'Automóvel'],
     ] as const) {
@@ -243,19 +244,25 @@ describe('the reference registry (IN-01)', () => {
     expect(snackbars().join(' ')).toContain('Automóvel registrado');
     // The listing is re-read from the backend, not patched into the page.
     expect(requests.at(-1)).toBe('GET /references');
-    expect(rows('#list-references')).toHaveLength(3);
+    expect(rows('#list-references')).toHaveLength(2);
 
-    const client = rowContaining('#list-references', 'Ana Lima');
-    expect(client.textContent).toContain('Cliente');
+    const insurer = rowContaining('#list-references', 'Seguradora Norte');
+    expect(insurer.textContent).toContain('Seguradora');
     // The identifier stays visible: it is what every other record matches on.
-    expect(client.textContent).toContain('client-1');
+    expect(insurer.textContent).toContain('insurer-1');
+    // REQ-320: the client is no kind of IN-01 any more; it has its own page.
+    expect(
+      [...document.querySelectorAll('#form-reference [name="kind"] option')].map(
+        (option: Untyped) => option.value,
+      ),
+    ).toEqual(['INSURER', 'INTERMEDIARY', 'PRODUCT']);
   });
 
   it('refuses a reference with no name, in Portuguese, leaving the registry alone', async () => {
     await openSettings();
     const before = rows('#list-references').length;
 
-    fill('#form-reference', { kind: 'CLIENT', id: 'client-9', name: '   ' });
+    fill('#form-reference', { kind: 'INSURER', id: 'insurer-9', name: '   ' });
     document
       .querySelector('#form-reference')
       ?.dispatchEvent(new window.Event('submit', { cancelable: true }));
@@ -274,6 +281,7 @@ describe('the reference registry (IN-01)', () => {
 
     const line = rowContaining('#list', 'PRP-A');
 
+    // REQ-318: the client's name comes from the client registry.
     expect(line.textContent).toContain('Ana Lima');
     expect(line.textContent).toContain('Seguradora Norte');
     // REQ-022 names the field "produto/ramo": the product's name is the ramo.
@@ -287,8 +295,8 @@ describe('the reference registry (IN-01)', () => {
 
     // The business is listed exactly like the other one; what it lacks is a
     // name, and the screen says the identifier rather than leaving a gap.
-    expect(unnamed.textContent).toContain('cliente-sem-cadastro');
-    expect(unnamed.textContent).toContain('Seguradora Norte');
+    expect(unnamed.textContent).toContain('seguradora-sem-cadastro');
+    expect(unnamed.textContent).toContain('Bruno Souza');
     expect(rows('#list')).toHaveLength(2);
   });
 
@@ -298,36 +306,38 @@ describe('the reference registry (IN-01)', () => {
     await import('/app/proposals/new.js');
 
     await vi.waitFor(() => {
-      expect(document.querySelectorAll('#client-options option').length).toBeGreaterThan(0);
+      expect(document.querySelectorAll('#insurer-options option').length).toBeGreaterThan(0);
     });
 
-    const clients = [...document.querySelectorAll('#client-options option')].map(
+    const insurers = [...document.querySelectorAll('#insurer-options option')].map(
       (option: Untyped) => ({ value: option.value, label: option.textContent }),
     );
 
     expect(requests).toContain('GET /references');
-    expect(clients).toContainEqual({ value: 'client-1', label: 'Ana Lima' });
+    expect(insurers).toContainEqual({ value: 'insurer-1', label: 'Seguradora Norte' });
     // A suggestion, never a constraint: the field is free text and the list
     // only spares the operator from retyping what the registry already holds.
-    expect(field('#form-proposal', 'clientId').getAttribute('list')).toBe('client-options');
-    expect(field('#form-proposal', 'clientId').hasAttribute('pattern')).toBe(false);
+    expect(field('#form-proposal', 'insurerId').getAttribute('list')).toBe('insurer-options');
+    expect(field('#form-proposal', 'insurerId').hasAttribute('pattern')).toBe(false);
+    // REQ-317: the client is typed as name and CPF, not picked from IN-01.
+    expect(document.querySelector('#client-options')).toBeNull();
   });
 
   it('corrects a name in place instead of listing it twice', async () => {
     await openSettings();
 
-    fill('#form-reference', { kind: 'CLIENT', id: 'client-1', name: 'Ana Lima Souza' });
+    fill('#form-reference', { kind: 'INSURER', id: 'insurer-1', name: 'Seguradora Norte Ltda' });
     await submit('#form-reference', '#list-references', '/references');
 
-    const client = rows('#list-references').filter((row: Untyped) =>
-      row.textContent.includes('client-1'),
+    const insurer = rows('#list-references').filter((row: Untyped) =>
+      row.textContent.includes('insurer-1'),
     );
 
-    expect(client).toHaveLength(1);
-    expect(client[0].textContent).toContain('Ana Lima Souza');
+    expect(insurer).toHaveLength(1);
+    expect(insurer[0].textContent).toContain('Seguradora Norte Ltda');
 
     // And the correction reaches the operation, which reads the registry fresh.
     await openPolicies();
-    expect(rowContaining('#list', 'PRP-A').textContent).toContain('Ana Lima Souza');
+    expect(rowContaining('#list', 'PRP-A').textContent).toContain('Seguradora Norte Ltda');
   });
 });

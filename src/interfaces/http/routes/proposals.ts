@@ -59,7 +59,7 @@ const registerProposalSchema: FastifySchema = {
     type: 'object',
     // REQ-202: every datum is required except the installments.
     required: [
-      'clientId',
+      'client',
       'brokerId',
       'insurerId',
       'productId',
@@ -74,7 +74,16 @@ const registerProposalSchema: FastifySchema = {
     ],
     additionalProperties: false,
     properties: {
-      clientId: { type: 'string' },
+      // REQ-317: name and CPF as typed; whether they are valid is the domain's.
+      client: {
+        type: 'object',
+        required: ['name', 'cpf'],
+        additionalProperties: false,
+        properties: {
+          name: { type: 'string' },
+          cpf: { type: 'string' },
+        },
+      },
       brokerId: { type: 'string' },
       insurerId: { type: 'string' },
       productId: { type: 'string' },
@@ -160,6 +169,8 @@ const listProposalsSchema: FastifySchema = {
     additionalProperties: false,
     properties: {
       status: { type: 'string', enum: ['AWAITING_ISSUANCE', 'ISSUED', 'REJECTED'] },
+      // REQ-319: part of the client's name or of its CPF.
+      client: { type: 'string' },
     },
   },
 };
@@ -184,7 +195,7 @@ interface ProposalIdParams {
 }
 
 interface RegisterProposalBody {
-  clientId: string;
+  client: { name: string; cpf: string };
   brokerId: string;
   insurerId: string;
   productId: string;
@@ -224,7 +235,8 @@ function intermediaryOf(
 }
 
 export function registerProposalRoutes(app: FastifyInstance, useCases: UseCases): void {
-  // The proposals to follow, optionally narrowed to one state.
+  // The proposals to follow, optionally narrowed to one state and to the
+  // clients a term matches (REQ-319).
   app.get('/proposals', { schema: listProposalsSchema }, async (request) => {
     // The schema already restricted the query to a known state or nothing.
     return useCases.listProposals.execute(request.query as ListProposalsInput);
@@ -257,7 +269,7 @@ export function registerProposalRoutes(app: FastifyInstance, useCases: UseCases)
       const body = request.body as RegisterProposalBody;
 
       const output = await useCases.registerProposal.execute({
-        clientId: body.clientId,
+        client: { name: body.client.name, cpf: body.client.cpf },
         brokerId: body.brokerId,
         insurerId: body.insurerId,
         productId: body.productId,

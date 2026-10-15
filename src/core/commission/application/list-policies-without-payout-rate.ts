@@ -1,6 +1,8 @@
 import type { PolicyRepository } from '../../policy/application/policy-repository.ts';
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
 import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
+import { clientNameOf } from '../../registry/application/client-name.ts';
+import type { ClientRepository } from '../../registry/application/client-repository.ts';
 import { payoutBase } from '../domain/payout-commission.ts';
 import type { PayoutCommissionRepository } from './payout-commission-repository.ts';
 import {
@@ -12,6 +14,8 @@ export interface ListPoliciesWithoutPayoutRateDependencies {
   readonly policies: PolicyRepository;
   readonly proposals: ProposalRepository;
   readonly payouts: PayoutCommissionRepository;
+  /** REQ-318: each line shows the client's current name. */
+  readonly clients: ClientRepository;
 }
 
 /**
@@ -52,6 +56,7 @@ export class ListPoliciesWithoutPayoutRate {
           policy,
           proposal,
           payoutBase(proposal.expectedReceipt()).toString(),
+          await clientNameOf(this.deps.clients, proposal.clientId),
         ),
       );
     }

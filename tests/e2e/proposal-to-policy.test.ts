@@ -7,6 +7,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { registerBroker } from './support/brokers.ts';
+import { clientNamed } from './support/clients.ts';
 import { type SignedIn, signIn } from './support/sign-in.ts';
 
 /**
@@ -62,7 +63,7 @@ async function post(url: string, body: unknown): Promise<Response> {
 /** A V2 proposal awaiting issuance, carrying the number from registration (REQ-206). */
 function proposalBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    clientId: 'client-1',
+    client: clientNamed('client-1'),
     brokerId,
     insurerId: 'insurer-1',
     productId: 'auto',
@@ -282,6 +283,7 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
     policyNumber: string;
     proposalNumber: string | null;
     clientId: string;
+    clientName: string;
     status: string;
     premium: string;
     coverageStart: string;
@@ -317,7 +319,8 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
       id: early,
       policyNumber: 'PRP-LIST-EARLY',
       proposalNumber: 'PRP-LIST-EARLY',
-      clientId: 'client-1',
+      // REQ-318: the name of the client registered with the proposal.
+      clientName: 'client-1',
       status: 'ACTIVE',
       premium: '1200.00',
       coverageStart: '2026-10-01',
@@ -397,27 +400,28 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
   }
 
   it('notifies the broker with the five fields when the issuance is recognised (CA-029)', async () => {
-    // IN-01 gives the client and the product a name, the broker registry the
-    // broker (REQ-308); the other two fields are the worked percentage of
-    // REQ-212 and the net premium of REQ-202.
-    for (const reference of [
-      { kind: 'CLIENT', id: 'client-notified', name: 'Maria Souza' },
-      { kind: 'PRODUCT', id: 'auto', name: 'Automovel' },
-    ]) {
-      expect((await post('/references', reference)).status).toBe(201);
-    }
+    // IN-01 gives the product a name, the broker registry the broker
+    // (REQ-308) and the client registry the client (REQ-318); the other two
+    // fields are the worked percentage of REQ-212 and the net premium of
+    // REQ-202.
+    expect(
+      (await post('/references', { kind: 'PRODUCT', id: 'auto', name: 'Automovel' })).status,
+    ).toBe(201);
 
     const proposal = await post(
       '/proposals',
       proposalBody({
-        clientId: 'client-notified',
+        client: clientNamed('Maria Souza'),
         brokerId: brokers.notified,
         productId: 'auto',
         paymentMethodId: 'credit',
         proposalNumber: 'PRP-NOTIFY-1',
       }),
     );
-    const { id: proposalId } = (await proposal.json()) as { id: string };
+    const { id: proposalId, clientId } = (await proposal.json()) as {
+      id: string;
+      clientId: string;
+    };
 
     const policy = await post('/policies', recognition(proposalId));
     const { id: policyId } = (await policy.json()) as { id: string };
@@ -427,7 +431,7 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
       recipientId: brokers.notified,
       policyId,
       policyNumber: 'PRP-NOTIFY-1',
-      client: { id: 'client-notified', name: 'Maria Souza' },
+      client: { id: clientId, name: 'Maria Souza' },
       broker: { id: brokers.notified, name: 'Corretora Notificada' },
       product: { id: 'auto', name: 'Automovel' },
       workedCommission: '32.5',
@@ -439,9 +443,9 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
     const proposal = await post(
       '/proposals',
       proposalBody({
-        clientId: 'client-unnamed',
+        client: clientNamed('client-unnamed'),
         brokerId: brokers.unnamed,
-        productId: 'auto',
+        productId: 'product-unnamed',
         paymentMethodId: 'credit',
         proposalNumber: 'PRP-NOTIFY-2',
       }),
@@ -450,14 +454,16 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
     await post('/policies', recognition(proposalId));
 
     const [notified] = await listNotifications(`?recipientId=${brokers.unnamed}`);
-    expect(notified?.client).toEqual({ id: 'client-unnamed', name: null });
+    expect(notified?.product).toEqual({ id: 'product-unnamed', name: null });
+    // REQ-317: the client is always a registered one now, so it has a name.
+    expect(notified?.client.name).toBe('client-unnamed');
   });
 
   it('produces nothing for a recognition that was refused', async () => {
     const proposal = await post(
       '/proposals',
       proposalBody({
-        clientId: 'client-1',
+        client: clientNamed('client-1'),
         brokerId: brokers.nothing,
         productId: 'auto',
         paymentMethodId: 'credit',

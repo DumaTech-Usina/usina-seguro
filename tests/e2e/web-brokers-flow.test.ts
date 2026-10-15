@@ -9,6 +9,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { chooseBroker } from './support/brokers.ts';
+import { clientNamed } from './support/clients.ts';
 import { TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
@@ -255,7 +256,8 @@ describe('the broker of a proposal and of its policy (REQ-307, REQ-308)', () => 
 
   function fillTheRest(proposalNumber: string): void {
     fill('#form-proposal', {
-      clientId: 'client-web',
+      clientName: 'Cliente Web',
+      clientCpf: clientNamed('Cliente Web').cpf,
       insurerId: 'insurer-1',
       productId: 'auto',
       paymentMethodId: 'bank-slip',

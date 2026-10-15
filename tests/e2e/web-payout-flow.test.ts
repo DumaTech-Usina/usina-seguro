@@ -9,6 +9,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { registerBroker } from './support/brokers.ts';
+import { clientNamed } from './support/clients.ts';
 import { TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
@@ -220,14 +221,14 @@ async function rawApi(method: string, apiPath: string, body?: unknown): Promise<
 /** FP-02 step 1: a policy exists (FP-01 step 9). Answers its id. */
 async function issuedPolicy(options: {
   proposalNumber: string;
-  clientId?: string;
+  clientName?: string;
   brokerId?: string;
   mode?: 'INTEGRAL' | 'PARCELLED';
   intermediary?: { intermediaryId: string; ctu: string } | null;
   workedCommission?: string;
 }): Promise<string> {
   const proposal = await callApi('POST', '/proposals', {
-    clientId: options.clientId ?? 'Ana Lima',
+    client: clientNamed(options.clientName ?? 'Ana Lima'),
     brokerId: options.brokerId ?? brokers.alfa,
     insurerId: 'ALLIANZ',
     productId: 'Auto',
@@ -501,7 +502,7 @@ describe('the eligible commissions on the payouts page (REQ-284)', () => {
   it('filters by part of the broker and the client, and leads to the policy (CA-234, CA-235)', async () => {
     const beta = await issuedPolicy({
       proposalNumber: 'APL-BETA-1',
-      clientId: 'Bruno Souza',
+      clientName: 'Bruno Souza',
       brokerId: brokers.beta,
     });
     await callApi('POST', `/policies/${beta}/payout`, { rate: '50' });

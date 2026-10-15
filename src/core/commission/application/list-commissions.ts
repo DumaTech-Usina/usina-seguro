@@ -2,6 +2,8 @@ import type { PolicyRepository } from '../../policy/application/policy-repositor
 import { POLICY_MESSAGES } from '../../policy/domain/errors.ts';
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
 import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
+import { clientNameOf } from '../../registry/application/client-name.ts';
+import type { ClientRepository } from '../../registry/application/client-repository.ts';
 import { ReferenceNames } from '../../registry/application/reference-names.ts';
 import type { ReferenceRepository } from '../../registry/application/reference-repository.ts';
 import type { CommissionStatus } from '../domain/commission.ts';
@@ -21,6 +23,8 @@ export interface ListCommissionsDependencies {
   readonly proposals: ProposalRepository;
   /** IN-01: the names the line is identified by (REQ-096). */
   readonly references: ReferenceRepository;
+  /** REQ-318: the client's name, from the client registry. */
+  readonly clients: ClientRepository;
 }
 
 /**
@@ -63,7 +67,13 @@ export class ListCommissions {
           throw new RecordNotFound(PROPOSAL_MESSAGES.NOT_FOUND, { id: policy.proposalId });
         }
 
-        return toCommissionListItemView(commission, policy, proposal, names);
+        return toCommissionListItemView(
+          commission,
+          policy,
+          proposal,
+          names,
+          await clientNameOf(this.deps.clients, proposal.clientId),
+        );
       }),
     );
   }

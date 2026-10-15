@@ -44,7 +44,7 @@ function open(): Application {
 async function policy(proposalNumber: string, mode: 'INTEGRAL' | 'PARCELLED' = 'INTEGRAL') {
   const { useCases } = application;
   const proposal = await useCases.registerProposal.execute({
-    clientId: 'Ana Lima',
+    client: { name: 'Ana Lima', cpf: cpfOf(201) },
     brokerId,
     insurerId: 'ALLIANZ',
     productId: 'Auto',

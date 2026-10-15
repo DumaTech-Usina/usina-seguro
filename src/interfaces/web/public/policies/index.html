@@ -58,6 +58,17 @@
               />
               <label class="field__label" for="renewal-until">Renovação até</label>
             </div>
+            <!-- REQ-319: busca pelo cliente cadastrado, por nome ou CPF. -->
+            <div class="field renewal-field">
+              <input
+                class="field__input"
+                id="client-search"
+                name="client"
+                type="search"
+                placeholder=" "
+              />
+              <label class="field__label" for="client-search">Cliente (nome ou CPF)</label>
+            </div>
             <button class="btn btn--outlined" id="clear" type="button" hidden>
               <span class="material-symbols-outlined">filter_alt_off</span>
               Ver todas

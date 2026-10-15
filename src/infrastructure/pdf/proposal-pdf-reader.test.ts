@@ -20,7 +20,7 @@ function allianzText(overrides: Partial<Record<string, string>> = {}): string {
     'E-mail: corretor@example.com Telefone: 0000000000 Código: 1',
     'SUAS INFORMAÇÕES',
     part.client,
-    'CPF/CNPJ: 000.000.000-00 Tel: 0000000000',
+    part.clientDocument,
     'INFORMAÇÕES DO SEU SEGURO',
     `${part.coverage} Nº da Proposta: ${part.secondNumber}`,
     `Tipo de Seguro: Seguro novo ${part.lineOfBusiness}`,
@@ -44,6 +44,7 @@ function allianzText(overrides: Partial<Record<string, string>> = {}): string {
 const DEFAULT_PARTS: Record<string, string> = {
   broker: 'CORRETORA EXEMPLO LTDA',
   client: 'Nome: MARIA DA SILVA',
+  clientDocument: 'CPF/CNPJ: 529.982.247-25 Tel: 0000000000',
   coverage: 'Vigência: das 24H de 17/09/2026 às 24H de 17/09/2027',
   secondNumber: '123456789',
   lineOfBusiness: 'Ramo: 31 - Moto',
@@ -62,6 +63,7 @@ describe('readAllianzProposalText', () => {
     expect(reading.fields).toEqual({
       proposalNumber: '123456789',
       clientId: 'MARIA DA SILVA',
+      clientCpf: '52998224725',
       brokerId: 'CORRETORA EXEMPLO LTDA',
       insurerId: 'ALLIANZ',
       productId: 'Auto',
@@ -75,6 +77,29 @@ describe('readAllianzProposalText', () => {
         { amount: '434.62', dueDate: null },
       ],
     });
+  });
+
+  it.each([
+    ['a CNPJ', 'CPF/CNPJ: 11.222.333/0001-81 Tel: 0000000000'],
+    ['a CPF with invalid check digits', 'CPF/CNPJ: 529.982.247-24 Tel: 0000000000'],
+    ['a masked CPF', 'CPF/CNPJ: ***.982.247-** Tel: 0000000000'],
+    ['no document line', 'Tel: 0000000000'],
+  ])('leaves the client CPF absent for %s, keeping the name (REQ-321)', (_case, line) => {
+    const reading = readAllianzProposalText(allianzText({ clientDocument: line }), identifyByText);
+
+    expect(reading.status).toBe('PARTIAL');
+    expect(reading.missing).toEqual(['clientCpf']);
+    expect(reading.fields.clientId).toBe('MARIA DA SILVA');
+    expect(reading.fields.clientCpf).toBeUndefined();
+  });
+
+  it('reads the CPF printed without punctuation as well (REQ-321)', () => {
+    const reading = readAllianzProposalText(
+      allianzText({ clientDocument: 'CPF/CNPJ: 52998224725 Tel: 0000000000' }),
+      identifyByText,
+    );
+
+    expect(reading.fields.clientCpf).toBe('52998224725');
   });
 
   it('normalizes money to the decimal string of the domain (REQ-120)', () => {

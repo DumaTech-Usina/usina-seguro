@@ -15,6 +15,7 @@
 import { ApiError, api } from '/app/shared/api.js';
 import { authorName, loadAuthors } from '/app/shared/authors.js';
 import { brokerName, loadBrokers } from '/app/shared/brokers.js';
+import { clientLabel, loadClients } from '/app/shared/clients.js';
 import { base64Of } from '/app/shared/file.js';
 import { addInstallmentRow, scheduleOf } from '/app/shared/installments.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
@@ -157,7 +158,9 @@ function summaryCard(proposal) {
 
   const details = element('div', 'definitions');
   details.append(
-    definition('Cliente', proposal.clientId),
+    // REQ-318: the client's current name and CPF; the text of an older
+    // proposal as it is (REQ-320).
+    definition('Cliente', clientLabel(proposal.clientId)),
     definition('Corretor', brokerName(proposal.brokerId)),
     definition('Seguradora', proposal.insurerId),
     definition('Produto / ramo', proposal.productId),
@@ -593,7 +596,12 @@ async function render() {
   try {
     // REQ-216: the signatures keep ids; the directory gives the names to show.
     // REQ-308: likewise the broker's id and its name.
-    [proposal] = await Promise.all([api.getProposal(proposalId), loadAuthors(), loadBrokers()]);
+    [proposal] = await Promise.all([
+      api.getProposal(proposalId),
+      loadAuthors(),
+      loadBrokers(),
+      loadClients(),
+    ]);
   } catch (error) {
     notFound(error instanceof ApiError ? error.message : 'Falha ao consultar a proposta.');
     return;

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { ImmediateTransaction } from '../../../infrastructure/persistence/in-memory/immediate-transaction.ts';
 import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { BusinessRuleViolation, PROPOSAL_MESSAGES } from '../domain/errors.ts';
+import type { ProposalClientInput } from './proposal-clients.ts';
 import { RegisterProposal, type RegisterProposalInput } from './register-proposal.ts';
 
 const NOW = new Date('2026-09-22T12:00:00.000Z');
@@ -11,25 +13,55 @@ function registeredBrokers(...ids: string[]) {
   return { isRegistered: async (id: string) => ids.includes(id) };
 }
 
+/**
+ * REQ-317: the client registry as the port answers it — one id per CPF digits,
+ * created on first sight. Every call is kept so a test can see what was asked.
+ */
+function clientRegistry() {
+  const ids = new Map<string, string>();
+  const calls: { client: ProposalClientInput; author: string }[] = [];
+
+  return {
+    calls,
+    port: {
+      resolve: async (client: ProposalClientInput, author: string) => {
+        calls.push({ client, author });
+        if (client.name.trim() === '') {
+          throw new BusinessRuleViolation('REQ-311', 'registry.client_name_required');
+        }
+        const digits = client.cpf.replace(/[.-]/g, '');
+        if (!ids.has(digits)) {
+          ids.set(digits, `client-${ids.size + 1}`);
+        }
+        return ids.get(digits) as string;
+      },
+      matching: async () => new Set<string>(),
+    },
+  };
+}
+
 function scenario() {
   const proposals = new InMemoryProposalRepository();
   const documents = new InMemoryDocumentStorage();
+  const clients = clientRegistry();
   let sequence = 0;
   const useCase = new RegisterProposal({
     proposals,
     documents,
     brokers: registeredBrokers('broker-1'),
+    clients: clients.port,
+    transaction: new ImmediateTransaction(),
     newId: () => (sequence++ === 0 ? 'fixed-id' : `id-${sequence}`),
     now: () => NOW,
   });
-  return { proposals, documents, useCase };
+  return { proposals, documents, clients, useCase };
 }
 
 const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]);
 
 function input(overrides: Partial<RegisterProposalInput> = {}): RegisterProposalInput {
   return {
-    clientId: 'client-1',
+    client: { name: 'Maria Souza', cpf: '529.982.247-25' },
     brokerId: 'broker-1',
     insurerId: 'insurer-1',
     productId: 'product-1',
@@ -78,6 +110,38 @@ describe('RegisterProposal', () => {
     await useCase.execute(input());
 
     expect((await proposals.findById('fixed-id'))?.brokerId).toBe('broker-1');
+  });
+
+  it('resolves the client from the typed name and CPF, signed by the author, and keeps its id (REQ-317, CA-313)', async () => {
+    const { proposals, clients, useCase } = scenario();
+
+    await useCase.execute(input());
+
+    expect(clients.calls).toEqual([
+      { client: { name: 'Maria Souza', cpf: '529.982.247-25' }, author: 'ana.souza' },
+    ]);
+    expect((await proposals.findById('fixed-id'))?.clientId).toBe('client-1');
+  });
+
+  it('points two proposals with the same CPF at the same client (REQ-317, CA-313)', async () => {
+    const { useCase } = scenario();
+
+    const first = await useCase.execute(input());
+    const second = await useCase.execute(
+      input({ client: { name: 'M. Souza', cpf: '52998224725' } }),
+    );
+
+    expect(second.clientId).toBe(first.clientId);
+  });
+
+  it('refuses a client the registry refuses, and stores nothing (REJ-310)', async () => {
+    const { proposals, useCase } = scenario();
+
+    await expect(
+      useCase.execute(input({ client: { name: ' ', cpf: '52998224725' } })),
+    ).rejects.toThrow(BusinessRuleViolation);
+
+    expect(await proposals.list({})).toEqual([]);
   });
 
   it('persists the proposal awaiting issuance and answers what it holds (FP-01 steps 1-6)', async () => {
@@ -184,6 +248,8 @@ describe('RegisterProposal', () => {
       proposals,
       documents: new InMemoryDocumentStorage(),
       brokers: registeredBrokers('broker-1'),
+      clients: clientRegistry().port,
+      transaction: new ImmediateTransaction(),
       newId: () => `id-${++next}`,
       now: () => NOW,
     });

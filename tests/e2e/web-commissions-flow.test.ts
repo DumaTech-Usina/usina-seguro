@@ -9,6 +9,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { registerBroker } from './support/brokers.ts';
+import { clientNamed } from './support/clients.ts';
 import { signIn } from './support/sign-in.ts';
 
 /**
@@ -172,7 +173,7 @@ interface Business {
 /** A business the way FP-01 leaves it: policy registered, commission forecast. */
 async function registeredPolicy(proposalNumber: string, policyNumber: string): Promise<Business> {
   const proposal = await callApi('POST', '/proposals', {
-    clientId: 'client-1',
+    client: clientNamed('client-1'),
     brokerId,
     insurerId: 'insurer-1',
     productId: 'auto',

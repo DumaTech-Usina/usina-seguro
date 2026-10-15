@@ -22,13 +22,13 @@ function violationOf(action: () => unknown): BusinessRuleViolation {
 
 describe('Cpf (REQ-301)', () => {
   it('accepts a CPF with or without punctuation and keeps only the digits (CA-300)', () => {
-    expect(Cpf.parse('529.982.247-25').digits).toBe('52998224725');
-    expect(Cpf.parse('52998224725').digits).toBe('52998224725');
-    expect(Cpf.parse(' 529.982.247-25 ').digits).toBe('52998224725');
+    expect(Cpf.parse('529.982.247-25', 'BROKER').digits).toBe('52998224725');
+    expect(Cpf.parse('52998224725', 'BROKER').digits).toBe('52998224725');
+    expect(Cpf.parse(' 529.982.247-25 ', 'BROKER').digits).toBe('52998224725');
   });
 
   it('refuses invalid check digits (REJ-301)', () => {
-    const violation = violationOf(() => Cpf.parse('529.982.247-24'));
+    const violation = violationOf(() => Cpf.parse('529.982.247-24', 'BROKER'));
 
     expect(violation.rule).toBe('REQ-301');
     expect(violation.messageKey).toBe(REGISTRY_MESSAGES.BROKER_CPF_INVALID);
@@ -36,14 +36,14 @@ describe('Cpf (REQ-301)', () => {
 
   it('refuses anything but 11 digits (REJ-301)', () => {
     for (const text of ['5299822472', '529982247250', '529.982.247-2A', '529 982 247 25']) {
-      expect(violationOf(() => Cpf.parse(text)).messageKey).toBe(
+      expect(violationOf(() => Cpf.parse(text, 'BROKER')).messageKey).toBe(
         REGISTRY_MESSAGES.BROKER_CPF_INVALID,
       );
     }
   });
 
   it('refuses an empty CPF as missing (REJ-300)', () => {
-    const violation = violationOf(() => Cpf.parse('   '));
+    const violation = violationOf(() => Cpf.parse('   ', 'BROKER'));
 
     expect(violation.rule).toBe('REQ-300');
     expect(violation.messageKey).toBe(REGISTRY_MESSAGES.BROKER_CPF_REQUIRED);

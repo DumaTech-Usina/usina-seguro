@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import { InMemoryClientRepository } from '../../../infrastructure/persistence/in-memory/in-memory-client-repository.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { InMemoryReferenceRepository } from '../../../infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
+import { Authorship } from '../../proposal/domain/authorship.ts';
 import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal } from '../../proposal/domain/proposal.ts';
+import { Client } from '../../registry/domain/client.ts';
 import { Reference } from '../../registry/domain/reference.ts';
 import { Installment } from '../domain/installment.ts';
 import { Policy } from '../domain/policy.ts';
@@ -86,6 +89,9 @@ async function scenario() {
     // IN-01 is empty unless a test registers a name: an unregistered
     // reference is the ordinary case until somebody maintains the registry.
     references: new InMemoryReferenceRepository(),
+    // V2 section 9E: empty unless a test registers a client. A proposal whose
+    // client is no registered client holds a typed text (REQ-320).
+    clients: new InMemoryClientRepository(),
   };
 
   await business(repositories, {
@@ -191,22 +197,16 @@ describe('ListPolicies', () => {
       policies,
       proposals: new InMemoryProposalRepository(),
       references: new InMemoryReferenceRepository(),
+      clients: new InMemoryClientRepository(),
     });
 
     await expect(useCase.execute()).rejects.toBeInstanceOf(RecordNotFound);
   });
 
-  it('identifies each line by the name IN-01 registered (REQ-096)', async () => {
-    const { references, useCase } = await scenario();
+  it('identifies each line by the name IN-01 registered, and the client by its registry (REQ-096, REQ-318)', async () => {
+    const { references, clients, useCase } = await scenario();
 
-    await references.save(
-      Reference.register({
-        kind: 'CLIENT',
-        id: 'client-MID',
-        name: 'Ana Lima',
-        registeredAt: new Date('2026-09-20T12:00:00.000Z'),
-      }),
-    );
+    await clients.save(anaLima());
     await references.save(
       Reference.register({
         kind: 'INSURER',
@@ -236,25 +236,63 @@ describe('ListPolicies', () => {
     expect(mid?.clientId).toBe('client-MID');
   });
 
-  it('answers no name for a reference nobody registered, and lists it anyway', async () => {
-    const { references, useCase } = await scenario();
+  it('shows the text of a client that is no registered client, and lists it anyway (REQ-320)', async () => {
+    const { clients, useCase } = await scenario();
 
-    await references.save(
-      Reference.register({
-        kind: 'CLIENT',
-        id: 'client-MID',
-        name: 'Ana Lima',
-        registeredAt: new Date('2026-09-20T12:00:00.000Z'),
-      }),
-    );
+    await clients.save(anaLima());
 
     const listing = await useCase.execute();
     const last = listing.find((line) => line.policyNumber === 'APL-LAST');
 
-    // REQ-002: the system reflects a control that happens outside it. A client
-    // nobody registered is a missing name, never a business to hide or refuse.
-    expect(last?.clientName).toBeNull();
+    // A proposal registered before the client registry keeps its text, shown
+    // as it is; it is never a business to hide or refuse.
+    expect(last?.clientName).toBe('client-LAST');
     expect(last?.clientId).toBe('client-LAST');
+    expect(last?.insurerName).toBeNull();
     expect(listing).toHaveLength(3);
   });
 });
+
+describe('ListPolicies by client (REQ-319, REQ-320)', () => {
+  it('finds the policies of the clients whose name or CPF matches (CA-316)', async () => {
+    const { clients, useCase } = await scenario();
+    await clients.save(anaLima());
+
+    const numbers = async (client: string) =>
+      (await useCase.execute({ client })).map((line) => line.policyNumber);
+
+    expect(await numbers('lima')).toEqual(['APL-MID']);
+    expect(await numbers('529.982.247-25')).toEqual(['APL-MID']);
+    expect(await numbers('52998')).toEqual(['APL-MID']);
+    expect(await numbers('carlos')).toEqual([]);
+  });
+
+  it('does not find a policy by the text its proposal held before the registry (REQ-320)', async () => {
+    const { useCase } = await scenario();
+
+    expect(await useCase.execute({ client: 'client-LAST' })).toEqual([]);
+  });
+
+  it('combines with the renewal filter, and a blank term is no filter', async () => {
+    const { clients, useCase } = await scenario();
+    await clients.save(anaLima());
+
+    expect(await useCase.execute({ client: 'lima', renewalUntil: '2027-01-31' })).toEqual([]);
+    expect(
+      (await useCase.execute({ client: 'lima', renewalUntil: '2027-06-30' })).map(
+        (line) => line.policyNumber,
+      ),
+    ).toEqual(['APL-MID']);
+    expect(await useCase.execute({ client: '  ' })).toHaveLength(3);
+  });
+});
+
+/** The client of the proposal MID, registered (V2 section 9E). */
+function anaLima(): Client {
+  return Client.register({
+    id: 'client-MID',
+    name: 'Ana Lima',
+    cpf: '52998224725',
+    signed: Authorship.of('operator', new Date('2026-09-20T12:00:00.000Z')),
+  });
+}

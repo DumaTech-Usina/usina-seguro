@@ -9,6 +9,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { chooseBroker, registerBroker } from './support/brokers.ts';
+import { clientNamed } from './support/clients.ts';
 import { TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
@@ -224,7 +225,7 @@ const THREE_OF_100 = [{ amount: '100.00' }, { amount: '100.00' }, { amount: '100
 
 async function awaitingProposal(overrides: Record<string, unknown> = {}): Promise<string> {
   const proposal = await callApi('POST', '/proposals', {
-    clientId: 'Ana Lima',
+    client: clientNamed('Ana Lima'),
     brokerId,
     insurerId: 'ALLIANZ',
     productId: 'Auto',
@@ -308,7 +309,8 @@ describe('registering a parcelled proposal (REQ-290 to REQ-296)', () => {
     await import('/app/proposals/new.js');
 
     for (const [name, value] of Object.entries({
-      clientId: 'Ana Lima',
+      clientName: 'Ana Lima',
+      clientCpf: clientNamed('Ana Lima').cpf,
       insurerId: 'ALLIANZ',
       productId: 'Auto',
       paymentMethodId: 'credit',
@@ -356,7 +358,8 @@ describe('registering a parcelled proposal (REQ-290 to REQ-296)', () => {
     await import('/app/proposals/new.js');
 
     for (const [name, value] of Object.entries({
-      clientId: 'Ana Lima',
+      clientName: 'Ana Lima',
+      clientCpf: clientNamed('Ana Lima').cpf,
       insurerId: 'ALLIANZ',
       productId: 'Auto',
       paymentMethodId: 'credit',
