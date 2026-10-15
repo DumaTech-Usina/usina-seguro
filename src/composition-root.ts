@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
+import nodemailer from 'nodemailer';
 import type { Config } from './config/config.ts';
 import { CalculateAgreedCommission } from './core/commission/application/calculate-agreed-commission.ts';
 import type { CommissionRepository } from './core/commission/application/commission-repository.ts';
@@ -22,11 +23,23 @@ import type { PayoutCommissionRepository } from './core/commission/application/p
 import { ReviseParcelledPayoutRates } from './core/commission/application/revise-parcelled-payout-rates.ts';
 import { RevisePayoutRate } from './core/commission/application/revise-payout-rate.ts';
 import { AcceptInvitation } from './core/identity/application/accept-invitation.ts';
+import type { AccessMailer } from './core/identity/application/access-mailer.ts';
+import { ChangeUserRole } from './core/identity/application/change-user-role.ts';
+import { CreateUser } from './core/identity/application/create-user.ts';
+import { DeactivateUser } from './core/identity/application/deactivate-user.ts';
 import type { InvitationRepository } from './core/identity/application/invitation-repository.ts';
+import { InviteUser } from './core/identity/application/invite-user.ts';
 import { IssueFirstAdministratorInvitation } from './core/identity/application/issue-first-administrator-invitation.ts';
+import { ListUserDirectory } from './core/identity/application/list-user-directory.ts';
+import { ListUsers } from './core/identity/application/list-users.ts';
 import { LogIn } from './core/identity/application/log-in.ts';
 import { LogOut } from './core/identity/application/log-out.ts';
+import type { PasswordResetRepository } from './core/identity/application/password-reset-repository.ts';
+import { RequestPasswordReset } from './core/identity/application/request-password-reset.ts';
+import { ResendInvitation } from './core/identity/application/resend-invitation.ts';
+import { ResetPassword } from './core/identity/application/reset-password.ts';
 import { ResolveSession } from './core/identity/application/resolve-session.ts';
+import type { RoleChangeRepository } from './core/identity/application/role-change-repository.ts';
 import type { SessionRepository } from './core/identity/application/session-repository.ts';
 import type { UserRepository } from './core/identity/application/user-repository.ts';
 import { ListNotifications } from './core/notification/application/list-notifications.ts';
@@ -55,6 +68,12 @@ import type { SourceDocumentStorage } from './core/proposal/application/source-d
 import { ListReferences } from './core/registry/application/list-references.ts';
 import type { ReferenceRepository } from './core/registry/application/reference-repository.ts';
 import { RegisterReference } from './core/registry/application/register-reference.ts';
+import {
+  InMemoryAccessMailer,
+  type SentAccessMail,
+} from './infrastructure/email/in-memory-access-mailer.ts';
+import { LogAccessMailer } from './infrastructure/email/log-access-mailer.ts';
+import { SmtpAccessMailer } from './infrastructure/email/smtp-access-mailer.ts';
 import { ProposalPdfReader, identifyByText } from './infrastructure/pdf/proposal-pdf-reader.ts';
 import { ImmediateTransaction } from './infrastructure/persistence/in-memory/immediate-transaction.ts';
 import { InMemoryCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
@@ -62,10 +81,12 @@ import { InMemoryDocumentStorage } from './infrastructure/persistence/in-memory/
 import { InMemoryInvitationRepository } from './infrastructure/persistence/in-memory/in-memory-invitation-repository.ts';
 import { InMemoryNotificationRepository } from './infrastructure/persistence/in-memory/in-memory-notification-repository.ts';
 import { InMemoryParcelledPayoutRepository } from './infrastructure/persistence/in-memory/in-memory-parcelled-payout-repository.ts';
+import { InMemoryPasswordResetRepository } from './infrastructure/persistence/in-memory/in-memory-password-reset-repository.ts';
 import { InMemoryPayoutCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-payout-commission-repository.ts';
 import { InMemoryPolicyRepository } from './infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from './infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { InMemoryReferenceRepository } from './infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
+import { InMemoryRoleChangeRepository } from './infrastructure/persistence/in-memory/in-memory-role-change-repository.ts';
 import { InMemorySessionRepository } from './infrastructure/persistence/in-memory/in-memory-session-repository.ts';
 import { InMemoryUserRepository } from './infrastructure/persistence/in-memory/in-memory-user-repository.ts';
 import { SqliteCommissionRepository } from './infrastructure/persistence/sqlite/sqlite-commission-repository.ts';
@@ -74,10 +95,12 @@ import { SqliteDocumentStorage } from './infrastructure/persistence/sqlite/sqlit
 import { SqliteInvitationRepository } from './infrastructure/persistence/sqlite/sqlite-invitation-repository.ts';
 import { SqliteNotificationRepository } from './infrastructure/persistence/sqlite/sqlite-notification-repository.ts';
 import { SqliteParcelledPayoutRepository } from './infrastructure/persistence/sqlite/sqlite-parcelled-payout-repository.ts';
+import { SqlitePasswordResetRepository } from './infrastructure/persistence/sqlite/sqlite-password-reset-repository.ts';
 import { SqlitePayoutCommissionRepository } from './infrastructure/persistence/sqlite/sqlite-payout-commission-repository.ts';
 import { SqlitePolicyRepository } from './infrastructure/persistence/sqlite/sqlite-policy-repository.ts';
 import { SqliteProposalRepository } from './infrastructure/persistence/sqlite/sqlite-proposal-repository.ts';
 import { SqliteReferenceRepository } from './infrastructure/persistence/sqlite/sqlite-reference-repository.ts';
+import { SqliteRoleChangeRepository } from './infrastructure/persistence/sqlite/sqlite-role-change-repository.ts';
 import { SqliteSessionRepository } from './infrastructure/persistence/sqlite/sqlite-session-repository.ts';
 import { SqliteTransaction } from './infrastructure/persistence/sqlite/sqlite-transaction.ts';
 import { SqliteUserRepository } from './infrastructure/persistence/sqlite/sqlite-user-repository.ts';
@@ -139,10 +162,28 @@ export interface UseCases {
   readonly logIn: LogIn;
   readonly logOut: LogOut;
   readonly resolveSession: ResolveSession;
+  /** REQ-216: the ids that sign the records, with the name to show for each. */
+  readonly listUserDirectory: ListUserDirectory;
+  /** REQ-407: run by a command on the server, never over HTTP. */
+  readonly createUser: CreateUser;
+  /** REQ-440: the administrator's management of users. */
+  readonly listUsers: ListUsers;
+  readonly inviteUser: InviteUser;
+  readonly resendInvitation: ResendInvitation;
+  readonly deactivateUser: DeactivateUser;
+  readonly changeUserRole: ChangeUserRole;
+  /** REQ-425, REQ-426: "Esqueci a senha". */
+  readonly requestPasswordReset: RequestPasswordReset;
+  readonly resetPassword: ResetPassword;
 }
 
 export interface Application {
   readonly useCases: UseCases;
+  /**
+   * The e-mails of access kept in memory, when `EMAIL_DRIVER=memory` — the
+   * tests read the links there. `null` with any other driver.
+   */
+  readonly outbox: readonly SentAccessMail[] | null;
   readonly shutdown: () => Promise<void>;
 }
 
@@ -165,9 +206,12 @@ export function composeApplication(config: Config): Application {
     users,
     invitations,
     sessions,
+    roleChanges,
+    resets,
     transaction,
     shutdown,
   } = composePersistence(config);
+  const { mailer, outbox } = composeMailer(config);
   const newId = (): string => randomUUID();
   const now = (): Date => new Date();
   // REQ-416: what is stored in place of a password, a session or a link.
@@ -304,7 +348,32 @@ export function composeApplication(config: Config): Application {
       logIn: new LogIn({ users, sessions, hasher, secrets, newId, now }),
       logOut: new LogOut({ sessions, secrets, now }),
       resolveSession: new ResolveSession({ users, sessions, secrets, now }),
+      listUserDirectory: new ListUserDirectory({ users }),
+      createUser: new CreateUser({ users, hasher, newId, now }),
+      listUsers: new ListUsers({ users, invitations }),
+      inviteUser: new InviteUser({ users, invitations, secrets, mailer, newId, now }),
+      resendInvitation: new ResendInvitation({ users, invitations, secrets, mailer, newId, now }),
+      deactivateUser: new DeactivateUser({ users, sessions, now }),
+      changeUserRole: new ChangeUserRole({ users, roleChanges, newId, now }),
+      requestPasswordReset: new RequestPasswordReset({
+        users,
+        resets,
+        secrets,
+        mailer,
+        newId,
+        now,
+      }),
+      resetPassword: new ResetPassword({
+        users,
+        resets,
+        sessions,
+        hasher,
+        secrets,
+        transaction,
+        now,
+      }),
     },
+    outbox,
     shutdown,
   };
 }
@@ -321,6 +390,8 @@ interface Persistence {
   readonly users: UserRepository;
   readonly invitations: InvitationRepository;
   readonly sessions: SessionRepository;
+  readonly roleChanges: RoleChangeRepository;
+  readonly resets: PasswordResetRepository;
   readonly transaction: Transaction;
   readonly shutdown: () => Promise<void>;
 }
@@ -340,6 +411,8 @@ function composePersistence(config: Config): Persistence {
         users: new InMemoryUserRepository(),
         invitations: new InMemoryInvitationRepository(),
         sessions: new InMemorySessionRepository(),
+        roleChanges: new InMemoryRoleChangeRepository(),
+        resets: new InMemoryPasswordResetRepository(),
         transaction: new ImmediateTransaction(),
         shutdown: async () => {},
       };
@@ -358,6 +431,8 @@ function composePersistence(config: Config): Persistence {
         users: new SqliteUserRepository(db),
         invitations: new SqliteInvitationRepository(db),
         sessions: new SqliteSessionRepository(db),
+        roleChanges: new SqliteRoleChangeRepository(db),
+        resets: new SqlitePasswordResetRepository(db),
         transaction: new SqliteTransaction(db),
         shutdown: async () => db.close(),
       };
@@ -372,6 +447,42 @@ function composePersistence(config: Config): Persistence {
         'Persistence driver postgres is not implemented yet. ' +
           'Use PERSISTENCE_DRIVER=sqlite or memory.',
       );
+  }
+}
+
+/**
+ * REQ-435, REQ-436: how the e-mails of access leave. The SMTP credentials come
+ * from the environment; until they do, the e-mails are written to the output.
+ */
+function composeMailer(config: Config): {
+  mailer: AccessMailer;
+  outbox: readonly SentAccessMail[] | null;
+} {
+  const { email } = config;
+  const publicUrl = config.http.publicUrl;
+
+  switch (email.driver) {
+    case 'smtp':
+      return {
+        mailer: new SmtpAccessMailer(
+          nodemailer.createTransport({
+            host: email.host,
+            port: email.port,
+            secure: email.secure,
+            ...(email.user === null
+              ? {}
+              : { auth: { user: email.user, pass: email.password ?? '' } }),
+          }),
+          { from: email.from, publicUrl },
+        ),
+        outbox: null,
+      };
+    case 'memory': {
+      const mailer = new InMemoryAccessMailer({ delivers: true });
+      return { mailer, outbox: mailer.sent };
+    }
+    case 'log':
+      return { mailer: new LogAccessMailer((line) => console.log(line), publicUrl), outbox: null };
   }
 }
 

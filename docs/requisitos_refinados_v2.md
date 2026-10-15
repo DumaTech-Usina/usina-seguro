@@ -2,7 +2,8 @@
 
 > **Escopo desta versão**: dois fluxos. **FP-01** — **Criação da Proposta → evolução da
 > Proposta → transformação em Apólice**. **FP-02** — **Apólice → comissão de repasse (CR)
-> → comissão elegível** (seção 9A). O restante do sistema (conciliação, o que acontece com
+> → comissão elegível** (seção 9A). E o **acesso ao sistema** — login, sessão, convite,
+> recuperação de senha e papéis (seção 9C). O restante do sistema (conciliação, o que acontece com
 > o repasse depois da elegibilidade, notificação, cadastros, renovação, endosso, sinistro)
 > **permanece regido pela V1** até ser revisto.
 >
@@ -47,6 +48,15 @@
 > as duas: a parcelada tem **lista própria**, com quatro situações (`REQ-268`); a edição de
 > parcelas vale **também na integral** e é **auditada** (`REQ-254`); e a CT parcelada passa a
 > exigir **ao menos duas parcelas** (`REQ-292`).
+> Em **2026-10-14** o negócio definiu o **acesso ao sistema** (seção 9C), respondendo
+> `Q-401`–`Q-413`. São dois papéis, Administrador e Usuário, e o corretor não acessa o sistema.
+> Login por e-mail e senha, com sessão. Convite e recuperação de senha por e-mail, com o envio
+> desacoplado (SMTP próprio no início). O autor de um ato auditado passa a ser o **usuário
+> autenticado**, referenciado pelo id (`REQ-216` alterada). Ficou em aberto a assinatura da
+> recusa (`DEC-401`). Na mesma data respondeu `Q-414` (o último administrador é protegido,
+> `REQ-406`), definiu a tela de usuários (`REQ-440`), a exibição do link de convite enquanto o
+> SMTP não estiver configurado (`REQ-436`) e um comando para criar usuário com senha
+> (`REQ-407`, a especificar melhor — `Q-415`).
 > A V1 (`requisitos_refinados.md`) é preservada como registro do entendimento anterior e
 > **não é fonte da verdade** para o que está escrito aqui. Onde as duas divergem, **vale a
 > V2** — o mapa da seção 12 diz o que foi mantido, alterado ou descartado.
@@ -55,7 +65,8 @@
 > dito com todas as letras. Não é regra até ser confirmado. Estão todos reunidos na
 > seção 13.
 >
-> **Convenções de identificadores** — a série `2xx` é da V2 e não colide com a V1.
+> **Convenções de identificadores** — a série `2xx` é da V2 e não colide com a V1. A série
+> `4xx` é a do acesso ao sistema (seção 9C).
 >
 > | Prefixo   | Significado                         |
 > | --------- | ----------------------------------- |
@@ -109,6 +120,11 @@ própria proposta**, por quem a registra, e traz consigo um segundo percentual (
 | **CT parcelada**                       | Modo em que a comissão é recebida **por parcela**. Dois CTs, sobre o valor de cada parcela, sem intermediária. Fluxo **em definição** (seções 6A e 9B)                               |
 | **CT da primeira / das subsequentes**  | Na CT parcelada: o percentual aplicado à **parcela de número 1** e o aplicado a **cada uma das demais**                                                                              |
 | **CR da primeira / das subsequentes**  | Na CT parcelada: a CR aplicada ao **valor** da parcela de número 1 e a aplicada ao de cada uma das demais (`REQ-287`, `REQ-264`) |
+| **Usuário**                            | Pessoa da Usina com acesso ao sistema. Entra com o **e-mail** e a senha; é referenciado pelo seu **id** (`REQ-400`) |
+| **Papel**                              | O que o usuário pode fazer no sistema: **Administrador** ou **Usuário** (`REQ-401`) |
+| **Sessão**                             | O acesso aberto pelo login. Guardada no servidor; termina no logout, ao expirar ou quando o servidor a encerra (`REQ-412`) |
+| **Convite**                            | Link de uso único, enviado por e-mail por um administrador, pelo qual a pessoa conclui o cadastro e define a senha (`REQ-420`) |
+| **Redefinição de senha**               | Link de uso único, enviado ao e-mail do usuário, pelo qual ele define uma nova senha (`REQ-425`) |
 
 ---
 
@@ -285,12 +301,21 @@ com o mesmo registro de autoria (`REQ-215`).
 `REQ-215` A CT é **dado sensível e passível de erro**, porque é levantada por comunicação
 interna. Toda informação e toda alteração de CT registra **quem informou e quando**.
 
-`REQ-216` **Identificação de quem assina uma ação.** Enquanto não houver login, o autor de
-uma ação auditada (`REQ-209`, `REQ-215`, `REQ-223`, `REQ-247`, `REQ-254`, `REQ-279`, `REQ-281`, `REQ-265`, `REQ-288`) é um **identificador digitado pelo usuário** no
-próprio ato. No futuro haverá login e o nome de usuário passará a ser o autor. Por isso a
-forma de "assinar" uma ação deve ser **desacoplada** das regras que exigem a assinatura:
-trocar o identificador digitado pelo login, ou acrescentar outra forma de assinar, não
-pode exigir mudança nas regras da proposta.
+`REQ-216` **Identificação de quem assina uma ação** (alterada em 2026-10-14). O autor de uma
+ação auditada (`REQ-209`, `REQ-215`, `REQ-223`, `REQ-247`, `REQ-254`, `REQ-279`, `REQ-281`,
+`REQ-265`, `REQ-288` e os atos mantidos da V1 que registram quem — `REQ-123`) é o **usuário
+autenticado** que pratica o ato (seção 9C). O autor **não é digitado** nem enviado pela tela:
+o ato continua sendo explícito ("Assinar", "Salvar"), e quem assina é quem está logado.
+
+- O autor é **referenciado pelo id do usuário**. A exibição é o **nome** do usuário ou, sem
+  nome, o **e-mail** (`REQ-400`).
+- A forma de "assinar" continua **desacoplada** das regras que exigem a assinatura: trocar ou
+  acrescentar outra forma de identificar o usuário não pode exigir mudança nas regras da
+  proposta.
+
+> Até 2026-10-14, sem login, o autor era um **identificador digitado** pelo usuário no próprio
+> ato. As assinaturas gravadas assim não são preservadas: a base atual é de desenvolvimento,
+> sem dados reais, e é recriada (`Q-408`).
 
 ---
 
@@ -944,6 +969,169 @@ e das subsequentes.
 
 ---
 
+## 9C. Acesso ao sistema — autenticação, convite e papéis
+
+> Definido em **2026-10-14** (`Q-401`–`Q-413`). Até aqui o sistema não tinha login: toda
+> operação era aberta e o autor de um ato auditado era digitado (`REQ-216`, versão anterior).
+> Esta seção **não muda nenhuma regra de negócio** das seções 3 a 9B: muda **quem pode**
+> executar cada operação e **de onde vem** o autor de um ato assinado.
+>
+> A distinção que esta seção existe para manter: **o controle de acesso é do servidor**. A
+> tela pode esconder o que o usuário não pode fazer, mas nunca é ela que impede.
+
+### 9C.1 Usuários e papéis
+
+`REQ-400` **Usuário.** Pessoa da Usina com acesso ao sistema.
+
+- Entra com o **e-mail** e a senha. O e-mail é o **login**; não existe um segundo nome de
+  usuário.
+- É referenciado pelo seu **id** — é o id que as assinaturas guardam (`REQ-216`).
+- Tem um **nome opcional**, informado ao aceitar o convite (`REQ-422`). A exibição do usuário é
+  o nome ou, sem nome, o e-mail.
+
+`REQ-401` **Papéis.** Existem **dois** papéis, e cada usuário tem **exatamente um**:
+
+| Papel             | O que pode fazer                                                                                                                    |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Usuário**       | **Todas** as operações de negócio e todas as consultas: proposta, apólice, comissões, repasse, notificações e cadastros de referência |
+| **Administrador** | Tudo o que o Usuário faz **e** a gestão de usuários: convidar (`REQ-420`), desativar (`REQ-403`) e trocar o papel (`REQ-404`)        |
+
+Todo usuário autenticado **consulta tudo**: não há restrição de leitura por usuário nem por
+dado. A gestão de usuários é exclusiva do Administrador **também no servidor**, qualquer que
+seja o caminho da requisição.
+
+`REQ-402` **O corretor não acessa o sistema.** Não existe papel de corretor. O acesso do
+corretor (`DEC-010` e `ITP-001` da V1) depende de ele ser identificado por id, o que vem com o
+cadastro de corretores (`DEC-208`, `DEC-214`).
+
+`REQ-403` **Desativação.** Um administrador pode **desativar** um usuário. O usuário **nunca é
+apagado**: as assinaturas o referenciam (`REQ-124` da V1, mantida). Desativado, ele não entra
+mais, e as suas sessões são encerradas na hora. **Não há reativação**: quem volta recebe um
+novo convite (`REQ-421`).
+
+`REQ-404` **Troca de papel.** Um administrador pode trocar o papel de um usuário. A troca
+registra **quem** trocou, **quando**, o papel **anterior** e o **novo**, e vale **a partir da
+próxima operação** do usuário, sem novo login.
+
+`REQ-406` **Último administrador** (`Q-414`, 2026-10-14). A desativação ou a troca de papel
+que deixaria o sistema **sem nenhum administrador ativo** é **recusada**.
+
+`REQ-405` **Primeiro administrador.** O primeiro administrador nasce por um **comando
+executado no servidor**, que emite um convite de administrador e o exibe a quem executou. Não
+existe usuário nem senha padrão.
+
+`REQ-407` **Usuário criado por comando** (2026-10-14). Um **comando executado no servidor**
+cria um usuário ativo, com e-mail, senha, papel e nome opcional, sem convite. A senha é
+**digitada sem eco**, num prompt à parte — nunca como argumento do comando, para não ficar no
+histórico. Valem as regras de senha (`REQ-415`) e de e-mail (`REQ-421`). Existe para destravar
+o uso enquanto o envio de e-mail não está configurado; o detalhamento fica para depois
+(`Q-415`).
+
+### 9C.2 Autenticação e sessão
+
+`REQ-410` **Tudo exige login.** Toda operação do sistema exige um usuário autenticado. As
+exceções são exatamente estas:
+
+- o login;
+- o aceite do convite;
+- o pedido e a conclusão da redefinição de senha;
+- a verificação de saúde do serviço;
+- as páginas, que não contêm dados — os dados vêm das operações protegidas.
+
+Uma operação nova nasce **protegida**.
+
+`REQ-411` **Login e logout.** O login é feito com e-mail e senha e abre uma **sessão**. O
+logout encerra a sessão **no servidor**, não só na tela.
+
+`REQ-412` **Sessão.** A sessão expira **12 horas depois do login**, qualquer que seja o uso
+nesse intervalo. Ela também é encerrada pelo logout, pela redefinição de senha (`REQ-426`) e
+pela desativação do usuário (`REQ-403`).
+
+`REQ-413` **Login recusado não revela a conta.** E-mail inexistente, senha errada, usuário
+desativado e conta suspensa (`REQ-414`) recebem **a mesma mensagem**.
+
+`REQ-414` **Tentativas.** Depois de **5 falhas seguidas** de login numa conta, o login dela
+fica **suspenso por 15 minutos**. Um login bem-sucedido zera a contagem.
+
+`REQ-415` **Senha.** De **12 a 128 caracteres**, sem regra de composição (maiúscula, número,
+símbolo).
+
+`REQ-416` **Segredos nunca em claro.** A senha, o identificador da sessão e os links de
+convite e de redefinição **não são guardados em claro**. A senha é guardada só como resultado
+de uma função irreversível, com sal próprio.
+
+`REQ-417` **Requisição de outro site.** Uma operação que altera dados, vinda de uma página que
+não é a do próprio sistema, é **recusada**, mesmo que o navegador tenha uma sessão aberta.
+
+### 9C.3 Convite
+
+`REQ-420` **Convidar.** Um administrador convida informando o **e-mail** e o **papel**. O
+sistema envia ao e-mail um **link de uso único**, válido por **72 horas**. O convite registra
+**quem convidou** e **quando**.
+
+`REQ-421` **Um convite por e-mail.**
+
+- Um novo convite para o mesmo e-mail **invalida o anterior**: só o último vale.
+- Convidar o e-mail de um usuário **ativo** é **recusado**.
+- O e-mail de um usuário **desativado** pode ser convidado. O aceite cria **um novo usuário**,
+  com um novo id. As assinaturas antigas continuam apontando para o usuário desativado.
+
+`REQ-422` **Aceite.** Pelo link, a pessoa define a **senha** (`REQ-415`) e, se quiser, o
+**nome** (`REQ-400`). O usuário é criado **ativo**, com o papel do convite, e depois disso faz
+o login normalmente. Um link **expirado, já usado, substituído ou desconhecido** é recusado com
+**uma única mensagem**, sem dizer qual desses é o caso.
+
+### 9C.4 Recuperação de senha
+
+`REQ-425` **Pedido.** "Esqueci a senha" recebe o e-mail e responde **sempre a mesma coisa**,
+exista a conta ou não. Só um usuário **ativo** recebe o e-mail, com um **link de uso único**,
+válido por **1 hora**.
+
+`REQ-426` **Conclusão.** Pelo link, o usuário define a nova senha (`REQ-415`). O link deixa de
+valer, assim como qualquer outro link de redefinição pendente do usuário, e **todas as suas
+sessões são encerradas**. Um link inválido segue `REQ-422`: uma única mensagem.
+
+### 9C.5 Autorização
+
+`REQ-430` **O servidor decide.** Toda operação verifica, no servidor, se o usuário tem o papel
+que ela exige (`REQ-401`). A tela pode esconder o que o papel não permite, mas isso é
+conveniência, nunca a proteção.
+
+`REQ-431` **Respostas.**
+
+| Situação                                  | Comportamento                                              |
+| ----------------------------------------- | ---------------------------------------------------------- |
+| Sem sessão, ou com a sessão encerrada     | A operação é recusada e a tela leva ao login               |
+| Autenticado, sem o papel que a operação exige | A operação é recusada, com mensagem                    |
+| Usuário desativado                        | As sessões já foram encerradas: vale a primeira linha      |
+
+### 9C.6 E-mail
+
+`REQ-435` **Envio desacoplado.** O convite e a redefinição de senha chegam por **e-mail**. O
+meio de envio é **desacoplado** das regras: começa pelo **SMTP próprio** da Usina, e outro
+meio aprovado no futuro entra sem mudar nenhuma regra desta seção. O e-mail de acesso **não é**
+uma notificação de negócio (`REQ-100`–`REQ-105` da V1) e não aparece entre as notificações.
+
+`REQ-436` **Sem envio configurado** (2026-10-14). Enquanto o SMTP não estiver configurado
+(as credenciais vêm depois, pelo ambiente), o **link do convite é exibido ao administrador** que
+convidou, na tela, para ele repassar — como o comando do primeiro administrador já faz
+(`REQ-405`). Configurado o SMTP, o link vai só por e-mail.
+
+### 9C.7 Tela de usuários
+
+`REQ-440` **Usuários** (2026-10-14). O administrador tem uma tela de usuários com:
+
+- a **lista** de usuários, com **nome**, **e-mail**, **papel** e **situação** (ativo ou
+  desativado);
+- os **convites pendentes** na mesma lista, com o e-mail, o papel e a validade;
+- as ações **convidar** (`REQ-420`), **reenviar convite** — um novo link, que invalida o
+  anterior (`REQ-421`) —, **desativar** (`REQ-403`) e **trocar o papel** (`REQ-404`).
+
+Não há cancelamento de convite: reenviar já invalida o anterior. A tela é só do
+administrador (`REQ-401`); o servidor recusa as ações a qualquer outro papel (`REQ-430`).
+
+---
+
 ## 10. Fluxo principal
 
 > Os dois fluxos abaixo são os da **CT integral**, **validados**. O fluxo da **CT parcelada**
@@ -1016,6 +1204,35 @@ e das subsequentes.
     ordem, desde que os CRs estejam informados (`REQ-288`). A parcela fica elegível de forma definitiva, gera o seu extrato
     (`REQ-266`) e, a partir da primeira, os CRs congelam (`REQ-289`).
 
+### Acesso ao sistema
+
+**Login**
+
+1. Sem sessão, a tela leva ao login (`REQ-410`, `REQ-431`).
+2. O usuário informa e-mail e senha (`REQ-411`). Uma recusa não revela a conta (`REQ-413`),
+   e as falhas seguidas suspendem o login da conta (`REQ-414`).
+3. A sessão é aberta, e o usuário volta à página em que estava (`REQ-412`).
+
+**Convite**
+
+1. Um administrador convida pelo e-mail e pelo papel (`REQ-420`, `REQ-421`).
+2. A pessoa recebe o link por e-mail (`REQ-435`) e define a senha e, se quiser, o nome
+   (`REQ-422`).
+3. O usuário é criado ativo e entra pelo login.
+
+**Recuperação de senha**
+
+1. O usuário pede a redefinição pelo e-mail e recebe sempre a mesma resposta (`REQ-425`).
+2. Sendo ativo, recebe o link e define a nova senha. As sessões dele são encerradas
+   (`REQ-426`).
+
+**Ato assinado**
+
+1. O usuário logado executa um ato auditado. O servidor confere a sessão e o papel
+   (`REQ-430`).
+2. O autor registrado é o usuário da sessão, pelo id (`REQ-216`). Nada é digitado para
+   assinar.
+
 ---
 
 ## 11. Fluxos alternativos, exceções, aceitação e rejeição
@@ -1047,6 +1264,11 @@ e das subsequentes.
 | `FA-223` | CRs da parcelada alterados antes de qualquer parcela elegível | Permitido, com motivo e auditoria dos dois CRs (`REQ-265`) |
 | `FA-224` | Parcelas incluídas, alteradas ou removidas antes da emissão, em qualquer modo | Permitido, com autoria (`REQ-254`) |
 | `FA-225` | CRs da parcelada iguais a zero, informados deliberadamente | Permitido; nada a repassar nas parcelas (`REQ-263`) |
+| `FA-401` | Convite reenviado ao mesmo e-mail        | O anterior deixa de valer; só o último vale (`REQ-421`) |
+| `FA-402` | Redefinição pedida para e-mail sem conta ativa | Mesma resposta; nenhum e-mail é enviado (`REQ-425`) |
+| `FA-403` | Sessão expirada no meio do trabalho      | A operação é recusada; a tela leva ao login e depois volta à página (`REQ-412`, `REQ-431`) |
+| `FA-404` | Usuário desativado volta à Usina         | Recebe um novo convite; o aceite cria um novo usuário (`REQ-403`, `REQ-421`) |
+| `FA-405` | Convite aceito sem nome                  | Permitido; a exibição usa o e-mail (`REQ-400`, `REQ-422`) |
 
 ### 11.2 Exceções
 
@@ -1067,6 +1289,13 @@ e das subsequentes.
 | `EX-213` | CR da parcelada maior que o seu CT       | Recusada pelo backend; a tela exibe o erro (`REQ-263`) |
 | `EX-214` | Elegibilidade de parcela sem CR          | Recusada (`REQ-288`) |
 | `EX-215` | Só uma das duas CRs da parcelada informada | Recusada (`REQ-287`) |
+| `EX-401` | Operação sem sessão válida               | Recusada; a tela leva ao login (`REQ-410`, `REQ-431`) |
+| `EX-402` | Operação sem o papel exigido             | Recusada, com mensagem (`REQ-430`, `REQ-431`) |
+| `EX-403` | Link de convite ou de redefinição expirado, usado, substituído ou desconhecido | Recusado com uma única mensagem (`REQ-422`, `REQ-426`) |
+| `EX-404` | Login de usuário desativado, ou login durante a suspensão | Recusado com a mesma mensagem de qualquer falha (`REQ-413`, `REQ-414`) |
+| `EX-405` | Operação que altera dados vinda de outro site | Recusada (`REQ-417`) |
+| `EX-406` | Convite para o e-mail de um usuário ativo | Recusado (`REQ-421`) |
+| `EX-407` | Senha com menos de 12 ou mais de 128 caracteres | Recusada (`REQ-415`) |
 
 ### 11.3 Critérios de aceitação
 
@@ -1138,6 +1367,23 @@ e das subsequentes.
 | `CA-267` | Uma parcela elegível leva a apólice a "Parcialmente elegida"; todas elegíveis, a "Totalmente elegida" | `REQ-268` |
 | `CA-268` | Proposta parcelada com uma parcela é recusada; com duas, aceita; remover uma das duas é recusado | `REQ-292` |
 | `CA-266` | A auditoria de uma alteração das CRs guarda os dados do cálculo de cada parcela | `REQ-265` |
+| `CA-401` | Toda operação, exceto as de `REQ-410`, é recusada sem sessão | `REQ-410` |
+| `CA-402` | O login correto abre a sessão; depois do logout, a mesma sessão é recusada | `REQ-411` |
+| `CA-403` | A sessão é recusada 12 horas depois do login | `REQ-412` |
+| `CA-404` | E-mail inexistente e senha errada recebem a mesma mensagem | `REQ-413` |
+| `CA-405` | A sexta tentativa depois de 5 falhas seguidas é recusada mesmo com a senha certa; passados 15 minutos, o login volta a funcionar | `REQ-414` |
+| `CA-406` | Nada do que está guardado contém a senha, a sessão ou um link de convite ou de redefinição em claro | `REQ-416` |
+| `CA-407` | O convite aceito cria o usuário ativo com o papel convidado e o nome informado; o mesmo link, usado de novo, é recusado | `REQ-420`, `REQ-422` |
+| `CA-408` | Um convite com mais de 72 horas é recusado; reenviado o convite, o link anterior é recusado | `REQ-420`, `REQ-421` |
+| `CA-409` | A redefinição troca a senha, o link deixa de valer e as sessões anteriores são recusadas; um link com mais de 1 hora é recusado | `REQ-425`, `REQ-426` |
+| `CA-410` | O pedido de redefinição responde o mesmo para e-mail com e sem conta | `REQ-425` |
+| `CA-411` | Um Usuário é recusado ao convidar, desativar ou trocar papel; um Administrador consegue | `REQ-401`, `REQ-430` |
+| `CA-412` | Um Usuário executa todas as operações de negócio e consultas, inclusive os cadastros de referência | `REQ-401` |
+| `CA-413` | O usuário desativado perde a sessão na hora e não entra mais | `REQ-403` |
+| `CA-414` | A troca de papel registra quem, quando, o papel anterior e o novo, e vale na operação seguinte do usuário | `REQ-404` |
+| `CA-415` | Corrigir a CT logado registra como autor o id do usuário da sessão e exibe o nome, ou o e-mail sem nome; o mesmo vale para todo ato assinado | `REQ-216` |
+| `CA-416` | Um autor enviado no corpo da requisição não vira o autor do ato | `REQ-216` |
+| `CA-417` | Pelas telas: login, convite aceito, redefinição de senha, logout e uma operação recusada por papel | `REQ-410`–`REQ-431` |
 
 ### 11.4 Casos que devem ser rejeitados
 
@@ -1188,6 +1434,14 @@ e das subsequentes.
 | `REJ-243` | Informar ou alterar só uma das duas CRs da parcelada                      | `REQ-287`                                                       |
 | `REJ-244` | Incluir, alterar ou remover parcela sem registrar autor e momento         | `REQ-254`                                                       |
 | `REJ-245` | Mostrar apólice parcelada na lista de apólices sem CR de `REQ-286`        | `REQ-268`                                                       |
+| `REJ-401` | Controlar o acesso só na tela                                             | `REQ-430`                                                       |
+| `REJ-402` | Guardar senha, sessão ou link de convite ou redefinição em claro          | `REQ-416`                                                       |
+| `REJ-403` | Aceitar duas vezes o mesmo link de convite ou de redefinição              | `REQ-420`, `REQ-425`                                            |
+| `REJ-404` | Tomar o autor de um ato assinado do que a tela envia                      | `REQ-216`                                                       |
+| `REJ-405` | Apagar um usuário                                                         | `REQ-403`                                                       |
+| `REJ-406` | Responder login ou redefinição de forma que revele se a conta existe      | `REQ-413`, `REQ-425`                                            |
+| `REJ-407` | Usuário, senha ou administrador padrão                                    | `REQ-405`                                                       |
+| `REJ-408` | Dar acesso ao corretor                                                    | `REQ-402`                                                       |
 
 ---
 
@@ -1225,6 +1479,8 @@ e das subsequentes.
 | `REQ-275` (versão de 2026-09-25) — valor a repassar arredondado **para baixo (piso)** | `REQ-275`, `REQ-298` (2026-10-07) — **ABNT NBR 5891**; `CA-227` passou de 7,05/2,95 para 7,06/2,94 |
 | `REQ-261`, `REJ-211` (versões anteriores) — parcelas imutáveis desde o registro | `REQ-254` (2026-10-07) — editáveis antes da emissão, nos dois modos, com autoria |
 | `REQ-237` (versão de 2026-09-25) — valor da Usina arredondado **metade para cima** a cada etapa | `REQ-237`, `REQ-298` (2026-10-05) — **ABNT NBR 5891** a cada etapa; `CA-241` passou de 7,51 para 7,50 |
+| `REQ-216` (versão anterior) — autor de ato auditado é um identificador **digitado** | `REQ-216` (2026-10-14) — o **usuário autenticado**, referenciado pelo id e exibido pelo nome ou pelo e-mail (seção 9C) |
+| `DEC-010`, `ITP-001`, `ATR-001`–`ATR-004` — permissões por perfil; o corretor acessa o sistema | `REQ-401`, `REQ-402` (2026-10-14) — dois papéis, Administrador e Usuário; o corretor **não** acessa o sistema por ora |
 
 ### 12.3 Retiradas **durante** o levantamento
 
@@ -1268,11 +1524,21 @@ apólice; os dois números seguem consultáveis) · `REQ-120`, `REQ-121` (precis
 | `DEC-213` | **Conteúdo do PDF da apólice** — quais informações o PDF da apólice deve conter, e se o sistema deve ler, extrair ou conferir algum dado dele. Deixado em aberto para uma rodada futura de levantamento de requisitos | `REQ-247`: o arquivo é guardado como enviado; nenhum conteúdo é lido nem validado |
 | `DEC-214` | **Cadastro manual de corretores** — se os usuários da Usina poderão cadastrar corretores manualmente. Objetivo: permitir, posteriormente, o **controle, a busca e a filtragem** de informações relacionadas aos corretores pelos usuários da Usina. **Não definidos**: os campos do corretor, as regras de cadastro, as validações, as permissões, o fluxo de aprovação e os filtros. Relacionada a `DEC-208` | Nenhuma regra: não há cadastro manual de corretores |
 | `DEC-215` | **CPF do cliente na proposta** — se o CPF do cliente poderá ser informado no cadastro da proposta. Objetivo: avaliar se essa informação será necessária para permitir, posteriormente, o **controle, a busca e a filtragem** de informações relacionadas aos clientes e às propostas pelos usuários da Usina. **Não definidos**: a obrigatoriedade, o formato e a validação, a etapa do fluxo em que é informado, os filtros, as regras de privacidade e de acesso, e se a decisão depende ou não de `DEC-214` | Nenhuma regra: a proposta não tem CPF do cliente |
+| `DEC-401` | **Assinatura da recusa** — com login, se a recusa da proposta (`REQ-253`) passa a registrar **quem** recusou e quando. Hoje não registra, e `REQ-216` não a inclui. Deixada para uma rodada futura (`Q-409`, 2026-10-14) | A recusa continua sem autor, só com o motivo |
 | `DEC-207` | **Unicidade do número da proposta** — se dois registros podem ter o mesmo número. **Por ora, sem restrição**; relacionada a `DEC-205` (o número "voltar a ficar disponível")          | Nenhuma unicidade é validada no registro. Confirmado: quando a conciliação busca pelo número e há repetição, vale a proposta **registrada primeiro**. Como o número da apólice é o da proposta (`REQ-241`), ele **também não é validado como único** por ora |
 
 ### 13.2 Confirmações pendentes
 
-Nenhuma. Todas foram respondidas:
+| ID      | Pergunta | Onde |
+| ------- | -------- | ---- |
+| `Q-415` | **Comando de criação de usuário** — detalhes ainda não especificados: papel padrão (hoje Usuário, com opção de Administrador), se deve existir em produção, se registra quem o executou | `REQ-407` |
+
+**Respondidas em 2026-10-14** (seção 9C): `Q-401` (`REQ-401`), `Q-402` (`REQ-402`), `Q-403`
+(`REQ-400`, `REQ-216`), `Q-404` (`REQ-435`), `Q-405` (`REQ-412`, `REQ-415`, `REQ-420`,
+`REQ-425`), `Q-406` (`REQ-405`), `Q-407` (sem dados reais; o próximo ambiente é staging, com
+HTTPS), `Q-408` (`REQ-216`: a base atual é recriada), `Q-409` (`DEC-401`), `Q-410` (`REQ-403`,
+`REQ-404`), `Q-411` (`REQ-401`), `Q-412` (`REQ-401`), `Q-413` (`REQ-414`), `Q-414`
+(`REQ-406`).
 
 **Respondidas em 2026-10-07:** `Q-215` (`REQ-254`), `Q-216` (`REQ-263`, `REQ-264`),
 `Q-217` (`REQ-275`, `REQ-298`), `Q-218` (`REQ-288`), `Q-219` em parte (`REQ-268`; o
@@ -1317,6 +1583,7 @@ o restante em `Q-219`), `Q-213` (`REQ-269`), `Q-214` (`REQ-237`, `REQ-298`).
 | Comissão calculada distinguida da elegível                  | ✅ `REQ-276`–`REQ-282` |
 | Auditoria da CR e da elegibilidade definida                 | ✅ `REQ-279`, `REQ-281` |
 | Limite do sistema no financeiro declarado                   | ✅ `REQ-280`          |
+| Acesso ao sistema, papéis e autoria definidos               | ✅ seção 9C, `REQ-216` (pendentes: `DEC-401`, `Q-415`) |
 | Dúvidas restantes registradas como pendências               | ✅ seções 13.1 e 13.2 |
 
 **Não foi escrito nenhum código.** A comparação desta especificação com o sistema existente

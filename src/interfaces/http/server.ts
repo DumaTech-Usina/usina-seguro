@@ -7,7 +7,7 @@ import type { UseCases } from '../../composition-root.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../../core/proposal/domain/errors.ts';
 import { translate } from '../../i18n/messages.ts';
 import { registerWebInterface } from '../web/web.ts';
-import { registerAuthentication } from './authentication.ts';
+import { registerAuthentication, requireRole } from './authentication.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerCommissionRoutes } from './routes/commissions.ts';
 import { registerHealthRoute } from './routes/health.ts';
@@ -16,6 +16,7 @@ import { registerPayoutRoutes } from './routes/payouts.ts';
 import { registerPolicyRoutes } from './routes/policies.ts';
 import { registerProposalRoutes } from './routes/proposals.ts';
 import { registerReferenceRoutes } from './routes/references.ts';
+import { registerUserRoutes } from './routes/users.ts';
 
 export interface HttpServerOptions {
   readonly logger: boolean;
@@ -23,6 +24,8 @@ export interface HttpServerOptions {
   readonly logStream?: NodeJS.WritableStream;
   /** REQ-412: the session cookie only over https. `true` in production. */
   readonly secureCookies?: boolean;
+  /** Where people reach the system: the base of the links handed out (REQ-436). */
+  readonly publicUrl?: string;
 }
 
 /**
@@ -96,12 +99,19 @@ export function createHttpServer(
   registerAuthRoutes(app, useCases, cookie);
 
   registerHealthRoute(app);
-  registerProposalRoutes(app, useCases);
-  registerPolicyRoutes(app, useCases);
-  registerCommissionRoutes(app, useCases);
-  registerPayoutRoutes(app, useCases);
-  registerReferenceRoutes(app, useCases);
-  registerNotificationRoutes(app, useCases);
+
+  // REQ-401, REQ-430: the business — every operation and every query — is for
+  // both roles; a route in here that needs more says so itself.
+  app.register(async (business) => {
+    requireRole(business, 'USER');
+    registerProposalRoutes(business, useCases);
+    registerPolicyRoutes(business, useCases);
+    registerCommissionRoutes(business, useCases);
+    registerPayoutRoutes(business, useCases);
+    registerReferenceRoutes(business, useCases);
+    registerNotificationRoutes(business, useCases);
+    registerUserRoutes(business, useCases, options.publicUrl ?? '');
+  });
 
   return app;
 }

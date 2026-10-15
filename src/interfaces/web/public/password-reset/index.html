@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Redefinir senha — Usina do Seguro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/app/shared/base.css" />
+  </head>
+  <!--
+    REQ-425, REQ-426: open to everyone (REQ-410). Without a token it asks for
+    the e-mail; with the token of the e-mail it asks for the new password.
+  -->
+  <body class="access">
+    <main class="access__main">
+      <section class="card access__card">
+        <div class="card__header">
+          <span class="material-symbols-outlined">lock_reset</span>
+          <h1 class="text-title">Redefinir senha</h1>
+        </div>
+        <form id="form-request">
+          <div class="card__body stack">
+            <p class="text-muted">
+              Informe o seu e-mail. Se houver um usuário ativo com ele, enviamos um link para
+              definir uma nova senha.
+            </p>
+            <div class="field">
+              <input
+                class="field__input"
+                name="email"
+                inputmode="email"
+                autocomplete="username"
+                placeholder=" "
+                required
+              />
+              <label class="field__label">E-mail</label>
+            </div>
+          </div>
+          <div class="card__footer">
+            <a class="btn" href="/app/login/">Voltar</a>
+            <button class="btn btn--filled" type="submit">Enviar link</button>
+          </div>
+        </form>
+        <form id="form-new-password" hidden>
+          <div class="card__body stack">
+            <div class="field">
+              <input
+                class="field__input"
+                name="password"
+                type="password"
+                autocomplete="new-password"
+                placeholder=" "
+                required
+              />
+              <label class="field__label">Nova senha</label>
+              <span class="field__hint">De 12 a 128 caracteres.</span>
+            </div>
+          </div>
+          <div class="card__footer">
+            <button class="btn btn--filled" type="submit">Redefinir senha</button>
+          </div>
+        </form>
+        <div class="card__body stack">
+          <p class="access__error" id="access-error" role="alert" hidden></p>
+          <p id="access-done" role="status" hidden></p>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/app/password-reset/index.js"></script>
+  </body>
+</html>

@@ -181,12 +181,10 @@ async function registeredPolicy(proposalNumber: string, policyNumber: string): P
     workedCommission: '40',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
-    userId: 'operator',
   });
 
   const policy = await callApi('POST', '/policies', {
     proposalId: proposal.id,
-    userId: 'operator',
   });
 
   return { policyId: policy.id, proposalNumber, policyNumber };
@@ -239,7 +237,6 @@ describe('the agreed commission panel (OUT-05)', () => {
     await callApi('POST', `/policies/${forecast.policyId}/commission/override`, {
       receivable: '45.00',
       justification: 'acordo extraordinario com a seguradora',
-      userId: 'admin-1',
     });
 
     await openPanel();

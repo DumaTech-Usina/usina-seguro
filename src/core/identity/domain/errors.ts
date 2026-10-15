@@ -14,6 +14,21 @@ export const IDENTITY_MESSAGES = {
   AUTHENTICATION_REQUIRED: 'identity.authentication_required',
   /** REQ-417: a changing request sent by a page that is not the system's own. */
   FOREIGN_ORIGIN: 'identity.foreign_origin',
+  /** REQ-401, REQ-430: an act reserved to administrators. */
+  ADMINISTRATOR_ONLY: 'identity.administrator_only',
+  /** REQ-406: the act would leave no active administrator. */
+  LAST_ADMINISTRATOR: 'identity.last_administrator',
+  /** REQ-421: only a pending invitation is resent. */
+  INVITATION_NOT_PENDING: 'identity.invitation_not_pending',
+  USER_NOT_FOUND: 'identity.user_not_found',
+  INVITATION_NOT_FOUND: 'identity.invitation_not_found',
+  /** REQ-425: the one answer to every request of a reset. */
+  RESET_REQUESTED: 'identity.reset_requested',
+  /** REQ-435: the words of the e-mails of access, with `{link}` and `{expiresAt}`. */
+  INVITATION_EMAIL_SUBJECT: 'identity.invitation_email_subject',
+  INVITATION_EMAIL_BODY: 'identity.invitation_email_body',
+  RESET_EMAIL_SUBJECT: 'identity.reset_email_subject',
+  RESET_EMAIL_BODY: 'identity.reset_email_body',
 } as const;
 
 export type IdentityMessageKey = (typeof IDENTITY_MESSAGES)[keyof typeof IDENTITY_MESSAGES];

@@ -22,4 +22,12 @@ export class InMemoryInvitationRepository implements InvitationRepository {
       (invitation) => invitation.status === 'PENDING' && invitation.email === email,
     );
   }
+
+  async findById(id: string): Promise<Invitation | null> {
+    return this.records.get(id) ?? null;
+  }
+
+  async listPending(): Promise<readonly Invitation[]> {
+    return [...this.records.values()].filter((invitation) => invitation.status === 'PENDING');
+  }
 }

@@ -7,7 +7,9 @@ import { BusinessRuleViolation } from '../../proposal/domain/errors.ts';
 import { IDENTITY_MESSAGES } from '../domain/errors.ts';
 import { User } from '../domain/user.ts';
 import { AcceptInvitation } from './accept-invitation.ts';
+import { CreateUser } from './create-user.ts';
 import { IssueFirstAdministratorInvitation } from './issue-first-administrator-invitation.ts';
+import { ListUserDirectory } from './list-user-directory.ts';
 import { LogIn } from './log-in.ts';
 import { LogOut } from './log-out.ts';
 import type { PasswordHasher } from './password-hasher.ts';
@@ -71,6 +73,8 @@ function setup() {
     logIn: new LogIn({ users, sessions, hasher, secrets, newId, now }),
     logOut: new LogOut({ sessions, secrets, now }),
     resolveSession: new ResolveSession({ users, sessions, secrets, now }),
+    listUserDirectory: new ListUserDirectory({ users }),
+    createUser: new CreateUser({ users, hasher, newId, now }),
   };
 }
 
@@ -352,5 +356,81 @@ describe('LogIn, ResolveSession and LogOut (REQ-411 to REQ-414)', () => {
     await s.users.save(User.restore({ ...stored.toData(), status: 'DEACTIVATED' }));
 
     await expect(s.resolveSession.execute({ token })).resolves.toBeNull();
+  });
+});
+
+describe('ListUserDirectory (REQ-216, REQ-400)', () => {
+  let s: Setup;
+  beforeEach(() => {
+    s = setup();
+  });
+
+  it('answers each user by id with the name to show, nothing else', async () => {
+    const named = await anAdministrator(s, 'ana@usina.com.br', 'Ana Lima');
+    const unnamed = await anAdministrator(s, 'bruno@usina.com.br');
+
+    await expect(s.listUserDirectory.execute()).resolves.toEqual([
+      { id: named.id, displayName: 'Ana Lima' },
+      { id: unnamed.id, displayName: 'bruno@usina.com.br' },
+    ]);
+  });
+
+  it('keeps a deactivated user, whose signatures still have to be shown (REQ-403)', async () => {
+    const admin = await anAdministrator(s, 'ana@usina.com.br', 'Ana Lima');
+    const stored = (await s.users.findById(admin.id)) as User;
+    await s.users.save(User.restore({ ...stored.toData(), status: 'DEACTIVATED' }));
+
+    await expect(s.listUserDirectory.execute()).resolves.toEqual([
+      { id: admin.id, displayName: 'Ana Lima' },
+    ]);
+  });
+});
+
+describe('CreateUser (REQ-407)', () => {
+  let s: Setup;
+  beforeEach(() => {
+    s = setup();
+  });
+
+  it('creates an active user with the role, the name and the password, who can log in', async () => {
+    const created = await s.createUser.execute({
+      email: ' Dev@Email.com ',
+      password: PASSWORD,
+      role: 'ADMINISTRATOR',
+      name: 'Dev',
+    });
+
+    expect(created).toEqual({
+      id: expect.any(String),
+      email: 'dev@email.com',
+      name: 'Dev',
+      role: 'ADMINISTRATOR',
+      displayName: 'Dev',
+    });
+    await expect(
+      s.logIn.execute({ email: 'dev@email.com', password: PASSWORD }),
+    ).resolves.toMatchObject({ user: { id: created.id } });
+  });
+
+  it('refuses a short password (REQ-415)', async () => {
+    await expectRefusal(
+      s.createUser.execute({ email: 'dev@email.com', password: 'short', role: 'USER', name: null }),
+      IDENTITY_MESSAGES.PASSWORD_LENGTH,
+    );
+  });
+
+  it('refuses the e-mail of an active user (REQ-421)', async () => {
+    await anAdministrator(s, 'dev@email.com');
+
+    await expectRefusal(
+      s.createUser.execute({
+        email: 'dev@email.com',
+        password: PASSWORD,
+        role: 'USER',
+        name: null,
+      }),
+      IDENTITY_MESSAGES.EMAIL_ALREADY_ACTIVE,
+      'REQ-421',
+    );
   });
 });

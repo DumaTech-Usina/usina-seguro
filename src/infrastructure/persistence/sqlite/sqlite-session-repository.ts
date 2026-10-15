@@ -39,15 +39,24 @@ export class SqliteSessionRepository implements SessionRepository {
     const row = this.db
       .prepare('SELECT * FROM user_session WHERE token_digest = ?')
       .get(tokenDigest) as SessionRow | undefined;
-    return row === undefined
-      ? null
-      : Session.restore({
-          id: row.id,
-          tokenDigest: row.token_digest,
-          userId: row.user_id,
-          startedAt: new Date(row.started_at),
-          expiresAt: new Date(row.expires_at),
-          endedAt: row.ended_at === null ? null : new Date(row.ended_at),
-        });
+    return row === undefined ? null : restore(row);
   }
+
+  async listOpenByUser(userId: string): Promise<readonly Session[]> {
+    const rows = this.db
+      .prepare('SELECT * FROM user_session WHERE user_id = ? AND ended_at IS NULL')
+      .all(userId) as unknown as SessionRow[];
+    return rows.map(restore);
+  }
+}
+
+function restore(row: SessionRow): Session {
+  return Session.restore({
+    id: row.id,
+    tokenDigest: row.token_digest,
+    userId: row.user_id,
+    startedAt: new Date(row.started_at),
+    expiresAt: new Date(row.expires_at),
+    endedAt: row.ended_at === null ? null : new Date(row.ended_at),
+  });
 }

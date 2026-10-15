@@ -48,3 +48,54 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ APP_BASE_URL: 'ftp://usina.example' })).toThrow(InvalidConfiguration);
   });
 });
+
+describe('loadConfig — e-mail (REQ-435, REQ-436)', () => {
+  it('writes e-mails to the log while no SMTP is configured', () => {
+    expect(loadConfig({}).email).toEqual({ driver: 'log' });
+  });
+
+  it('uses SMTP once its host is configured, with 587 and STARTTLS by default', () => {
+    expect(
+      loadConfig({
+        SMTP_HOST: 'smtp.usina.example',
+        SMTP_USER: 'naoresponda',
+        SMTP_PASSWORD: 'segredo',
+        SMTP_FROM: 'Usina do Seguro <naoresponda@usina.example>',
+      }).email,
+    ).toEqual({
+      driver: 'smtp',
+      host: 'smtp.usina.example',
+      port: 587,
+      secure: false,
+      user: 'naoresponda',
+      password: 'segredo',
+      from: 'Usina do Seguro <naoresponda@usina.example>',
+    });
+  });
+
+  it('reads the implicit-TLS port and an SMTP with no authentication', () => {
+    expect(
+      loadConfig({
+        SMTP_HOST: 'smtp.usina.example',
+        SMTP_PORT: '465',
+        SMTP_SECURE: 'true',
+        SMTP_FROM: 'naoresponda@usina.example',
+      }).email,
+    ).toMatchObject({ port: 465, secure: true, user: null, password: null });
+  });
+
+  it('refuses an SMTP without a sender, a user without a password, or a bad port', () => {
+    expect(() => loadConfig({ SMTP_HOST: 'smtp.usina.example' })).toThrow(InvalidConfiguration);
+    expect(() =>
+      loadConfig({ SMTP_HOST: 'h', SMTP_FROM: 'f@u.example', SMTP_USER: 'only-user' }),
+    ).toThrow(InvalidConfiguration);
+    expect(() =>
+      loadConfig({ SMTP_HOST: 'h', SMTP_FROM: 'f@u.example', SMTP_PORT: 'abc' }),
+    ).toThrow(InvalidConfiguration);
+  });
+
+  it('keeps e-mails in memory when the tests ask for it', () => {
+    expect(loadConfig({ EMAIL_DRIVER: 'memory' }).email).toEqual({ driver: 'memory' });
+    expect(() => loadConfig({ EMAIL_DRIVER: 'pigeon' })).toThrow(InvalidConfiguration);
+  });
+});

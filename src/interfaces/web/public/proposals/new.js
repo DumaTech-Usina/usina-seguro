@@ -273,7 +273,6 @@ form.addEventListener('submit', (event) => {
       installments: scheduleOf(installments),
       ...workedCommissionOf(form),
       intermediary: intermediaryOf(form),
-      userId: value('userId'),
       ...(sourceDocument === null ? {} : { sourceDocument }),
     });
 

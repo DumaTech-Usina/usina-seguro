@@ -125,6 +125,29 @@ export class User {
     return new User({ ...this.toData(), failedLoginAttempts: attempts });
   }
 
+  /** REQ-403: no longer enters; never erased — the signatures keep its id. */
+  deactivate(): User {
+    return new User({ ...this.toData(), status: 'DEACTIVATED' });
+  }
+
+  /** REQ-404. Who may change it, and the last administrator, are the use case's to check. */
+  changeRole(role: Role): User {
+    return new User({ ...this.toData(), role });
+  }
+
+  /**
+   * REQ-426: a new password. A suspension of the login is lifted with it: the
+   * person proved, through their e-mail, that the account is theirs.
+   */
+  changePassword(passwordHash: string): User {
+    return new User({
+      ...this.toData(),
+      passwordHash,
+      failedLoginAttempts: 0,
+      loginSuspendedUntil: null,
+    });
+  }
+
   /** REQ-414: a successful login resets the count. */
   recordSuccessfulLogin(): User {
     return new User({ ...this.toData(), failedLoginAttempts: 0, loginSuspendedUntil: null });

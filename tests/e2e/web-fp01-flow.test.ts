@@ -8,7 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
-import { signIn } from './support/sign-in.ts';
+import { type SignedIn, TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
  * FP-01 of V2, from the registration of the proposal up to its outcome — the
@@ -43,6 +43,7 @@ let directory: string;
 let application: Application;
 let app: FastifyInstance;
 let baseUrl: string;
+let signedIn: SignedIn;
 
 /** Every request the pages made, in order, as `METHOD path`. */
 const requests: string[] = [];
@@ -67,7 +68,7 @@ beforeAll(async () => {
   baseUrl = `http://127.0.0.1:${address.port}`;
 
   // REQ-410: every journey starts logged in, as the test user.
-  await signIn(application.useCases, baseUrl);
+  signedIn = await signIn(application.useCases, baseUrl);
 
   // The pages call the API by path, the way the browser does when the page and
   // the API share an origin. Here the origin is the test server.
@@ -159,7 +160,6 @@ function proposalBody(overrides: Record<string, unknown> = {}): Record<string, u
     workedCommission: '20',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
-    userId: 'ana.souza',
     ...overrides,
   };
 }
@@ -182,7 +182,6 @@ function fillRegistration(): void {
   field('#form-proposal', 'coverageEnd').value = '2027-10-01';
   field('#form-proposal', 'workedCommission').value = '20';
   field('#form-proposal', 'workedCommissionMode').value = 'INTEGRAL';
-  field('#form-proposal', 'userId').value = 'ana.souza';
 }
 
 function choose(form: string, name: string, value: string): void {
@@ -210,6 +209,8 @@ describe('FP-01 through the web interface', () => {
   it('registers a proposal awaiting issuance from one form (steps 1 to 6)', async () => {
     openPage('proposals/new.html');
     await import('/app/proposals/new.js');
+    // REQ-216: the registration is signed by the session; nobody types who signs.
+    expect(document.querySelector('#form-proposal [name="userId"]')).toBeNull();
 
     fillRegistration();
     // REQ-204, FA-205: one installment, with no due date.
@@ -242,7 +243,7 @@ describe('FP-01 through the web interface', () => {
       ctu: '50',
       expectedReceipt: { intermediary: '20.00', usina: '10.00' },
     });
-    expect(stored.workedCommissionHistory[0].informedBy).toBe('ana.souza');
+    expect(stored.workedCommissionHistory[0].informedBy).toBe(signedIn.user.id);
 
     const link = document.querySelector('#done-body a.btn--filled');
     expect(link?.href).toContain(`/app/proposals/detail.html?id=${stored.id}`);
@@ -375,7 +376,9 @@ describe('FP-01 through the web interface', () => {
     expect(text('[data-definition="receipt"]')).toContain('50%');
     expect(text('#expected')).toContain('R$ 20,00');
     expect(text('#expected')).toContain('R$ 10,00');
-    expect(text('#history')).toContain('ana.souza');
+    // REQ-216: the author is shown by name, never by the id the backend keeps.
+    expect(text('#history')).toContain(TEST_USER.name);
+    expect(text('#history')).not.toContain(signedIn.user.id);
   });
 
   it('corrects the CT and its mode before issuance, signed (FA-203, CA-204, CA-217)', async () => {
@@ -392,7 +395,6 @@ describe('FP-01 through the web interface', () => {
     choose('#form-worked-commission', 'workedCommissionMode', 'PARCELLED');
     // REQ-291: both CTs of the parcelled CT.
     field('#form-worked-commission', 'subsequentWorkedCommission').value = '10';
-    field('#form-worked-commission', 'userId').value = 'bruno.lima';
     submit('#form-worked-commission');
 
     await vi.waitFor(() => {
@@ -401,30 +403,23 @@ describe('FP-01 through the web interface', () => {
     });
     expect(requests).toContain(`POST /proposals/${id}/worked-commission`);
     expect(text('[data-definition="workedCommission"]')).toContain('Parcelada');
-    // REQ-215, REQ-124: both entries, each with its author.
-    expect(text('#history')).toContain('ana.souza');
-    expect(text('#history')).toContain('bruno.lima');
+    // REQ-215, REQ-124: both entries, each signed by the session user (REQ-216).
+    expect(text('#history')).toContain(TEST_USER.name);
 
     const stored = await callApi('GET', `/proposals/${id}`);
     expect(stored.workedCommissionHistory.map((entry: Untyped) => entry.informedBy)).toEqual([
-      'ana.souza',
-      'bruno.lima',
+      signedIn.user.id,
+      signedIn.user.id,
     ]);
   });
 
-  it('refuses an unsigned correction with the sentence the server rendered (REQ-216)', async () => {
+  it('asks nobody to type who signs: the corrections are signed by the session (REQ-216)', async () => {
     const id = await awaitingProposal({ proposalNumber: 'PRP-CT-2' });
     await openProposal(id);
 
-    field('#form-worked-commission', 'workedCommission').value = '25';
-    field('#form-worked-commission', 'userId').value = '  ';
-    submit('#form-worked-commission');
-
-    await vi.waitFor(() => {
-      expect(snackbars().length).toBeGreaterThan(0);
-    });
-    expect(snackbars()[0]).toContain('Informe quem está registrando esta informação.');
-    expect((await callApi('GET', `/proposals/${id}`)).workedCommission).toBe('20');
+    for (const form of ['#form-worked-commission', '#form-receipt', '#form-installments']) {
+      expect(document.querySelector(`${form} [name="userId"]`), form).toBeNull();
+    }
   });
 
   it('declares and then removes the intermediary before issuance (FA-204, FA-209, CA-214)', async () => {
@@ -434,7 +429,6 @@ describe('FP-01 through the web interface', () => {
     choose('#form-receipt', 'receiptKind', 'INTERMEDIARY');
     field('#form-receipt', 'intermediaryId').value = 'intermediary-1';
     field('#form-receipt', 'ctu').value = '50';
-    field('#form-receipt', 'userId').value = 'bruno.lima';
     submit('#form-receipt');
 
     await vi.waitFor(() => {
@@ -443,7 +437,6 @@ describe('FP-01 through the web interface', () => {
     expect(text('[data-definition="receipt"]')).toContain('intermediary-1');
 
     choose('#form-receipt', 'receiptKind', 'DIRECT');
-    field('#form-receipt', 'userId').value = 'bruno.lima';
     submit('#form-receipt');
 
     await vi.waitFor(() => {
@@ -510,7 +503,6 @@ describe('FP-01 through the web interface', () => {
       expect(document.querySelector(`#form-issuance [name="${name}"]`)).toBeNull();
     }
 
-    field('#form-issuance', 'userId').value = 'carla.dias';
     submit('#form-issuance');
 
     await vi.waitFor(() => {
@@ -520,11 +512,11 @@ describe('FP-01 through the web interface', () => {
     expect(hidden('[data-panel="outcome"]')).toBe(true);
     expect(hidden('[data-panel="corrections"]')).toBe(true);
     // CA-207: who identified the issuance, on the proposal.
-    expect(text('#history')).toContain('Emissão reconhecida · carla.dias');
+    expect(text('#history')).toContain(`Emissão reconhecida · ${TEST_USER.name}`);
 
     const proposal = await callApi('GET', `/proposals/${proposalId}`);
     expect(proposal.status).toBe('ISSUED');
-    expect(proposal.issuanceRecognizedBy).toBe('carla.dias');
+    expect(proposal.issuanceRecognizedBy).toBe(signedIn.user.id);
     const policy = await callApi('GET', `/proposals/${proposalId}/policy`);
     expect(policy).toMatchObject({
       policyNumber: 'PRP-ACCEPT-1',
@@ -545,30 +537,25 @@ describe('FP-01 through the web interface', () => {
     const input = field('#form-issuance', 'policyPdf');
     const file = new window.File([PDF], 'apolice.pdf', { type: 'application/pdf' });
     Object.defineProperty(input, 'files', { value: [file], configurable: true });
-    field('#form-issuance', 'userId').value = 'carla.dias';
     submit('#form-issuance');
 
     await vi.waitFor(() => {
       expect(text('#page')).toContain('Apólice registrada');
     });
     const policy = await callApi('GET', `/proposals/${proposalId}/policy`);
-    expect(policy.document).toMatchObject({ fileName: 'apolice.pdf', attachedBy: 'carla.dias' });
+    expect(policy.document).toMatchObject({
+      fileName: 'apolice.pdf',
+      attachedBy: signedIn.user.id,
+    });
     const download = await fetch(`${baseUrl}/policies/${policy.id}/document`);
     expect(new Uint8Array(await download.arrayBuffer())).toEqual(PDF);
   });
 
-  it('refuses an unsigned recognition with the sentence the server rendered (REJ-205)', async () => {
+  it('asks nobody to type who recognised the issuance: it is the session user (REJ-205, REQ-216)', async () => {
     const proposalId = await awaitingProposal({ proposalNumber: 'PRP-ACCEPT-2' });
     await openProposal(proposalId);
 
-    field('#form-issuance', 'userId').value = '   ';
-    submit('#form-issuance');
-
-    await vi.waitFor(() => {
-      expect(snackbars().length).toBeGreaterThan(0);
-    });
-    expect(snackbars()[0]).toContain('Informe quem está registrando esta informação.');
-    expect((await callApi('GET', `/proposals/${proposalId}`)).status).toBe('AWAITING_ISSUANCE');
+    expect(document.querySelector('#form-issuance [name="userId"]')).toBeNull();
   });
 });
 
@@ -766,7 +753,6 @@ describe('filling the proposal from its PDF (REQ-218)', () => {
 
       // The user reviews, completes what the PDF does not carry, and registers.
       field('#form-proposal', 'workedCommission').value = '20';
-      field('#form-proposal', 'userId').value = 'ana.souza';
       submit('#form-proposal');
 
       await vi.waitFor(() => {
@@ -867,7 +853,7 @@ describe('the commercial progression on screen', () => {
 
   it('carries the issued proposal into the policy stage, both ways', async () => {
     const proposalId = await awaitingProposal({ proposalNumber: 'PRP-STAGE-3' });
-    const policy = await callApi('POST', '/policies', { proposalId, userId: 'operator' });
+    const policy = await callApi('POST', '/policies', { proposalId });
 
     await openProposal(proposalId);
     expect(stage().current).toBe('policy');

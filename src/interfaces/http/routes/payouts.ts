@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
 import type { ListEligiblePayoutsInput } from '../../../core/commission/application/list-eligible-payouts.ts';
-import { SIGNATURE_PROPERTIES, SIGNATURE_REQUIRED, authorOf } from '../author.ts';
+import { authorOf } from '../author.ts';
 
 /**
  * FP-02 (V2 section 9A). Shape only: the range and precision of the CR, the
@@ -18,10 +18,10 @@ const informSchema: FastifySchema = {
   params: policyIdParams,
   body: {
     type: 'object',
-    required: ['rate', ...SIGNATURE_REQUIRED],
+    required: ['rate'],
     additionalProperties: false,
     // The CR as a decimal string, never a JSON number (REQ-120, REQ-121).
-    properties: { rate: { type: 'string' }, ...SIGNATURE_PROPERTIES },
+    properties: { rate: { type: 'string' } },
   },
 };
 
@@ -29,24 +29,18 @@ const reviseSchema: FastifySchema = {
   params: policyIdParams,
   body: {
     type: 'object',
-    required: ['rate', 'reason', ...SIGNATURE_REQUIRED],
+    required: ['rate', 'reason'],
     additionalProperties: false,
     properties: {
       rate: { type: 'string' },
       reason: { type: 'string' },
-      ...SIGNATURE_PROPERTIES,
     },
   },
 };
 
+/** REQ-281: the act takes no data — who signs is the session (REQ-216). */
 const eligibilitySchema: FastifySchema = {
   params: policyIdParams,
-  body: {
-    type: 'object',
-    required: [...SIGNATURE_REQUIRED],
-    additionalProperties: false,
-    properties: { ...SIGNATURE_PROPERTIES },
-  },
 };
 
 /** V2 section 9B: the two CRs of a parcelled policy, as decimal strings. */
@@ -54,12 +48,11 @@ const informParcelledSchema: FastifySchema = {
   params: policyIdParams,
   body: {
     type: 'object',
-    required: ['firstRate', 'subsequentRate', ...SIGNATURE_REQUIRED],
+    required: ['firstRate', 'subsequentRate'],
     additionalProperties: false,
     properties: {
       firstRate: { type: 'string' },
       subsequentRate: { type: 'string' },
-      ...SIGNATURE_PROPERTIES,
     },
   },
 };
@@ -68,13 +61,12 @@ const reviseParcelledSchema: FastifySchema = {
   params: policyIdParams,
   body: {
     type: 'object',
-    required: ['firstRate', 'subsequentRate', 'reason', ...SIGNATURE_REQUIRED],
+    required: ['firstRate', 'subsequentRate', 'reason'],
     additionalProperties: false,
     properties: {
       firstRate: { type: 'string' },
       subsequentRate: { type: 'string' },
       reason: { type: 'string' },
-      ...SIGNATURE_PROPERTIES,
     },
   },
 };
@@ -89,7 +81,6 @@ const installmentEligibilitySchema: FastifySchema = {
       number: { type: 'string', pattern: '^[0-9]+$' },
     },
   },
-  body: eligibilitySchema.body,
 };
 
 const MONTH = { type: 'string', pattern: '^\\d{4}-(0[1-9]|1[0-2])$' } as const;

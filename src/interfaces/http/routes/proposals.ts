@@ -6,7 +6,7 @@ import type {
   RegisterProposalInstallmentInput,
 } from '../../../core/proposal/application/register-proposal.ts';
 import type { WorkedCommissionMode } from '../../../core/proposal/domain/worked-commission.ts';
-import { SIGNATURE_PROPERTIES, SIGNATURE_REQUIRED, authorOf } from '../author.ts';
+import { authorOf } from '../author.ts';
 
 /**
  * Request shape validation (Fastify JSON Schema).
@@ -71,7 +71,6 @@ const registerProposalSchema: FastifySchema = {
       'workedCommission',
       'workedCommissionMode',
       'intermediary',
-      ...SIGNATURE_REQUIRED,
     ],
     additionalProperties: false,
     properties: {
@@ -87,7 +86,6 @@ const registerProposalSchema: FastifySchema = {
       installments: installmentsProperty,
       ...workedCommissionProperties,
       intermediary: intermediaryProperty,
-      ...SIGNATURE_PROPERTIES,
       // REQ-219: the imported PDF, base64-encoded like the reading's body.
       sourceDocument: {
         type: 'object',
@@ -113,9 +111,9 @@ const reviseWorkedCommissionSchema: FastifySchema = {
   params: proposalIdParams,
   body: {
     type: 'object',
-    required: ['workedCommission', 'workedCommissionMode', ...SIGNATURE_REQUIRED],
+    required: ['workedCommission', 'workedCommissionMode'],
     additionalProperties: false,
-    properties: { ...workedCommissionProperties, ...SIGNATURE_PROPERTIES },
+    properties: { ...workedCommissionProperties },
   },
 };
 
@@ -124,9 +122,9 @@ const reviseInstallmentsSchema: FastifySchema = {
   params: proposalIdParams,
   body: {
     type: 'object',
-    required: ['installments', ...SIGNATURE_REQUIRED],
+    required: ['installments'],
     additionalProperties: false,
-    properties: { installments: installmentsProperty, ...SIGNATURE_PROPERTIES },
+    properties: { installments: installmentsProperty },
   },
 };
 
@@ -134,9 +132,9 @@ const reviseReceiptSchema: FastifySchema = {
   params: proposalIdParams,
   body: {
     type: 'object',
-    required: ['intermediary', ...SIGNATURE_REQUIRED],
+    required: ['intermediary'],
     additionalProperties: false,
-    properties: { intermediary: intermediaryProperty, ...SIGNATURE_PROPERTIES },
+    properties: { intermediary: intermediaryProperty },
   },
 };
 

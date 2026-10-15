@@ -11,6 +11,7 @@
  */
 
 import { ApiError, api } from '/app/shared/api.js';
+import { authorName, loadAuthors } from '/app/shared/authors.js';
 import { closeOnBackdropClick } from '/app/shared/dialog.js';
 import { base64Of } from '/app/shared/file.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
@@ -192,7 +193,7 @@ function documentBlock(policy) {
       element(
         'span',
         'text-muted',
-        `Enviado por ${policy.document.attachedBy} · ${formatInstant(policy.document.attachedAt)}`,
+        `Enviado por ${authorName(policy.document.attachedBy)} · ${formatInstant(policy.document.attachedAt)}`,
       ),
     );
   }
@@ -219,7 +220,6 @@ async function sendDocument(policy) {
       api.attachPolicyDocument(policy.id, {
         fileName: file.name,
         content: await base64Of(file),
-        userId: answer.userId,
       }),
     'PDF da apólice enviado.',
   );
@@ -283,7 +283,7 @@ function parcelledInstallmentsCard(policy, parcelled) {
         'text-muted',
         statement === null
           ? '—'
-          : `Elegível · ${statement.signedBy} · ${formatInstant(statement.eligibleAt)}`,
+          : `Elegível · ${authorName(statement.signedBy)} · ${formatInstant(statement.eligibleAt)}`,
       ),
     );
 
@@ -318,7 +318,7 @@ async function declareInstallmentEligibility(policy, installment) {
   }
 
   await perform(
-    () => api.declareInstallmentEligibility(policy.id, installment.number, answer.userId),
+    () => api.declareInstallmentEligibility(policy.id, installment.number),
     `Elegibilidade da parcela ${installment.number} assinada. O extrato da parcela foi gerado.`,
   );
 }
@@ -361,7 +361,7 @@ function installmentsCard(policy) {
     confirmation.textContent =
       installment.confirmedBy === null
         ? '—'
-        : `${installment.confirmedBy} · ${formatInstant(installment.confirmedAt)}`;
+        : `${authorName(installment.confirmedBy)} · ${formatInstant(installment.confirmedAt)}`;
     row.append(confirmation);
 
     const action = element('td', 'is-action');
@@ -395,7 +395,7 @@ async function confirmInstallment(policy, installment) {
   }
 
   await perform(
-    () => api.payInstallment(policy.id, installment.number, answer.userId),
+    () => api.payInstallment(policy.id, installment.number),
     `Recebimento da parcela ${installment.number} confirmado.`,
   );
 }
@@ -479,7 +479,7 @@ function auditNote(kind, title, justification, record) {
   body.append(
     element('span', 'text-label', title),
     element('span', undefined, justification),
-    element('span', 'text-muted', `${record.userId} · ${formatInstant(record.at)}`),
+    element('span', 'text-muted', `${authorName(record.userId)} · ${formatInstant(record.at)}`),
   );
   note.append(icon('tune'), body);
   return note;
@@ -496,7 +496,6 @@ async function overrideCommission(policy) {
       api.overrideCommission(policy.id, {
         receivable: answer.receivable,
         justification: answer.justification,
-        userId: answer.userId,
       }),
     'Ajuste aplicado.',
   );
@@ -544,7 +543,11 @@ function payoutHistory(entries) {
       element('td', 'is-numeric', formatMoney(entry.payout)),
       element('td', 'is-numeric', formatMoney(entry.retained)),
       element('td', undefined, entry.reason ?? 'Primeira informação'),
-      element('td', 'text-muted', `${entry.informedBy} · ${formatInstant(entry.informedAt)}`),
+      element(
+        'td',
+        'text-muted',
+        `${authorName(entry.informedBy)} · ${formatInstant(entry.informedAt)}`,
+      ),
     );
     rows.append(row);
   }
@@ -575,7 +578,7 @@ function statementBlock(statement) {
     definition('Data da elegibilidade', formatInstant(statement.eligibleAt)),
     definition('Fica na Usina', formatMoney(statement.retained)),
     definition('A repassar ao corretor', formatMoney(statement.payout)),
-    definition('Confirmado por', statement.signedBy),
+    definition('Confirmado por', authorName(statement.signedBy)),
   );
   block.append(element('span', 'text-label', 'Extrato de elegibilidade'), details);
   return block;
@@ -597,7 +600,7 @@ function installmentStatementBlock(statement) {
     definition('Fica na Usina', formatMoney(statement.retained)),
     definition('A repassar ao corretor', formatMoney(statement.payout)),
     definition('Data da elegibilidade', formatInstant(statement.eligibleAt)),
-    definition('Assinado por', statement.signedBy),
+    definition('Assinado por', authorName(statement.signedBy)),
   );
   block.append(
     element('span', 'text-label', `Extrato da parcela ${statement.installmentNumber}`),
@@ -638,7 +641,11 @@ function parcelledHistory(entries) {
             )}`,
       ),
       element('td', undefined, entry.reason ?? 'Primeira informação'),
-      element('td', 'text-muted', `${entry.informedBy} · ${formatInstant(entry.informedAt)}`),
+      element(
+        'td',
+        'text-muted',
+        `${authorName(entry.informedBy)} · ${formatInstant(entry.informedAt)}`,
+      ),
     );
     rows.append(row);
   }
@@ -728,7 +735,6 @@ async function informParcelledRates(policy) {
       api.informParcelledPayoutRates(policy.id, {
         firstRate: answer.firstRate,
         subsequentRate: answer.subsequentRate,
-        userId: answer.userId,
       }),
     'CRs informadas: o repasse de cada parcela está nas parcelas.',
   );
@@ -746,7 +752,6 @@ async function reviseParcelledRates(policy) {
         firstRate: answer.firstRate,
         subsequentRate: answer.subsequentRate,
         reason: answer.reason,
-        userId: answer.userId,
       }),
     'CRs alteradas: o repasse de cada parcela foi recalculado.',
   );
@@ -839,10 +844,7 @@ async function informPayoutRate(policy) {
     return;
   }
 
-  await perform(
-    () => api.informPayoutRate(policy.id, { rate: answer.rate, userId: answer.userId }),
-    payoutOutcome,
-  );
+  await perform(() => api.informPayoutRate(policy.id, { rate: answer.rate }), payoutOutcome);
 }
 
 async function revisePayoutRate(policy) {
@@ -856,7 +858,6 @@ async function revisePayoutRate(policy) {
       api.revisePayoutRate(policy.id, {
         rate: answer.rate,
         reason: answer.reason,
-        userId: answer.userId,
       }),
     payoutOutcome,
   );
@@ -869,7 +870,7 @@ async function declareEligibility(policy) {
   }
 
   await perform(
-    () => api.declarePayoutEligibility(policy.id, answer.userId),
+    () => api.declarePayoutEligibility(policy.id),
     'Elegibilidade assinada. O extrato de elegibilidade foi gerado.',
   );
 }
@@ -906,7 +907,8 @@ async function render() {
 
   let policy;
   try {
-    policy = await api.getPolicy(policyId);
+    // REQ-216: the signatures keep ids; the directory gives the names to show.
+    [policy] = await Promise.all([api.getPolicy(policyId), loadAuthors()]);
   } catch (error) {
     notFound(error instanceof ApiError ? error.message : 'Falha ao consultar a apólice.');
     return;

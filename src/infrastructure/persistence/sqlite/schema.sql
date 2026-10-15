@@ -381,3 +381,26 @@ CREATE TABLE IF NOT EXISTS user_session (
   expires_at    TEXT NOT NULL,
   ended_at      TEXT
 );
+
+-- REQ-404: every change of role, with who changed it and when. Append-only.
+CREATE TABLE IF NOT EXISTS user_role_change (
+  id             TEXT NOT NULL PRIMARY KEY,
+  user_id        TEXT NOT NULL REFERENCES app_user (id),
+  previous_role  TEXT NOT NULL CHECK (previous_role IN ('ADMINISTRATOR', 'USER')),
+  new_role       TEXT NOT NULL CHECK (new_role IN ('ADMINISTRATOR', 'USER')),
+  changed_by     TEXT NOT NULL REFERENCES app_user (id),
+  changed_at     TEXT NOT NULL
+);
+
+-- REQ-425, REQ-426: a single-use link to set a new password, kept as the
+-- SHA-256 of its token (REQ-416). Expiry is read from `expires_at`.
+CREATE TABLE IF NOT EXISTS password_reset (
+  id            TEXT NOT NULL PRIMARY KEY,
+  user_id       TEXT NOT NULL REFERENCES app_user (id),
+  token_digest  TEXT NOT NULL UNIQUE,
+  requested_at  TEXT NOT NULL,
+  expires_at    TEXT NOT NULL,
+  status        TEXT NOT NULL CHECK (status IN ('PENDING', 'USED', 'INVALIDATED')),
+  used_at       TEXT,
+  CHECK ((status = 'USED') = (used_at IS NOT NULL))
+);

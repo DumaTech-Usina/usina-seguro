@@ -27,4 +27,8 @@ export class InMemoryUserRepository implements UserRepository {
     }
     return null;
   }
+
+  async list(): Promise<readonly User[]> {
+    return [...this.records.values()];
+  }
 }

@@ -6,4 +6,6 @@ export interface UserRepository {
   findById(id: string): Promise<User | null>;
   /** The active user with this e-mail, already normalized; a deactivated one is never answered. */
   findActiveByEmail(email: string): Promise<User | null>;
+  /** Every user, deactivated ones included. */
+  list(): Promise<readonly User[]>;
 }

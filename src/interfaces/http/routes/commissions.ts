@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
 import type { ListCommissionsInput } from '../../../core/commission/application/list-commissions.ts';
+import { authorOf } from '../author.ts';
 
 /**
  * Request shape validation only. What the commission is worth and what an
@@ -16,14 +17,13 @@ const overrideSchema: FastifySchema = {
   params: policyIdParams,
   body: {
     type: 'object',
-    required: ['receivable', 'justification', 'userId'],
+    required: ['receivable', 'justification'],
     additionalProperties: false,
     properties: {
       // Money as a decimal string (REQ-120). Receivable side only: the
       // broker's part is the CR of FP-02 (REQ-270).
       receivable: { type: 'string' },
       justification: { type: 'string' },
-      userId: { type: 'string' },
     },
   },
 };
@@ -65,12 +65,13 @@ export function registerCommissionRoutes(app: FastifyInstance, useCases: UseCase
   // IN-14, FA-07, REQ-066: extraordinary agreement on a single policy.
   app.post('/policies/:id/commission/override', { schema: overrideSchema }, async (request) => {
     const { id } = request.params as PolicyIdParams;
-    const body = request.body as {
-      receivable: string;
-      justification: string;
-      userId: string;
-    };
+    const body = request.body as { receivable: string; justification: string };
 
-    return useCases.overrideCommission.execute({ policyId: id, ...body });
+    // REQ-067, REQ-216: who applied it is the session user.
+    return useCases.overrideCommission.execute({
+      policyId: id,
+      ...body,
+      userId: authorOf(request),
+    });
   });
 }

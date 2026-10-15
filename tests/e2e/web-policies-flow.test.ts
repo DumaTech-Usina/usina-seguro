@@ -199,12 +199,10 @@ async function registeredPolicy(
     workedCommission: '40',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
-    userId: 'operator',
   });
 
   const policy = await callApi('POST', '/policies', {
     proposalId: proposal.id,
-    userId: 'operator',
   });
 
   return policy.id as string;

@@ -201,10 +201,9 @@ async function registeredPolicy(options: {
     workedCommission: '40',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
-    userId: 'operator',
   });
 
-  await callApi('POST', '/policies', { proposalId: proposal.id, userId: 'operator' });
+  await callApi('POST', '/policies', { proposalId: proposal.id });
 }
 
 /* -------------------------------------------------------------- tests -- */

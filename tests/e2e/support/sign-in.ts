@@ -1,4 +1,5 @@
 import type { UseCases } from '../../../src/composition-root.ts';
+import type { UserView } from '../../../src/core/identity/application/user-view.ts';
 
 /**
  * Every operation needs a session (REQ-410), so every journey starts logged in.
@@ -20,13 +21,15 @@ export interface SignedIn {
   readonly cookie: string;
   /** The `fetch` as it was before the cookie was attached: a visitor with no session. */
   readonly anonymousFetch: typeof globalThis.fetch;
+  /** The test user: the author of every act the journey signs (REQ-216). */
+  readonly user: UserView;
 }
 
 export async function signIn(useCases: UseCases, baseUrl: string): Promise<SignedIn> {
   const { token } = await useCases.issueFirstAdministratorInvitation.execute({
     email: TEST_USER.email,
   });
-  await useCases.acceptInvitation.execute({
+  const user = await useCases.acceptInvitation.execute({
     token,
     password: TEST_USER.password,
     name: TEST_USER.name,
@@ -57,5 +60,33 @@ export async function signIn(useCases: UseCases, baseUrl: string): Promise<Signe
     return anonymousFetch(url, { ...init, headers });
   }) as typeof globalThis.fetch;
 
-  return { cookie, anonymousFetch };
+  return { cookie, anonymousFetch, user };
+}
+
+/**
+ * Another user, of the role asked, created by the command of REQ-407 and
+ * logged in. Answers the cookie of its own session, to send explicitly — the
+ * `fetch` installed by `signIn` keeps sending the test user's.
+ */
+export async function logInAs(
+  useCases: UseCases,
+  baseUrl: string,
+  anonymousFetch: typeof globalThis.fetch,
+  input: { email: string; role: 'ADMINISTRATOR' | 'USER'; name?: string },
+): Promise<{ user: UserView; cookie: string }> {
+  const user = await useCases.createUser.execute({
+    email: input.email,
+    password: TEST_USER.password,
+    role: input.role,
+    name: input.name ?? null,
+  });
+  const response = await anonymousFetch(`${baseUrl}/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: input.email, password: TEST_USER.password }),
+  });
+  if (!response.ok) {
+    throw new Error(`${input.email} could not log in: ${response.status}.`);
+  }
+  return { user, cookie: (response.headers.get('set-cookie') ?? '').split(';')[0] as string };
 }

@@ -10,6 +10,7 @@
  */
 
 import { ApiError, api } from '/app/shared/api.js';
+import { authorName, loadAuthors } from '/app/shared/authors.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
 import { reportError } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
@@ -221,7 +222,8 @@ function informedFilters() {
 async function loadEligible() {
   let lines;
   try {
-    lines = await api.listEligiblePayouts(informedFilters());
+    // REQ-216: who signed each eligibility is kept by id; the directory names it.
+    [lines] = await Promise.all([api.listEligiblePayouts(informedFilters()), loadAuthors()]);
   } catch (error) {
     failure(eligible, 'Não foi possível carregar as comissões elegíveis', error);
     return;
@@ -267,7 +269,7 @@ async function loadEligible() {
           element('td', 'is-numeric', formatPercentage(line.payoutRate)),
           element('td', 'is-numeric', formatMoney(line.payout)),
           element('td', 'is-numeric', formatMoney(line.retained)),
-          element('td', 'text-muted', line.signedBy),
+          element('td', 'text-muted', authorName(line.signedBy)),
           policyLink(line.policyId, 'Abrir apólice'),
         );
         return row;

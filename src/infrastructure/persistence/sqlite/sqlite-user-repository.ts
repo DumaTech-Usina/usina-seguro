@@ -64,6 +64,11 @@ export class SqliteUserRepository implements UserRepository {
       .get(email) as UserRow | undefined;
     return row === undefined ? null : restore(row);
   }
+
+  async list(): Promise<readonly User[]> {
+    const rows = this.db.prepare('SELECT * FROM app_user').all() as unknown as UserRow[];
+    return rows.map(restore);
+  }
 }
 
 function restore(row: UserRow): User {

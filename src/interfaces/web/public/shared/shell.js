@@ -80,6 +80,16 @@ const NAV = [
     group: 'Administração',
     items: [
       { id: 'settings', label: 'Cadastros', icon: 'tune', href: '/app/settings/', ready: true },
+      // REQ-440: only an administrator sees it — a convenience; the server is
+      // what refuses anyone else (REQ-430).
+      {
+        id: 'users',
+        label: 'Usuários',
+        icon: 'manage_accounts',
+        href: '/app/users/',
+        ready: true,
+        requires: 'ADMINISTRATOR',
+      },
     ],
   },
 ];
@@ -142,6 +152,9 @@ async function showUser() {
   try {
     const user = await api.me();
     document.querySelector('.app-bar__user').textContent = user.displayName;
+    for (const item of document.querySelectorAll('.app-nav__item[data-requires]')) {
+      item.hidden = item.dataset.requires !== user.role;
+    }
   } catch {
     // A 401 already sent the operator to the login; anything else leaves the
     // bar without a name, and the page reports its own failures.
@@ -178,6 +191,11 @@ function buildNav(current) {
 
       if (item.id === current) {
         link.setAttribute('aria-current', 'page');
+      }
+
+      if (item.requires !== undefined) {
+        link.dataset.requires = item.requires;
+        link.hidden = true;
       }
 
       section.append(link);

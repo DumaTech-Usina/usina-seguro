@@ -8,7 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
-import { signIn } from './support/sign-in.ts';
+import { TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
  * FP-02 of V2 driven through the pages: the CR informed on the policy, its
@@ -237,12 +237,10 @@ async function issuedPolicy(options: {
     subsequentWorkedCommission: options.mode === 'PARCELLED' ? '10' : null,
     workedCommissionMode: options.mode ?? 'INTEGRAL',
     intermediary: options.intermediary ?? null,
-    userId: 'operator',
   });
 
   const policy = await callApi('POST', '/policies', {
     proposalId: proposal.id,
-    userId: 'operator',
   });
   return policy.id;
 }
@@ -316,7 +314,7 @@ describe('FP-02 on the policy page', () => {
 
     const before = snackbars().length;
     clickIn(CR_CARD, 'Informar CR');
-    answerDialog('#dialog-payout-rate', { rate: '70.555', userId: 'ana' });
+    answerDialog('#dialog-payout-rate', { rate: '70.555' });
 
     const message = await nextSnackbar(before);
     expect(message).toContain('no máximo duas casas decimais');
@@ -329,7 +327,7 @@ describe('FP-02 on the policy page', () => {
 
     const before = snackbars().length;
     clickIn(CR_CARD, 'Informar CR');
-    answerDialog('#dialog-payout-rate', { rate: '60', userId: 'ana' });
+    answerDialog('#dialog-payout-rate', { rate: '60' });
 
     const message = await nextSnackbar(before);
     expect(message).toContain('R$ 180,00 a repassar ao corretor');
@@ -341,8 +339,8 @@ describe('FP-02 on the policy page', () => {
     const cr = card(CR_CARD).textContent;
     expect(cr).toContain('R$ 180,00');
     expect(cr).toContain('R$ 120,00');
-    // REQ-279: who informed it is on the record.
-    expect(cr).toContain('ana');
+    // REQ-279, REQ-216: who informed it is on the record, by name.
+    expect(cr).toContain(TEST_USER.name);
     expect(requests).toContain(`POST /policies/${policyId}/payout`);
   });
 
@@ -358,7 +356,7 @@ describe('FP-02 on the policy page', () => {
 
     const before = snackbars().length;
     clickIn(CR_CARD, 'Recalcular CR');
-    answerDialog('#dialog-payout-revision', { rate: '70.55', reason: '  ', userId: 'bruno' });
+    answerDialog('#dialog-payout-revision', { rate: '70.55', reason: '  ' });
     const refusal = await nextSnackbar(before);
     expect(refusal).toContain('A alteração da CR exige um motivo.');
     expect(refusal).toContain('REQ-279');
@@ -368,7 +366,6 @@ describe('FP-02 on the policy page', () => {
     answerDialog('#dialog-payout-revision', {
       rate: '70.55',
       reason: 'corretor renegociou',
-      userId: 'bruno',
     });
     // REQ-275: 300.00 x 70.55% = 211.65 exactly.
     expect(await nextSnackbar(beforeRevision)).toContain('R$ 211,65 a repassar');
@@ -381,7 +378,7 @@ describe('FP-02 on the policy page', () => {
     // The earlier calculation stays as it was (REQ-279).
     expect(history[0].textContent).toContain('R$ 180,00');
     expect(history[1].textContent).toContain('60%');
-    expect(history[1].textContent).toContain('bruno');
+    expect(history[1].textContent).toContain(TEST_USER.name);
   });
 
   it('signs the eligibility and shows the statement, then offers nothing else (REQ-281 to REQ-283)', async () => {
@@ -389,7 +386,7 @@ describe('FP-02 on the policy page', () => {
 
     const before = snackbars().length;
     clickIn(CR_CARD, 'Assinar elegibilidade');
-    answerDialog('#dialog-payout-eligibility', { userId: 'carla' });
+    answerDialog('#dialog-payout-eligibility', {});
     expect(await nextSnackbar(before)).toContain('Elegibilidade assinada');
 
     await vi.waitFor(() => {
@@ -407,7 +404,7 @@ describe('FP-02 on the policy page', () => {
       'R$ 300,00',
       'R$ 88,35',
       'R$ 211,65',
-      'carla',
+      TEST_USER.name,
     ]) {
       expect(statement).toContain(expected);
     }
@@ -421,7 +418,6 @@ describe('FP-02 on the policy page', () => {
     const response = await rawApi('POST', `/policies/${policyId}/payout/revision`, {
       rate: '50',
       reason: 'ajuste',
-      userId: 'bruno',
     });
 
     expect(response.status).toBe(422);
@@ -439,7 +435,6 @@ describe('FP-02 edge cases', () => {
 
     const view = await callApi('POST', `/policies/${policyId}/payout`, {
       rate: '70',
-      userId: 'ana',
     });
 
     expect(view.usinaValue).toBe('160.00');
@@ -459,7 +454,6 @@ describe('FP-02 edge cases', () => {
 
     const refusal = await rawApi('POST', `/policies/${policyId}/payout`, {
       rate: '60',
-      userId: 'ana',
     });
     expect(refusal.status).toBe(422);
     expect(await refusal.json()).toMatchObject({ rule: 'REQ-271' });
@@ -468,9 +462,7 @@ describe('FP-02 edge cases', () => {
   it('refuses the eligibility of a policy without CR (EX-205, REJ-226)', async () => {
     const policyId = await issuedPolicy({ proposalNumber: 'APL-FP02-NOCR' });
 
-    const response = await rawApi('POST', `/policies/${policyId}/payout/eligibility`, {
-      userId: 'carla',
-    });
+    const response = await rawApi('POST', `/policies/${policyId}/payout/eligibility`);
 
     expect(response.status).toBe(422);
     expect(await response.json()).toMatchObject({
@@ -481,11 +473,10 @@ describe('FP-02 edge cases', () => {
 
   it('refuses a second CR on the same policy (REQ-271, REJ-217)', async () => {
     const policyId = await issuedPolicy({ proposalNumber: 'APL-FP02-TWICE' });
-    await callApi('POST', `/policies/${policyId}/payout`, { rate: '60', userId: 'ana' });
+    await callApi('POST', `/policies/${policyId}/payout`, { rate: '60' });
 
     const response = await rawApi('POST', `/policies/${policyId}/payout`, {
       rate: '50',
-      userId: 'ana',
     });
 
     expect(response.status).toBe(422);
@@ -495,9 +486,7 @@ describe('FP-02 edge cases', () => {
   it('rejects a CR sent as a JSON number, and a malformed filter (REQ-120)', async () => {
     const policyId = await issuedPolicy({ proposalNumber: 'APL-FP02-NUM' });
 
-    expect(
-      (await rawApi('POST', `/policies/${policyId}/payout`, { rate: 60, userId: 'ana' })).status,
-    ).toBe(400);
+    expect((await rawApi('POST', `/policies/${policyId}/payout`, { rate: 60 })).status).toBe(400);
     expect((await rawApi('GET', '/payouts/eligible?renewalFrom=2027-13')).status).toBe(400);
     expect((await rawApi('GET', '/payouts/eligible?eligibleFrom=ontem')).status).toBe(400);
   });
@@ -510,8 +499,8 @@ describe('the eligible commissions on the payouts page (REQ-284)', () => {
       clientId: 'Bruno Souza',
       brokerId: 'Corretora Beta',
     });
-    await callApi('POST', `/policies/${beta}/payout`, { rate: '50', userId: 'ana' });
-    await callApi('POST', `/policies/${beta}/payout/eligibility`, { userId: 'carla' });
+    await callApi('POST', `/policies/${beta}/payout`, { rate: '50' });
+    await callApi('POST', `/policies/${beta}/payout/eligibility`);
 
     await openPayouts();
     // The eligible commission of the journey above and this one.

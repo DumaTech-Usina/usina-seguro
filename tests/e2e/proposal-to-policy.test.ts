@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
-import { signIn } from './support/sign-in.ts';
+import { type SignedIn, signIn } from './support/sign-in.ts';
 
 /**
  * FP-01 through the real external interface: a listening server, real HTTP,
@@ -16,6 +16,7 @@ let directory: string;
 let application: Application;
 let app: FastifyInstance;
 let baseUrl: string;
+let signedIn: SignedIn;
 
 beforeAll(async () => {
   directory = mkdtempSync(path.join(tmpdir(), 'usina-e2e-policy-'));
@@ -37,7 +38,7 @@ beforeAll(async () => {
   baseUrl = `http://127.0.0.1:${address.port}`;
 
   // REQ-410: every journey starts logged in, as the test user.
-  await signIn(application.useCases, baseUrl);
+  signedIn = await signIn(application.useCases, baseUrl);
 });
 
 afterAll(async () => {
@@ -69,7 +70,6 @@ function proposalBody(overrides: Record<string, unknown> = {}): Record<string, u
     workedCommission: '32.5',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
-    userId: 'operator',
     ...overrides,
   };
 }
@@ -87,9 +87,9 @@ async function registerProposal(
   return ((await response.json()) as { id: string }).id;
 }
 
-/** REQ-209, REQ-242: the recognition carries who identified it, nothing else. */
-function recognition(proposalId: string, userId = 'carla.dias'): unknown {
-  return { proposalId, userId };
+/** REQ-209, REQ-242: the recognition carries only the proposal; who identified it is the session (REQ-216). */
+function recognition(proposalId: string): unknown {
+  return { proposalId };
 }
 
 interface PolicyBody {
@@ -140,7 +140,7 @@ describe('FP-01 over HTTP: recognition of issuance, policy, installments', () =>
     const proposalId = await registerProposal('bank-slip', 'PRP-1100');
     const before = Date.now();
 
-    await post('/policies', recognition(proposalId, 'carla.dias'));
+    await post('/policies', recognition(proposalId));
 
     const proposal = (await (await fetch(`${baseUrl}/proposals/${proposalId}`)).json()) as {
       status: string;
@@ -148,7 +148,7 @@ describe('FP-01 over HTTP: recognition of issuance, policy, installments', () =>
       issuanceRecognizedAt: string;
     };
     expect(proposal.status).toBe('ISSUED');
-    expect(proposal.issuanceRecognizedBy).toBe('carla.dias');
+    expect(proposal.issuanceRecognizedBy).toBe(signedIn.user.id);
     // The moment it was recorded, not an informed one.
     expect(Date.parse(proposal.issuanceRecognizedAt)).toBeGreaterThanOrEqual(before - 1000);
     expect(Date.parse(proposal.issuanceRecognizedAt)).toBeLessThanOrEqual(Date.now());
@@ -217,16 +217,16 @@ describe('FP-01 over HTTP: recognition of issuance, policy, installments', () =>
     expect(await response.json()).toMatchObject({ rule: 'REQ-049' });
   });
 
-  it('refuses a recognition nobody signed with 422, in Portuguese (REJ-205, REQ-216)', async () => {
+  it('never takes the author of the recognition from the request (REJ-205, REQ-216, CA-416)', async () => {
     const proposalId = await registerProposal('bank-slip', 'PRP-7000');
 
-    const response = await post('/policies', recognition(proposalId, '   '));
+    const response = await post('/policies', { proposalId, userId: 'carla.dias' });
 
-    expect(response.status).toBe(422);
-    expect(await response.json()).toMatchObject({
-      rule: 'REQ-216',
-      message: 'Informe quem está registrando esta informação.',
-    });
+    expect(response.status).toBe(201);
+    const proposal = (await (await fetch(`${baseUrl}/proposals/${proposalId}`)).json()) as {
+      issuanceRecognizedBy: string;
+    };
+    expect(proposal.issuanceRecognizedBy).toBe(signedIn.user.id);
   });
 
   it('never takes policy data typed again: the policy only inherits (REQ-242, REJ-204)', async () => {
@@ -452,8 +452,10 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
     );
     const { id: proposalId } = (await proposal.json()) as { id: string };
 
-    // Unsigned: REJ-205 refuses the recognition, so no policy is created.
-    const refused = await post('/policies', recognition(proposalId, ''));
+    // A refused proposal cannot originate a policy (REJ-210), so the
+    // recognition is refused and no policy is created.
+    await post(`/proposals/${proposalId}/rejection`, { reason: 'seguradora recusou' });
+    const refused = await post('/policies', recognition(proposalId));
 
     expect(refused.status).toBe(422);
     expect(await listNotifications('?recipientId=broker-nothing')).toEqual([]);

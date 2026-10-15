@@ -87,11 +87,32 @@ export const api = {
   logOut: () => request('/auth/logout', { method: 'POST' }),
   /** Who is logged in: `{ id, email, name, role, displayName }` (REQ-400). */
   me: () => request('/auth/me'),
+  /** REQ-216: `[{ id, displayName }]`, every user a record may be signed by. */
+  listUserDirectory: () => request('/users/directory'),
+  // REQ-440 — the administrator's management of users. The server refuses
+  // anyone else (REQ-430); the page only shows what it answers.
+  /** `{ users: [...], invitations: [...] }`. */
+  listUsers: () => request('/users'),
+  /** REQ-420: answers `{ email, expiresAt, link }` — the link to hand over (REQ-436). */
+  inviteUser: (email, role) =>
+    request('/users/invitations', { method: 'POST', body: { email, role } }),
+  resendInvitation: (invitationId) =>
+    request(`/users/invitations/${encodeURIComponent(invitationId)}/resend`, { method: 'POST' }),
+  deactivateUser: (userId) =>
+    request(`/users/${encodeURIComponent(userId)}/deactivation`, { method: 'POST' }),
+  changeUserRole: (userId, role) =>
+    request(`/users/${encodeURIComponent(userId)}/role`, { method: 'POST', body: { role } }),
   /** REQ-422: `input` is `{ token, password, name }`, `name` optional. */
   acceptInvitation: (input) =>
     request('/auth/invitation/acceptance', { method: 'POST', body: input }),
+  /** REQ-425: answers `{ message }`, the same whether the e-mail has an account or not. */
+  requestPasswordReset: (email) =>
+    request('/auth/password-reset/request', { method: 'POST', body: { email } }),
+  /** REQ-426: the new password through the link of the e-mail. */
+  resetPassword: (token, password) =>
+    request('/auth/password-reset', { method: 'POST', body: { token, password } }),
   // FP-01 — the proposal, its corrections while it awaits issuance, and the
-  // refusal. Every correction is signed: `input.userId` (REQ-216).
+  // refusal. Every correction is signed by the session user (REQ-216).
   registerProposal: (input) => request('/proposals', { method: 'POST', body: input }),
   /**
    * REQ-218: reads the PDF of a proposal and answers what it found, for the
@@ -106,7 +127,7 @@ export const api = {
     }),
   reviseReceipt: (id, input) =>
     request(`/proposals/${encodeURIComponent(id)}/receipt`, { method: 'POST', body: input }),
-  /** REQ-254: "Corrigir parcelas" — `input` is `{ installments, userId }`, the list as it stays. */
+  /** REQ-254: "Corrigir parcelas" — `input` is `{ installments }`, the list as it stays. */
   reviseInstallments: (id, input) =>
     request(`/proposals/${encodeURIComponent(id)}/installments`, { method: 'POST', body: input }),
   rejectProposal: (id, reason) =>
@@ -132,7 +153,7 @@ export const api = {
   getPolicy: (id) => request(`/policies/${encodeURIComponent(id)}`),
   /**
    * REQ-247: sends the PDF of a policy that exists, signed. The last one sent
-   * is the policy's. `input` is `{ fileName, content, userId }`, `content`
+   * is the policy's. `input` is `{ fileName, content }`, `content`
    * base64-encoded.
    */
   attachPolicyDocument: (policyId, input) =>
@@ -156,10 +177,10 @@ export const api = {
         ? '/policies'
         : `/policies?renewalUntil=${encodeURIComponent(renewalUntil)}`,
     ),
-  payInstallment: (policyId, number, userId) =>
+  /** IN-13: who confirms is the session user (REQ-216); the act carries no data. */
+  payInstallment: (policyId, number) =>
     request(`/policies/${encodeURIComponent(policyId)}/installments/${number}/payment`, {
       method: 'POST',
-      body: { userId },
     }),
 
   // REQ-236: the agreed commission of a policy.
@@ -179,8 +200,8 @@ export const api = {
   proposalSourceDocumentUrl: (proposalId) =>
     `/proposals/${encodeURIComponent(proposalId)}/source-document`,
   // FP-02 of V2 (section 9A) — the CR of a policy, its recalculation and the
-  // eligibility. Every act is signed: `userId` (REQ-216). The system pays
-  // nothing (REQ-280).
+  // eligibility. Every act is signed by the session user (REQ-216). The
+  // system pays nothing (REQ-280).
   /** REQ-285: the situation of the policy, its Usina value and its commission. */
   getPolicyPayout: (policyId) => request(`/policies/${encodeURIComponent(policyId)}/payout`),
   informPayoutRate: (policyId, input) =>
@@ -190,11 +211,8 @@ export const api = {
       method: 'POST',
       body: input,
     }),
-  declarePayoutEligibility: (policyId, userId) =>
-    request(`/policies/${encodeURIComponent(policyId)}/payout/eligibility`, {
-      method: 'POST',
-      body: { userId },
-    }),
+  declarePayoutEligibility: (policyId) =>
+    request(`/policies/${encodeURIComponent(policyId)}/payout/eligibility`, { method: 'POST' }),
   /**
    * REQ-284: the eligible commissions. `filters` holds only what was informed:
    * `policyNumber`, `broker`, `client`, `eligibleFrom`/`eligibleBefore`
@@ -208,27 +226,27 @@ export const api = {
   listPoliciesWithoutPayoutRate: () => request('/payouts/policies-without-rate'),
 
   // V2 section 9B — the payout of a policy with parcelled CT: two CRs and the
-  // eligibility of each installment. Every act is signed: `userId` (REQ-216).
+  // eligibility of each installment. Every act is signed by the session user
+  // (REQ-216).
   /** REQ-268, REQ-293: each installment with its CT, Usina value and payout. */
   getParcelledPayout: (policyId) =>
     request(`/policies/${encodeURIComponent(policyId)}/parcelled-payout`),
-  /** REQ-287: `input` is `{ firstRate, subsequentRate, userId }`. */
+  /** REQ-287: `input` is `{ firstRate, subsequentRate }`. */
   informParcelledPayoutRates: (policyId, input) =>
     request(`/policies/${encodeURIComponent(policyId)}/parcelled-payout`, {
       method: 'POST',
       body: input,
     }),
-  /** REQ-265: `input` is `{ firstRate, subsequentRate, reason, userId }`. */
+  /** REQ-265: `input` is `{ firstRate, subsequentRate, reason }`. */
   reviseParcelledPayoutRates: (policyId, input) =>
     request(`/policies/${encodeURIComponent(policyId)}/parcelled-payout/revision`, {
       method: 'POST',
       body: input,
     }),
   /** REQ-288: the eligibility of one installment, signed. */
-  declareInstallmentEligibility: (policyId, number, userId) =>
+  declareInstallmentEligibility: (policyId, number) =>
     request(`/policies/${encodeURIComponent(policyId)}/installments/${number}/eligibility`, {
       method: 'POST',
-      body: { userId },
     }),
   /** REQ-268: every policy with parcelled CT, with its situation. */
   listParcelledPolicies: () => request('/payouts/parcelled-policies'),

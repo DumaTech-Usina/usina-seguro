@@ -8,7 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
-import { signIn } from './support/sign-in.ts';
+import { type SignedIn, TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
  * The policy screen, driven the way an operator drives it.
@@ -31,6 +31,7 @@ let directory: string;
 let application: Application;
 let app: FastifyInstance;
 let baseUrl: string;
+let signedIn: SignedIn;
 
 /** Every request the page made, in order, as `METHOD path`. */
 const requests: string[] = [];
@@ -93,7 +94,7 @@ beforeAll(async () => {
   baseUrl = `http://127.0.0.1:${address.port}`;
 
   // REQ-410: every journey starts logged in, as the test user.
-  await signIn(application.useCases, baseUrl);
+  signedIn = await signIn(application.useCases, baseUrl);
 
   const nodeFetch = globalThis.fetch;
   globalThis.fetch = ((input: Untyped, init: Untyped) => {
@@ -226,12 +227,10 @@ async function registeredPolicy(numbers: {
     workedCommission: '40',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
-    userId: 'operator',
   });
 
   const policy = await callApi('POST', '/policies', {
     proposalId: proposal.id,
-    userId: 'operator',
   });
 
   return policy.id;
@@ -273,7 +272,7 @@ describe('the policy screen', () => {
 
     const beforeRefusal = snackbars().length;
     clickIn('Comissão', 'Ajustar comissão');
-    answerDialog('#dialog-override', { receivable: '45.00', justification: '', userId: 'adm-1' });
+    answerDialog('#dialog-override', { receivable: '45.00', justification: '' });
 
     await vi.waitFor(() => {
       expect(snackbars().length).toBeGreaterThan(beforeRefusal);
@@ -285,7 +284,6 @@ describe('the policy screen', () => {
     answerDialog('#dialog-override', {
       receivable: '45.00',
       justification: 'acordo extraordinário com a seguradora',
-      userId: 'adm-1',
     });
 
     await vi.waitFor(() => {
@@ -299,7 +297,7 @@ describe('the policy screen', () => {
     const commission = await callApi('GET', `/policies/${policyId}/commission`);
     expect(commission.agreedReceivable).toBe('40.00');
     expect(commission.effectiveReceivable).toBe('45.00');
-    expect(commission.override.userId).toBe('adm-1');
+    expect(commission.override.userId).toBe(signedIn.user.id);
   });
 
   it('confirms an installment paid by the client and says who did it (IN-13, REQ-123)', async () => {
@@ -311,16 +309,17 @@ describe('the policy screen', () => {
     await openPolicy(policyId);
 
     clickIn('Parcelas', 'Confirmar recebimento');
-    answerDialog('#dialog-installment', { userId: 'fin-2' });
+    answerDialog('#dialog-installment', {});
 
     await vi.waitFor(() => {
       expect(card('Parcelas').textContent).toContain('Paga');
     });
-    expect(card('Parcelas').textContent).toContain('fin-2');
+    // REQ-123, REQ-216: who confirmed it is the session user, shown by name.
+    expect(card('Parcelas').textContent).toContain(TEST_USER.name);
     expect(requests).toContain(`POST /policies/${policyId}/installments/1/payment`);
 
     const policy = await callApi('GET', `/policies/${policyId}`);
-    expect(policy.installments[0]).toMatchObject({ status: 'PAID', confirmedBy: 'fin-2' });
+    expect(policy.installments[0]).toMatchObject({ status: 'PAID', confirmedBy: signedIn.user.id });
   });
 
   it('says so when the policy does not exist', async () => {
@@ -365,13 +364,13 @@ describe('the PDF of the policy (REQ-247)', () => {
 
     openSending();
     choosePdf(FIRST, 'apolice.pdf');
-    answerDialog('#dialog-policy-document', { userId: 'ana.souza' });
+    answerDialog('#dialog-policy-document', {});
 
     await vi.waitFor(() => {
       expect(text('#policy-document')).toContain('apolice.pdf');
     });
     expect(requests).toContain(`POST /policies/${policyId}/document`);
-    expect(text('#policy-document')).toContain('Enviado por ana.souza');
+    expect(text('#policy-document')).toContain(`Enviado por ${TEST_USER.name}`);
     const link = document.querySelector('#policy-document a');
     expect(link.getAttribute('href')).toBe(`/policies/${policyId}/document`);
     const first = await download(policyId);
@@ -381,12 +380,12 @@ describe('the PDF of the policy (REQ-247)', () => {
 
     openSending();
     choosePdf(SECOND, 'apolice-corrigida.pdf');
-    answerDialog('#dialog-policy-document', { userId: 'bruno.lima' });
+    answerDialog('#dialog-policy-document', {});
 
     await vi.waitFor(() => {
       expect(text('#policy-document')).toContain('apolice-corrigida.pdf');
     });
-    expect(text('#policy-document')).toContain('Enviado por bruno.lima');
+    expect(text('#policy-document')).toContain(`Enviado por ${TEST_USER.name}`);
     expect(text('#policy-document')).not.toContain('apolice.pdf');
     expect(new Uint8Array(await (await download(policyId)).arrayBuffer())).toEqual(SECOND);
   });
@@ -408,7 +407,6 @@ describe('the PDF of the policy (REQ-247)', () => {
     await callApi('POST', `/policies/${policyId}/document`, {
       fileName: 'apolice.pdf',
       content: Buffer.from(FIRST).toString('base64'),
-      userId: 'ana.souza',
     });
     await openPolicy(policyId);
 
@@ -451,7 +449,7 @@ describe('the PDF of the policy (REQ-247)', () => {
     expect(dialog.open).toBe(true);
 
     // A click on the content keeps it open.
-    dialog.querySelector('[name="userId"]').click();
+    dialog.querySelector('[name="pdf"]').click();
     expect(dialog.open).toBe(true);
 
     // The backdrop is the dialog itself as the target.
@@ -474,7 +472,6 @@ describe('the PDF of the policy (REQ-247)', () => {
     await callApi('POST', `/policies/${policyId}/document`, {
       fileName: 'apolice.pdf',
       content: Buffer.from(FIRST).toString('base64'),
-      userId: 'ana.souza',
     });
     await openPolicy(policyId);
 
@@ -491,21 +488,13 @@ describe('the PDF of the policy (REQ-247)', () => {
     expect(document.querySelector('dialog.pdf-viewer')).toBeNull();
   });
 
-  it('refuses a sending nobody signed with the sentence the server rendered (REQ-216)', async () => {
+  it('asks nobody to type who signs: every dialog of the policy is signed by the session (REQ-216)', async () => {
     const policyId = await registeredPolicy({
       proposalNumber: 'PRP-DOC-2',
       policyNumber: 'PRP-DOC-2',
     });
     await openPolicy(policyId);
 
-    openSending();
-    choosePdf(FIRST, 'apolice.pdf');
-    answerDialog('#dialog-policy-document', { userId: '  ' });
-
-    await vi.waitFor(() => {
-      expect(lastSnackbar()).toContain('Informe quem está registrando esta informação.');
-    });
-    expect((await callApi('GET', `/policies/${policyId}`)).document).toBeNull();
-    expect((await download(policyId)).status).toBe(404);
+    expect(document.querySelectorAll('dialog [name="userId"]')).toHaveLength(0);
   });
 });

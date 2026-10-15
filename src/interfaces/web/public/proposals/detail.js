@@ -13,6 +13,7 @@
  */
 
 import { ApiError, api } from '/app/shared/api.js';
+import { authorName, loadAuthors } from '/app/shared/authors.js';
 import { base64Of } from '/app/shared/file.js';
 import { addInstallmentRow, scheduleOf } from '/app/shared/installments.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
@@ -298,7 +299,7 @@ function historyCard(proposal) {
   for (const entry of proposal.workedCommissionHistory) {
     commission.append(
       definition(
-        `CT · ${entry.informedBy} · ${formatInstant(entry.informedAt)}`,
+        `CT · ${authorName(entry.informedBy)} · ${formatInstant(entry.informedAt)}`,
         workedCommissionText(
           entry.workedCommission,
           entry.subsequentWorkedCommission,
@@ -312,7 +313,7 @@ function historyCard(proposal) {
   for (const entry of proposal.receiptHistory) {
     receipt.append(
       definition(
-        `Recebimento · ${entry.declaredBy} · ${formatInstant(entry.declaredAt)}`,
+        `Recebimento · ${authorName(entry.declaredBy)} · ${formatInstant(entry.declaredAt)}`,
         receiptText(entry.intermediaryId, entry.ctu),
       ),
     );
@@ -323,7 +324,7 @@ function historyCard(proposal) {
   for (const entry of proposal.installmentHistory) {
     installments.append(
       definition(
-        `Parcelas · ${entry.informedBy} · ${formatInstant(entry.informedAt)}`,
+        `Parcelas · ${authorName(entry.informedBy)} · ${formatInstant(entry.informedAt)}`,
         entry.installments.length === 0
           ? 'Nenhuma parcela'
           : entry.installments.map((installment) => formatMoney(installment.amount)).join(' · '),
@@ -338,7 +339,7 @@ function historyCard(proposal) {
     const issuance = element('div', 'definitions');
     issuance.append(
       definition(
-        `Emissão reconhecida · ${proposal.issuanceRecognizedBy} · ${formatInstant(
+        `Emissão reconhecida · ${authorName(proposal.issuanceRecognizedBy)} · ${formatInstant(
           proposal.issuanceRecognizedAt,
         )}`,
         'Emitida',
@@ -447,17 +448,13 @@ document
   .addEventListener('click', () => addInstallmentRow(installmentRows));
 offerRegisteredIntermediaries(document.querySelector('#intermediary-options'));
 
-// FA-203: the CT and its mode, signed (REQ-214, REQ-215).
+// FA-203: the CT and its mode, signed by the session user (REQ-214, REQ-215, REQ-216).
 commissionForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  const input = values(commissionForm);
 
   submitting(commissionForm, async () => {
     // REQ-297: with a parcelled CT both CTs go together.
-    await api.reviseWorkedCommission(proposalId, {
-      ...workedCommissionOf(commissionForm),
-      userId: input.userId,
-    });
+    await api.reviseWorkedCommission(proposalId, workedCommissionOf(commissionForm));
 
     showSnackbar('Comissão trabalhada corrigida.', { tone: 'success' });
     await render();
@@ -467,12 +464,10 @@ commissionForm.addEventListener('submit', (event) => {
 // REQ-254, FA-224: the list of installments as it stays, signed.
 installmentsForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  const input = values(installmentsForm);
 
   submitting(installmentsForm, async () => {
     await api.reviseInstallments(proposalId, {
       installments: scheduleOf(installmentRows),
-      userId: input.userId,
     });
 
     showSnackbar('Parcelas corrigidas.', { tone: 'success' });
@@ -483,12 +478,10 @@ installmentsForm.addEventListener('submit', (event) => {
 // FA-204, FA-209: the receipt declared again, signed (REQ-223, REQ-225).
 receiptForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  const input = values(receiptForm);
 
   submitting(receiptForm, async () => {
     await api.reviseReceipt(proposalId, {
       intermediary: intermediaryOf(receiptForm),
-      userId: input.userId,
     });
 
     showSnackbar('Recebimento corrigido.', { tone: 'success' });
@@ -496,12 +489,11 @@ receiptForm.addEventListener('submit', (event) => {
   });
 });
 
-// FP-01 step 8 (REQ-209): signed by who identified it; the policy is created
+// FP-01 step 8 (REQ-209): signed by the session user (REQ-216); the policy is created
 // from the proposal (REQ-240, REQ-241) — no datum is sent again (REQ-242).
 // The PDF of the policy may go with it (REQ-247): a document, not a datum.
 issuanceForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  const input = values(issuanceForm);
   const [file] = issuanceForm.querySelector('[name="policyPdf"]').files ?? [];
 
   submitting(issuanceForm, async () => {
@@ -509,7 +501,6 @@ issuanceForm.addEventListener('submit', (event) => {
       file === undefined ? undefined : { fileName: file.name, content: await base64Of(file) };
     const policy = await api.registerPolicy({
       proposalId,
-      userId: input.userId,
       ...(pdf === undefined ? {} : { document: pdf }),
     });
 
@@ -599,7 +590,8 @@ async function render() {
 
   let proposal;
   try {
-    proposal = await api.getProposal(proposalId);
+    // REQ-216: the signatures keep ids; the directory gives the names to show.
+    [proposal] = await Promise.all([api.getProposal(proposalId), loadAuthors()]);
   } catch (error) {
     notFound(error instanceof ApiError ? error.message : 'Falha ao consultar a proposta.');
     return;

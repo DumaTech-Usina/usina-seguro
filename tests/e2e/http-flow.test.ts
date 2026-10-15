@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
-import { signIn } from './support/sign-in.ts';
+import { type SignedIn, signIn } from './support/sign-in.ts';
 
 /**
  * E2E exercises the system through the real external interface: a server
@@ -16,6 +16,7 @@ let directory: string;
 let application: Application;
 let app: FastifyInstance;
 let baseUrl: string;
+let signedIn: SignedIn;
 
 beforeAll(async () => {
   directory = mkdtempSync(path.join(tmpdir(), 'usina-e2e-'));
@@ -37,7 +38,7 @@ beforeAll(async () => {
   baseUrl = `http://127.0.0.1:${address.port}`;
 
   // REQ-410: every journey starts logged in, as the test user.
-  await signIn(application.useCases, baseUrl);
+  signedIn = await signIn(application.useCases, baseUrl);
 });
 
 afterAll(async () => {
@@ -60,7 +61,6 @@ const validProposal = {
   workedCommission: '20',
   workedCommissionMode: 'INTEGRAL',
   intermediary: null,
-  userId: 'ana.souza',
 };
 
 const TWO_INSTALLMENTS = [{ amount: '617.28' }, { amount: '617.28' }];
@@ -206,14 +206,16 @@ describe('proposal API (V2)', () => {
     expect(response.status).toBe(400);
   });
 
-  it('refuses an unsigned registration (REQ-216, REJ-206)', async () => {
-    const { userId: _omitted, ...unsigned } = validProposal;
+  it('signs the registration with the session, whatever author the body names (REQ-216, CA-416)', async () => {
+    const signed = await post({
+      ...validProposal,
+      proposalNumber: 'PRP-SIGNED',
+      userId: 'ana.souza',
+    });
 
-    expect((await post(unsigned)).status).toBe(400);
-
-    const blank = await post({ ...validProposal, userId: '  ' });
-    expect(blank.status).toBe(422);
-    expect(await blank.json()).toMatchObject({ rule: 'REQ-216' });
+    expect(signed.status).toBe(201);
+    const body = (await signed.json()) as { workedCommissionHistory: { informedBy: string }[] };
+    expect(body.workedCommissionHistory[0]?.informedBy).toBe(signedIn.user.id);
   });
 
   it('rejects a CT sent as a number (REQ-121)', async () => {
@@ -228,7 +230,6 @@ describe('proposal API (V2)', () => {
         workedCommission: '25',
         subsequentWorkedCommission: '10',
         workedCommissionMode: 'PARCELLED',
-        userId: 'bruno.lima',
       },
       `/proposals/${id}/worked-commission`,
     );
@@ -240,8 +241,8 @@ describe('proposal API (V2)', () => {
     };
     expect(body.workedCommissionMode).toBe('PARCELLED');
     expect(body.workedCommissionHistory.map((entry) => entry.informedBy)).toEqual([
-      'ana.souza',
-      'bruno.lima',
+      signedIn.user.id,
+      signedIn.user.id,
     ]);
   });
 
@@ -267,7 +268,7 @@ describe('proposal API (V2)', () => {
     const id = await registered(PARCELLED);
 
     const response = await post(
-      { intermediary: { intermediaryId: 'intermediary-1', ctu: '50' }, userId: 'bruno.lima' },
+      { intermediary: { intermediaryId: 'intermediary-1', ctu: '50' } },
       `/proposals/${id}/receipt`,
     );
 
@@ -283,7 +284,6 @@ describe('proposal API (V2)', () => {
     const response = await post(
       {
         installments: [{ amount: '600.00', dueDate: '2026-11-10' }, { amount: '634.56' }],
-        userId: 'bruno.lima',
       },
       `/proposals/${id}/installments`,
     );
@@ -298,8 +298,8 @@ describe('proposal API (V2)', () => {
       { number: 2, amount: '634.56', dueDate: null },
     ]);
     expect(body.installmentHistory.map((entry) => entry.informedBy)).toEqual([
-      'ana.souza',
-      'bruno.lima',
+      signedIn.user.id,
+      signedIn.user.id,
     ]);
   });
 
@@ -307,7 +307,7 @@ describe('proposal API (V2)', () => {
     const id = await registered(PARCELLED);
 
     const response = await post(
-      { installments: [{ amount: '100.00' }], userId: 'bruno.lima' },
+      { installments: [{ amount: '100.00' }] },
       `/proposals/${id}/installments`,
     );
 
@@ -319,15 +319,12 @@ describe('proposal API (V2)', () => {
     const id = await registered({ netPremium: '100.00' });
 
     const declared = await post(
-      { intermediary: { intermediaryId: 'intermediary-1', ctu: '50' }, userId: 'bruno.lima' },
+      { intermediary: { intermediaryId: 'intermediary-1', ctu: '50' } },
       `/proposals/${id}/receipt`,
     );
     expect(await declared.json()).toMatchObject({ expectedReceipt: { usina: '10.00' } });
 
-    const removed = await post(
-      { intermediary: null, userId: 'bruno.lima' },
-      `/proposals/${id}/receipt`,
-    );
+    const removed = await post({ intermediary: null }, `/proposals/${id}/receipt`);
     expect(await removed.json()).toMatchObject({
       intermediaryId: null,
       expectedReceipt: { intermediary: null, usina: '20.00' },
@@ -341,7 +338,7 @@ describe('proposal API (V2)', () => {
     );
 
     const response = await post(
-      { workedCommission: '25', workedCommissionMode: 'INTEGRAL', userId: 'bruno.lima' },
+      { workedCommission: '25', workedCommissionMode: 'INTEGRAL' },
       `/proposals/${id}/worked-commission`,
     );
 
@@ -363,7 +360,7 @@ describe('proposal API (V2)', () => {
 
   it('answers 404 when correcting a proposal that does not exist', async () => {
     const response = await post(
-      { workedCommission: '25', workedCommissionMode: 'INTEGRAL', userId: 'bruno.lima' },
+      { workedCommission: '25', workedCommissionMode: 'INTEGRAL' },
       '/proposals/ghost/worked-commission',
     );
 
@@ -459,7 +456,7 @@ describe('parcelled payout API (V2 section 9B)', () => {
       ...PARCELLED,
       installments: [{ amount: '100.00' }, { amount: '100.00' }, { amount: '100.00' }],
     });
-    const response = await post({ proposalId, userId: 'carla' }, '/policies');
+    const response = await post({ proposalId }, '/policies');
     expect(response.status).toBe(201);
     return ((await response.json()) as { id: string }).id;
   }
@@ -476,7 +473,7 @@ describe('parcelled payout API (V2 section 9B)', () => {
     expect(await before.json()).toMatchObject({ situation: 'WITHOUT_CR' });
 
     const informed = await post(
-      { firstRate: '100', subsequentRate: '15', userId: 'ana' },
+      { firstRate: '100', subsequentRate: '15' },
       `/policies/${policyId}/parcelled-payout`,
     );
     expect(informed.status).toBe(201);
@@ -490,22 +487,22 @@ describe('parcelled payout API (V2 section 9B)', () => {
     });
 
     const revised = await post(
-      { firstRate: '90', subsequentRate: '20', reason: 'acordo revisto', userId: 'bruno' },
+      { firstRate: '90', subsequentRate: '20', reason: 'acordo revisto' },
       `/policies/${policyId}/parcelled-payout/revision`,
     );
     expect(revised.status).toBe(200);
 
-    const eligible = await post(
-      { userId: 'carla' },
-      `/policies/${policyId}/installments/3/eligibility`,
-    );
+    const eligible = await post({}, `/policies/${policyId}/installments/3/eligibility`);
     expect(eligible.status).toBe(200);
     expect(await eligible.json()).toMatchObject({
       situation: 'PARTIALLY_ELIGIBLE',
       installments: [
         { number: 1, statement: null },
         { number: 2, statement: null },
-        { number: 3, statement: { installmentNumber: 3, payout: '20.00', signedBy: 'carla' } },
+        {
+          number: 3,
+          statement: { installmentNumber: 3, payout: '20.00', signedBy: signedIn.user.id },
+        },
       ],
     });
 
@@ -520,7 +517,7 @@ describe('parcelled payout API (V2 section 9B)', () => {
     const policyId = await parcelledPolicy();
 
     const response = await post(
-      { firstRate: '100', subsequentRate: '31', userId: 'ana' },
+      { firstRate: '100', subsequentRate: '31' },
       `/policies/${policyId}/parcelled-payout`,
     );
 
@@ -533,10 +530,7 @@ describe('parcelled payout API (V2 section 9B)', () => {
   it('refuses the eligibility of an installment without CR with 422 (REQ-288, EX-214)', async () => {
     const policyId = await parcelledPolicy();
 
-    const response = await post(
-      { userId: 'carla' },
-      `/policies/${policyId}/installments/1/eligibility`,
-    );
+    const response = await post({}, `/policies/${policyId}/installments/1/eligibility`);
 
     expect(response.status).toBe(422);
     expect(((await response.json()) as ErrorBody).rule).toBe('REQ-288');
@@ -545,10 +539,7 @@ describe('parcelled payout API (V2 section 9B)', () => {
   it('refuses the confirmation of payment of a parcelled installment with 422 (REQ-269)', async () => {
     const policyId = await parcelledPolicy();
 
-    const response = await post(
-      { userId: 'carla' },
-      `/policies/${policyId}/installments/1/payment`,
-    );
+    const response = await post({}, `/policies/${policyId}/installments/1/payment`);
 
     expect(response.status).toBe(422);
     expect(((await response.json()) as ErrorBody).rule).toBe('REQ-269');
@@ -558,7 +549,7 @@ describe('parcelled payout API (V2 section 9B)', () => {
     const policyId = await parcelledPolicy();
 
     const response = await post(
-      { firstRate: 100, subsequentRate: '15', userId: 'ana' },
+      { firstRate: 100, subsequentRate: '15' },
       `/policies/${policyId}/parcelled-payout`,
     );
 

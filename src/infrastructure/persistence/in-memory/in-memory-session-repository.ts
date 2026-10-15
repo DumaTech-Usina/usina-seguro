@@ -16,4 +16,10 @@ export class InMemorySessionRepository implements SessionRepository {
     }
     return null;
   }
+
+  async listOpenByUser(userId: string): Promise<readonly Session[]> {
+    return [...this.records.values()].filter(
+      (session) => session.userId === userId && session.endedAt === null,
+    );
+  }
 }

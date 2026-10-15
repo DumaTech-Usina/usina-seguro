@@ -27,6 +27,24 @@ export interface Config {
     | { readonly driver: 'memory' }
     | { readonly driver: 'sqlite'; readonly file: string }
     | { readonly driver: 'postgres'; readonly url: string };
+  /**
+   * REQ-435, REQ-436: how the e-mails of access leave. `smtp` once its host is
+   * configured; `log` (written to the server's output, nothing delivered)
+   * until then; `memory` for the tests.
+   */
+  readonly email:
+    | { readonly driver: 'log' }
+    | { readonly driver: 'memory' }
+    | {
+        readonly driver: 'smtp';
+        readonly host: string;
+        readonly port: number;
+        /** Implicit TLS (usually 465); `false` means STARTTLS when offered (587). */
+        readonly secure: boolean;
+        readonly user: string | null;
+        readonly password: string | null;
+        readonly from: string;
+      };
 }
 
 const DRIVERS: readonly PersistenceDriver[] = ['memory', 'sqlite', 'postgres'];
@@ -50,6 +68,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       publicUrl: readPublicUrl(env.APP_BASE_URL, host, port),
     },
     persistence: readPersistence(env),
+    email: readEmail(env),
   };
 }
 
@@ -88,6 +107,44 @@ function readPublicUrl(value: string | undefined, host: string, port: number): s
   }
 
   return url.replace(/\/+$/, '');
+}
+
+function readEmail(env: NodeJS.ProcessEnv): Config['email'] {
+  const host = env.SMTP_HOST?.trim() || null;
+  const driver = env.EMAIL_DRIVER?.trim() || (host === null ? 'log' : 'smtp');
+
+  if (driver === 'log' || driver === 'memory') {
+    return { driver };
+  }
+  if (driver !== 'smtp') {
+    throw new InvalidConfiguration(
+      `Invalid EMAIL_DRIVER: '${env.EMAIL_DRIVER}'. Use smtp, log or memory.`,
+    );
+  }
+
+  const from = env.SMTP_FROM?.trim() || null;
+  if (host === null || from === null) {
+    throw new InvalidConfiguration('The smtp e-mail driver requires SMTP_HOST and SMTP_FROM.');
+  }
+  const user = env.SMTP_USER?.trim() || null;
+  const password = env.SMTP_PASSWORD || null;
+  if ((user === null) !== (password === null)) {
+    throw new InvalidConfiguration('SMTP_USER and SMTP_PASSWORD go together, or neither.');
+  }
+  const port = env.SMTP_PORT?.trim() ? Number(env.SMTP_PORT) : 587;
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    throw new InvalidConfiguration(`Invalid SMTP_PORT: '${env.SMTP_PORT}'.`);
+  }
+
+  return {
+    driver: 'smtp',
+    host,
+    port,
+    secure: env.SMTP_SECURE?.trim() === 'true',
+    user,
+    password,
+    from,
+  };
 }
 
 function readPersistence(env: NodeJS.ProcessEnv): Config['persistence'] {

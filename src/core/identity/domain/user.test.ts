@@ -121,3 +121,20 @@ describe('login attempts (REQ-414)', () => {
     expect(user.failedLoginAttempts).toBe(0);
   });
 });
+
+describe('deactivation and role (REQ-403, REQ-404)', () => {
+  it('deactivates without erasing anything', () => {
+    const user = aUser().deactivate();
+
+    expect(user.status).toBe('DEACTIVATED');
+    expect(user.email).toBe('ana@usina.com.br');
+  });
+
+  it('changes the role, returning a new instance', () => {
+    const user = aUser();
+    const promoted = user.changeRole('ADMINISTRATOR');
+
+    expect(promoted.role).toBe('ADMINISTRATOR');
+    expect(user.role).toBe('USER');
+  });
+});

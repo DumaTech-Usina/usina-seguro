@@ -129,6 +129,20 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
       'Não foi possível entrar. Confira o e-mail e a senha ou tente novamente mais tarde.',
     'identity.authentication_required': 'Entre no sistema para continuar.',
     'identity.foreign_origin': 'Operação recusada: a requisição não veio do próprio sistema.',
+    'identity.administrator_only': 'Somente um administrador pode fazer isto.',
+    'identity.last_administrator':
+      'O sistema precisa de ao menos um administrador ativo: esta alteração deixaria nenhum.',
+    'identity.invitation_not_pending': 'Este convite não está mais pendente.',
+    'identity.user_not_found': 'Usuário não encontrado.',
+    'identity.invitation_not_found': 'Convite não encontrado.',
+    'identity.reset_requested':
+      'Se houver um usuário ativo com este e-mail, enviamos um link para redefinir a senha. Ele vale por 1 hora.',
+    'identity.invitation_email_subject': 'Convite para o sistema da Usina do Seguro',
+    'identity.invitation_email_body':
+      'Você foi convidado para o sistema da Usina do Seguro.\n\nPara concluir o cadastro e definir a sua senha, abra o link abaixo. Ele vale uma única vez, até {expiresAt}.\n\n{link}\n\nSe você não esperava este convite, ignore este e-mail.',
+    'identity.reset_email_subject': 'Redefinição de senha — Usina do Seguro',
+    'identity.reset_email_body':
+      'Recebemos um pedido para redefinir a sua senha no sistema da Usina do Seguro.\n\nPara definir uma nova senha, abra o link abaixo. Ele vale uma única vez, até {expiresAt}.\n\n{link}\n\nSe você não fez este pedido, ignore este e-mail: a sua senha continua a mesma.',
   },
 };
 

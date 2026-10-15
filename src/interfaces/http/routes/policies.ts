@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
 import type { ListPoliciesInput } from '../../../core/policy/application/list-policies.ts';
-import { SIGNATURE_PROPERTIES, SIGNATURE_REQUIRED, authorOf } from '../author.ts';
+import { authorOf } from '../author.ts';
 import { PDF_BODY_LIMIT, contentDisposition } from './proposals.ts';
 
 /**
@@ -28,11 +28,10 @@ const policyDocumentProperty = {
 const registerPolicySchema: FastifySchema = {
   body: {
     type: 'object',
-    required: ['proposalId', 'userId'],
+    required: ['proposalId'],
     additionalProperties: false,
     properties: {
       proposalId: { type: 'string' },
-      userId: { type: 'string' },
       document: policyDocumentProperty,
     },
   },
@@ -51,12 +50,9 @@ const attachPolicyDocumentSchema: FastifySchema = {
   params: getPolicySchema.params,
   body: {
     type: 'object',
-    required: ['fileName', 'content', ...SIGNATURE_REQUIRED],
+    required: ['fileName', 'content'],
     additionalProperties: false,
-    properties: {
-      ...policyDocumentProperty.properties,
-      ...SIGNATURE_PROPERTIES,
-    },
+    properties: policyDocumentProperty.properties,
   },
 };
 
@@ -96,13 +92,7 @@ const payInstallmentSchema: FastifySchema = {
       number: { type: 'string', pattern: '^[0-9]+$' },
     },
   },
-  body: {
-    type: 'object',
-    required: ['userId'],
-    additionalProperties: false,
-    // Presence only: an empty user is rejected by the domain (REQ-123).
-    properties: { userId: { type: 'string' } },
-  },
+  // No body: who confirms is the session (REQ-123, REQ-216).
 };
 
 export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): void {
@@ -115,13 +105,13 @@ export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): 
     async (request, reply) => {
       const body = request.body as {
         proposalId: string;
-        userId: string;
         document?: PolicyDocumentBody;
       };
 
       const output = await useCases.registerPolicy.execute({
         proposalId: body.proposalId,
-        userId: body.userId,
+        // REQ-209, REQ-216: who recognised the issuance is the session user.
+        userId: authorOf(request),
         document: body.document === undefined ? null : documentOf(body.document),
       });
       return reply.code(201).send(output);
@@ -185,12 +175,11 @@ export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): 
     { schema: payInstallmentSchema },
     async (request) => {
       const { id, number } = request.params as { id: string; number: string };
-      const { userId } = request.body as { userId: string };
 
       return useCases.payInstallment.execute({
         policyId: id,
         number: Number(number),
-        userId,
+        userId: authorOf(request),
       });
     },
   );

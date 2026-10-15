@@ -8,7 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
-import { signIn } from './support/sign-in.ts';
+import { TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
  * The flow of the parcelled CT (V2 sections 6A and 9B), driven through the
@@ -234,7 +234,6 @@ async function awaitingProposal(overrides: Record<string, unknown> = {}): Promis
     subsequentWorkedCommission: '30',
     workedCommissionMode: 'PARCELLED',
     intermediary: null,
-    userId: 'operator',
     ...overrides,
   });
   return proposal.id;
@@ -242,7 +241,7 @@ async function awaitingProposal(overrides: Record<string, unknown> = {}): Promis
 
 async function parcelledPolicy(proposalNumber: string): Promise<string> {
   const proposalId = await awaitingProposal({ proposalNumber });
-  return (await callApi('POST', '/policies', { proposalId, userId: 'operator' })).id;
+  return (await callApi('POST', '/policies', { proposalId })).id;
 }
 
 async function openProposal(id: string): Promise<void> {
@@ -314,7 +313,6 @@ describe('registering a parcelled proposal (REQ-290 to REQ-296)', () => {
       netPremium: '300.00',
       coverageStart: '2026-10-01',
       coverageEnd: '2027-10-01',
-      userId: 'ana.souza',
     })) {
       field('#form-proposal', name).value = value;
     }
@@ -363,7 +361,6 @@ describe('registering a parcelled proposal (REQ-290 to REQ-296)', () => {
       netPremium: '300.00',
       coverageStart: '2026-10-01',
       coverageEnd: '2027-10-01',
-      userId: 'ana.souza',
     })) {
       field('#form-proposal', name).value = value;
     }
@@ -409,14 +406,13 @@ describe('a parcelled proposal awaiting issuance (REQ-254, REQ-297, REQ-299)', (
 
     field('#form-worked-commission', 'workedCommission').value = '90';
     field('#form-worked-commission', 'subsequentWorkedCommission').value = '25';
-    field('#form-worked-commission', 'userId').value = 'bruno.lima';
     submit('#form-worked-commission');
 
     await vi.waitFor(() => {
       expect(text('#expected')).toContain('R$ 90,00');
     });
     expect(text('#expected')).toContain('R$ 25,00');
-    expect(text('#history')).toContain('bruno.lima');
+    expect(text('#history')).toContain(TEST_USER.name);
     const stored = await callApi('GET', `/proposals/${id}`);
     expect(stored.subsequentWorkedCommission).toBe('25');
   });
@@ -429,14 +425,13 @@ describe('a parcelled proposal awaiting issuance (REQ-254, REQ-297, REQ-299)', (
     expect(amounts).toHaveLength(3);
     amounts[0].value = '200.00';
     click('#form-installments .installment-row:last-child .installment-row__remove');
-    field('#form-installments', 'userId').value = 'bruno.lima';
     submit('#form-installments');
 
     await vi.waitFor(() => {
       expect(text('#expected')).toContain('R$ 200,00');
     });
     expect(text('#expected')).not.toContain('Parcela 3');
-    expect(text('#history')).toContain('Parcelas · bruno.lima');
+    expect(text('#history')).toContain(`Parcelas · ${TEST_USER.name}`);
     expect(requests).toContain(`POST /proposals/${id}/installments`);
   });
 
@@ -448,7 +443,6 @@ describe('a parcelled proposal awaiting issuance (REQ-254, REQ-297, REQ-299)', (
     await openProposal(id);
 
     click('#form-installments .installment-row:last-child .installment-row__remove');
-    field('#form-installments', 'userId').value = 'bruno.lima';
     submit('#form-installments');
 
     const message = await nextSnackbar(0);
@@ -470,7 +464,6 @@ describe('a parcelled proposal awaiting issuance (REQ-254, REQ-297, REQ-299)', (
     choose('#form-worked-commission', 'workedCommissionMode', 'PARCELLED');
     field('#form-worked-commission', 'workedCommission').value = '100';
     field('#form-worked-commission', 'subsequentWorkedCommission').value = '30';
-    field('#form-worked-commission', 'userId').value = 'bruno.lima';
     submit('#form-worked-commission');
 
     const message = await nextSnackbar(0);
@@ -493,16 +486,14 @@ describe('a parcelled proposal awaiting issuance (REQ-254, REQ-297, REQ-299)', (
     for (const input of document.querySelectorAll('#form-installments [name="amount"]')) {
       input.value = '150.00';
     }
-    field('#form-installments', 'userId').value = 'bruno.lima';
     submit('#form-installments');
     await vi.waitFor(() => {
-      expect(text('#history')).toContain('Parcelas · bruno.lima');
+      expect(text('#history')).toContain(`Parcelas · ${TEST_USER.name}`);
     });
 
     choose('#form-worked-commission', 'workedCommissionMode', 'PARCELLED');
     field('#form-worked-commission', 'workedCommission').value = '100';
     field('#form-worked-commission', 'subsequentWorkedCommission').value = '30';
-    field('#form-worked-commission', 'userId').value = 'bruno.lima';
     submit('#form-worked-commission');
 
     await vi.waitFor(() => {
@@ -556,7 +547,6 @@ describe('a parcelled policy (V2 section 9B)', () => {
     answerDialog('#dialog-parcelled-rates', {
       firstRate: '100',
       subsequentRate: '31',
-      userId: 'ana',
     });
 
     const message = await nextSnackbar(before);
@@ -571,7 +561,6 @@ describe('a parcelled policy (V2 section 9B)', () => {
     answerDialog('#dialog-parcelled-rates', {
       firstRate: '100',
       subsequentRate: '15',
-      userId: 'ana',
     });
 
     await vi.waitFor(() => {
@@ -580,7 +569,7 @@ describe('a parcelled policy (V2 section 9B)', () => {
     const installments = card(INSTALLMENTS_CARD).textContent;
     expect(installments).toContain('15%');
     expect(installments).toContain('R$ 15,00');
-    expect(card(CR_CARD).textContent).toContain('ana');
+    expect(card(CR_CARD).textContent).toContain(TEST_USER.name);
     expect(buttonsIn(CR_CARD)).toEqual(['Alterar CRs']);
   });
 
@@ -592,7 +581,6 @@ describe('a parcelled policy (V2 section 9B)', () => {
       firstRate: '90',
       subsequentRate: '20',
       reason: 'acordo revisto',
-      userId: 'bruno',
     });
 
     await vi.waitFor(() => {
@@ -602,7 +590,7 @@ describe('a parcelled policy (V2 section 9B)', () => {
     expect(history).toHaveLength(2);
     expect(history[1].textContent).toContain('90%');
     expect(history[1].textContent).toContain('20%');
-    expect(history[1].textContent).toContain('bruno');
+    expect(history[1].textContent).toContain(TEST_USER.name);
   });
 
   it('signs the eligibility of one installment and shows its statement; the CRs freeze (REQ-288, REQ-266, REQ-289)', async () => {
@@ -610,7 +598,7 @@ describe('a parcelled policy (V2 section 9B)', () => {
 
     const row = [...card(INSTALLMENTS_CARD).querySelectorAll('tbody tr')][1];
     clickIn(INSTALLMENTS_CARD, 'Assinar elegibilidade', row);
-    answerDialog('#dialog-installment-eligibility', { userId: 'carla' });
+    answerDialog('#dialog-installment-eligibility', {});
 
     await vi.waitFor(() => {
       expect(card(CR_CARD).textContent).toContain('Parcialmente elegida');
@@ -627,7 +615,7 @@ describe('a parcelled policy (V2 section 9B)', () => {
       '20%',
       'R$ 10,00',
       'R$ 20,00',
-      'carla',
+      TEST_USER.name,
     ]) {
       expect(statement).toContain(expected);
     }
@@ -644,15 +632,11 @@ describe('a parcelled policy (V2 section 9B)', () => {
   it('refuses the eligibility of an installment without CR, and the confirmation of payment (REQ-288, REQ-269)', async () => {
     const other = await parcelledPolicy('APL-PARC-2');
 
-    const eligibility = await rawApi('POST', `/policies/${other}/installments/1/eligibility`, {
-      userId: 'carla',
-    });
+    const eligibility = await rawApi('POST', `/policies/${other}/installments/1/eligibility`);
     expect(eligibility.status).toBe(422);
     expect(await eligibility.json()).toMatchObject({ rule: 'REQ-288' });
 
-    const payment = await rawApi('POST', `/policies/${other}/installments/1/payment`, {
-      userId: 'carla',
-    });
+    const payment = await rawApi('POST', `/policies/${other}/installments/1/payment`);
     expect(payment.status).toBe(422);
     expect(await payment.json()).toMatchObject({ rule: 'REQ-269' });
   });

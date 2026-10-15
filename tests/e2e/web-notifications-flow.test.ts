@@ -207,12 +207,10 @@ async function issuePolicy(
     workedCommission: '32.5',
     workedCommissionMode: 'INTEGRAL',
     intermediary: null,
-    userId: 'operator',
   });
 
   const policy = await callApi('POST', '/policies', {
     proposalId: proposal.id,
-    userId: 'operator',
   });
 
   return { proposalId: proposal.id, policyId: policy.id };
@@ -344,9 +342,8 @@ describe('the notification of a parcelled policy', () => {
       subsequentWorkedCommission: '30',
       workedCommissionMode: 'PARCELLED',
       intermediary: null,
-      userId: 'operator',
     });
-    await callApi('POST', '/policies', { proposalId: proposal.id, userId: 'operator' });
+    await callApi('POST', '/policies', { proposalId: proposal.id });
 
     await openNotifications();
 

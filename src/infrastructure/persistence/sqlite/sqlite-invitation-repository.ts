@@ -58,6 +58,20 @@ export class SqliteInvitationRepository implements InvitationRepository {
       .all(email) as unknown as InvitationRow[];
     return rows.map(restore);
   }
+
+  async findById(id: string): Promise<Invitation | null> {
+    const row = this.db.prepare('SELECT * FROM user_invitation WHERE id = ?').get(id) as
+      | InvitationRow
+      | undefined;
+    return row === undefined ? null : restore(row);
+  }
+
+  async listPending(): Promise<readonly Invitation[]> {
+    const rows = this.db
+      .prepare(`SELECT * FROM user_invitation WHERE status = 'PENDING'`)
+      .all() as unknown as InvitationRow[];
+    return rows.map(restore);
+  }
 }
 
 function restore(row: InvitationRow): Invitation {

@@ -277,18 +277,13 @@
           </section>
 
           <!-- ------------------------------------------ assinatura -- -->
+          <!-- REQ-216: quem assina é quem está logado; nada é digitado para assinar. -->
           <section class="card">
             <div class="card__body stack">
-              <div class="form-grid">
-                <div class="field">
-                  <input class="field__input" name="userId" placeholder=" " required />
-                  <label class="field__label">Seu identificador</label>
-                  <span class="field__hint">
-                    Assina a CT e a declaração de recebimento — fica registrado quem informou e
-                    quando.
-                  </span>
-                </div>
-              </div>
+              <p class="text-muted">
+                A CT e a declaração de recebimento ficam registradas em seu nome, com a data e a
+                hora do registro.
+              </p>
             </div>
             <div class="card__footer">
               <button class="btn btn--filled" type="submit">Registrar proposta</button>

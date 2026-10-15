@@ -1,18 +1,21 @@
 import type { FastifyRequest } from 'fastify';
 
 /**
- * How an audited action is signed at the HTTP boundary (REQ-216).
+ * Who signs an audited act at the HTTP boundary (REQ-216).
  *
- * There is no login yet, so the author is the identifier the user types, and
- * it travels in the body as `userId` — the same field the other signed forms
- * already use. When login exists, the author becomes the session's username,
- * and this file is what changes: the routes only spread these two constants and
- * call `authorOf`, and the core only receives an author string.
+ * The author is the user of the session, by id — never something the request
+ * carries: a body that names an author is refused by the route's schema, and a
+ * route that takes no body has nothing to read it from (CA-416). The routes
+ * only call `authorOf`, and the core only receives an author string, so how
+ * the user is identified can change here without touching a rule.
+ *
+ * Every route that signs is protected (REQ-410), so a user is always there by
+ * the time a handler runs; finding none is a wiring mistake, not a request to
+ * answer.
  */
-export const SIGNATURE_PROPERTIES = { userId: { type: 'string' } } as const;
-
-export const SIGNATURE_REQUIRED = ['userId'] as const;
-
 export function authorOf(request: FastifyRequest): string {
-  return (request.body as { userId: string }).userId;
+  if (request.user === null) {
+    throw new Error('A signed act reached its handler without a session.');
+  }
+  return request.user.id;
 }
