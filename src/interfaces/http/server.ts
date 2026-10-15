@@ -1,8 +1,14 @@
-import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
+import Fastify, {
+  type FastifyError,
+  type FastifyInstance,
+  type FastifyServerOptions,
+} from 'fastify';
 import type { UseCases } from '../../composition-root.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../../core/proposal/domain/errors.ts';
 import { translate } from '../../i18n/messages.ts';
 import { registerWebInterface } from '../web/web.ts';
+import { registerAuthentication } from './authentication.ts';
+import { registerAuthRoutes } from './routes/auth.ts';
 import { registerCommissionRoutes } from './routes/commissions.ts';
 import { registerHealthRoute } from './routes/health.ts';
 import { registerNotificationRoutes } from './routes/notifications.ts';
@@ -13,6 +19,10 @@ import { registerReferenceRoutes } from './routes/references.ts';
 
 export interface HttpServerOptions {
   readonly logger: boolean;
+  /** Where the log goes; standard output when absent. */
+  readonly logStream?: NodeJS.WritableStream;
+  /** REQ-412: the session cookie only over https. `true` in production. */
+  readonly secureCookies?: boolean;
 }
 
 /**
@@ -27,7 +37,7 @@ export function createHttpServer(
   options: HttpServerOptions = { logger: false },
 ): FastifyInstance {
   const app = Fastify({
-    logger: options.logger,
+    logger: loggerOptions(options),
     // No type coercion during validation: by default Ajv would turn the number
     // 1234.56 into the string '1234.56', letting a binary float in as a monetary
     // value (REQ-120). Here a wrong type is an invalid request, not a silent
@@ -79,6 +89,12 @@ export function createHttpServer(
   // exist.
   registerWebInterface(app);
 
+  // V2 section 9C: every route below needs a session unless it says otherwise.
+  const cookie = registerAuthentication(app, useCases, {
+    secureCookies: options.secureCookies ?? false,
+  });
+  registerAuthRoutes(app, useCases, cookie);
+
   registerHealthRoute(app);
   registerProposalRoutes(app, useCases);
   registerPolicyRoutes(app, useCases);
@@ -88,4 +104,28 @@ export function createHttpServer(
   registerNotificationRoutes(app, useCases);
 
   return app;
+}
+
+/**
+ * The request is logged by its path only. The query string is left out
+ * because an invitation link carries its token there (REQ-416): the page
+ * `/app/invitation/?token=...` must not leave a working link in the log.
+ * Bodies, where the password travels, are never logged by Fastify.
+ */
+function loggerOptions(options: HttpServerOptions): NonNullable<FastifyServerOptions['logger']> {
+  if (!options.logger) {
+    return false;
+  }
+
+  return {
+    ...(options.logStream === undefined ? {} : { stream: options.logStream }),
+    serializers: {
+      req: (request) => ({
+        method: request.method,
+        url: request.url.split('?')[0] ?? request.url,
+        hostname: request.hostname,
+        remoteAddress: request.ip,
+      }),
+    },
+  };
 }

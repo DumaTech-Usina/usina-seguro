@@ -10,6 +10,10 @@ export const IDENTITY_MESSAGES = {
   PASSWORD_LENGTH: 'identity.password_length',
   INVALID_LINK: 'identity.invalid_link',
   LOGIN_REFUSED: 'identity.login_refused',
+  /** REQ-410, REQ-431: an operation reached with no valid session. */
+  AUTHENTICATION_REQUIRED: 'identity.authentication_required',
+  /** REQ-417: a changing request sent by a page that is not the system's own. */
+  FOREIGN_ORIGIN: 'identity.foreign_origin',
 } as const;
 
 export type IdentityMessageKey = (typeof IDENTITY_MESSAGES)[keyof typeof IDENTITY_MESSAGES];

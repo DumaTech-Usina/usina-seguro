@@ -127,6 +127,8 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'identity.invalid_link': 'Este link não é válido ou já expirou.',
     'identity.login_refused':
       'Não foi possível entrar. Confira o e-mail e a senha ou tente novamente mais tarde.',
+    'identity.authentication_required': 'Entre no sistema para continuar.',
+    'identity.foreign_origin': 'Operação recusada: a requisição não veio do próprio sistema.',
   },
 };
 

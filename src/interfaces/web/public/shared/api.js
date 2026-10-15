@@ -10,8 +10,12 @@
  * - a rule violation arrives already translated. `ApiError.message` is the
  *   Portuguese sentence the server rendered through `src/i18n`, and the pages
  *   display it as it came. The interface never writes its own text for a
- *   domain error.
+ *   domain error;
+ * - a 401 means there is no session (REQ-410): the operator is sent to the
+ *   login, which brings them back here afterwards (REQ-431).
  */
+
+import { navigateTo } from '/app/shared/navigation.js';
 
 /** A response the server refused: 400 (shape), 404 (absent) or 422 (rule). */
 export class ApiError extends Error {
@@ -30,6 +34,12 @@ export class ApiError extends Error {
   }
 }
 
+/** REQ-431: no session — to the login, keeping the way back to this page. */
+function sendToLogin() {
+  const here = `${window.location.pathname}${window.location.search}`;
+  navigateTo(`/app/login/?next=${encodeURIComponent(here)}`);
+}
+
 async function request(path, { method = 'GET', body } = {}) {
   const response = await fetch(path, {
     method,
@@ -37,6 +47,10 @@ async function request(path, { method = 'GET', body } = {}) {
       ? {}
       : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
   });
+
+  if (response.status === 401) {
+    sendToLogin();
+  }
 
   const text = await response.text();
   const payload = text === '' ? null : JSON.parse(text);
@@ -52,6 +66,10 @@ async function request(path, { method = 'GET', body } = {}) {
 async function readFile(path) {
   const response = await fetch(path);
 
+  if (response.status === 401) {
+    sendToLogin();
+  }
+
   if (!response.ok) {
     const text = await response.text();
     throw new ApiError(response.status, text === '' ? null : JSON.parse(text));
@@ -62,6 +80,16 @@ async function readFile(path) {
 
 export const api = {
   readFile,
+  // V2 section 9C — access to the system. The session token travels in an
+  // HttpOnly cookie the page never reads.
+  /** REQ-411: answers `{ user }`; a refusal is the same for every cause (REQ-413). */
+  logIn: (email, password) => request('/auth/login', { method: 'POST', body: { email, password } }),
+  logOut: () => request('/auth/logout', { method: 'POST' }),
+  /** Who is logged in: `{ id, email, name, role, displayName }` (REQ-400). */
+  me: () => request('/auth/me'),
+  /** REQ-422: `input` is `{ token, password, name }`, `name` optional. */
+  acceptInvitation: (input) =>
+    request('/auth/invitation/acceptance', { method: 'POST', body: input }),
   // FP-01 — the proposal, its corrections while it awaits issuance, and the
   // refusal. Every correction is signed: `input.userId` (REQ-216).
   registerProposal: (input) => request('/proposals', { method: 'POST', body: input }),

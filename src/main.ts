@@ -8,7 +8,11 @@ import { createHttpServer } from './interfaces/http/server.ts';
 async function main(): Promise<void> {
   const config = loadConfig();
   const application = composeApplication(config);
-  const app = createHttpServer(application.useCases, { logger: true });
+  const app = createHttpServer(application.useCases, {
+    logger: true,
+    // REQ-412: production runs on https, so the cookie never travels in clear.
+    secureCookies: config.env === 'production',
+  });
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info(`Received ${signal}, shutting down.`);

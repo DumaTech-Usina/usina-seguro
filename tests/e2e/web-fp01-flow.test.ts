@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { signIn } from './support/sign-in.ts';
 
 /**
  * FP-01 of V2, from the registration of the proposal up to its outcome — the
@@ -64,6 +65,9 @@ beforeAll(async () => {
     throw new Error('Server did not expose a TCP address.');
   }
   baseUrl = `http://127.0.0.1:${address.port}`;
+
+  // REQ-410: every journey starts logged in, as the test user.
+  await signIn(application.useCases, baseUrl);
 
   // The pages call the API by path, the way the browser does when the page and
   // the API share an origin. Here the origin is the test server.

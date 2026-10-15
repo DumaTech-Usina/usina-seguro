@@ -27,7 +27,9 @@ export function registerWebInterface(app: FastifyInstance): void {
   // Whoever starts the service types the bare host, not `/app/`. The root
   // belongs to the API, which answers on named routes and has nothing to show
   // at `/`, so it points at the interface instead of answering 404.
-  app.get('/', async (_request, reply) => reply.redirect(WEB_PREFIX, 302));
+  app.get('/', { config: { public: true } }, async (_request, reply) =>
+    reply.redirect(WEB_PREFIX, 302),
+  );
 
   app.register(fastifyStatic, {
     root: path.join(import.meta.dirname, 'public'),

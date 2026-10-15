@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Entrar — Usina do Seguro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/app/shared/base.css" />
+  </head>
+  <!-- REQ-410: the login is open to everyone; it has no navigation and shows no data. -->
+  <body class="access">
+    <main class="access__main">
+      <section class="card access__card">
+        <div class="card__header">
+          <span class="material-symbols-outlined">local_fire_department</span>
+          <h1 class="text-title">Usina do Seguro</h1>
+        </div>
+        <form id="form-login">
+          <div class="card__body stack">
+            <p class="text-muted">Entre com o seu e-mail e a sua senha.</p>
+            <div class="field">
+              <input
+                class="field__input"
+                name="email"
+                inputmode="email"
+                autocomplete="username"
+                placeholder=" "
+                required
+              />
+              <label class="field__label">E-mail</label>
+            </div>
+            <div class="field">
+              <input
+                class="field__input"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+                placeholder=" "
+                required
+              />
+              <label class="field__label">Senha</label>
+            </div>
+            <p class="access__error" id="access-error" role="alert" hidden></p>
+          </div>
+          <div class="card__footer">
+            <button class="btn btn--filled" type="submit">Entrar</button>
+          </div>
+        </form>
+      </section>
+    </main>
+
+    <script type="module" src="/app/login/index.js"></script>
+  </body>
+</html>

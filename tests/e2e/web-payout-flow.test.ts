@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { signIn } from './support/sign-in.ts';
 
 /**
  * FP-02 of V2 driven through the pages: the CR informed on the policy, its
@@ -89,6 +90,9 @@ beforeAll(async () => {
     throw new Error('Server did not expose a TCP address.');
   }
   baseUrl = `http://127.0.0.1:${address.port}`;
+
+  // REQ-410: every journey starts logged in, as the test user.
+  await signIn(application.useCases, baseUrl);
 
   const nodeFetch = globalThis.fetch;
   globalThis.fetch = ((input: Untyped, init: Untyped) => {

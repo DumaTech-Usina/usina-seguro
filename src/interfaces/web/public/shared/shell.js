@@ -7,7 +7,14 @@
  *
  * A page opts in with `<body class="shell" data-nav="policies">`; the value
  * marks the current item.
+ *
+ * The app bar also says who is logged in (REQ-400) and holds "Sair", which
+ * ends the session on the server (REQ-411). With no session, the reading of
+ * who is logged in is what sends the operator to the login (REQ-431).
  */
+
+import { api } from '/app/shared/api.js';
+import { navigateTo } from '/app/shared/navigation.js';
 
 /**
  * The navigation. `ready: false` marks a page that exists as a placeholder:
@@ -110,8 +117,35 @@ function buildAppBar() {
   environment.className = 'chip';
   environment.textContent = 'MVP';
 
-  bar.append(mark, titles, spacer, environment);
+  const user = document.createElement('span');
+  user.className = 'app-bar__user text-muted';
+
+  const logout = document.createElement('button');
+  logout.type = 'button';
+  logout.className = 'btn btn--sm app-bar__logout';
+  logout.append(icon('logout'), document.createTextNode('Sair'));
+  logout.addEventListener('click', async () => {
+    logout.disabled = true;
+    try {
+      await api.logOut();
+    } finally {
+      navigateTo('/app/login/');
+    }
+  });
+
+  bar.append(mark, titles, spacer, environment, user, logout);
   return bar;
+}
+
+/** REQ-400: the name, or the e-mail when there is none, as the server renders it. */
+async function showUser() {
+  try {
+    const user = await api.me();
+    document.querySelector('.app-bar__user').textContent = user.displayName;
+  } catch {
+    // A 401 already sent the operator to the login; anything else leaves the
+    // bar without a name, and the page reports its own failures.
+  }
 }
 
 function buildNav(current) {
@@ -195,6 +229,8 @@ function mount() {
   const host = document.createElement('div');
   host.className = 'snackbar-host';
   document.body.append(host);
+
+  void showUser();
 }
 
 mount();
