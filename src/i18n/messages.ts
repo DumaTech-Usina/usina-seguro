@@ -1,4 +1,5 @@
 import type { CommissionMessageKey } from '../core/commission/domain/errors.ts';
+import type { IdentityMessageKey } from '../core/identity/domain/errors.ts';
 import type { NotificationMessageKey } from '../core/notification/domain/errors.ts';
 import type { PolicyMessageKey } from '../core/policy/domain/errors.ts';
 import type { ProposalMessageKey } from '../core/proposal/domain/errors.ts';
@@ -22,7 +23,8 @@ export type MessageKey =
   | PolicyMessageKey
   | CommissionMessageKey
   | RegistryMessageKey
-  | NotificationMessageKey;
+  | NotificationMessageKey
+  | IdentityMessageKey;
 
 export type Locale = 'pt-BR';
 
@@ -118,6 +120,13 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
 
     'notification.recipient_required':
       'Notificação de emissão efetivada exige a identificação do corretor destinatário.',
+
+    'identity.email_required': 'Informe o e-mail.',
+    'identity.email_already_active': 'Já existe um usuário ativo com este e-mail.',
+    'identity.password_length': 'A senha deve ter de {min} a {max} caracteres.',
+    'identity.invalid_link': 'Este link não é válido ou já expirou.',
+    'identity.login_refused':
+      'Não foi possível entrar. Confira o e-mail e a senha ou tente novamente mais tarde.',
   },
 };
 

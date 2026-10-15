@@ -16,6 +16,12 @@ export interface Config {
   readonly http: {
     readonly port: number;
     readonly host: string;
+    /**
+     * Where people reach the system, without a trailing slash: the base of
+     * the links sent by e-mail (REQ-420, REQ-425) and the origin a changing
+     * request must come from (REQ-417).
+     */
+    readonly publicUrl: string;
   };
   readonly persistence:
     | { readonly driver: 'memory' }
@@ -33,11 +39,15 @@ export class InvalidConfiguration extends Error {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const port = readPort(env.PORT);
+  const host = env.HOST?.trim() || '127.0.0.1';
+
   return {
     env: readEnvironment(env.NODE_ENV),
     http: {
-      port: readPort(env.PORT),
-      host: env.HOST?.trim() || '127.0.0.1',
+      port,
+      host,
+      publicUrl: readPublicUrl(env.APP_BASE_URL, host, port),
     },
     persistence: readPersistence(env),
   };
@@ -62,6 +72,22 @@ function readPort(value: string | undefined): number {
     throw new InvalidConfiguration(`Invalid PORT: '${value}'.`);
   }
   return port;
+}
+
+function readPublicUrl(value: string | undefined, host: string, port: number): string {
+  const url = value?.trim() || `http://${host}:${port}`;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new InvalidConfiguration(`Invalid APP_BASE_URL: '${value}'. Use an http(s) URL.`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new InvalidConfiguration(`Invalid APP_BASE_URL: '${value}'. Use an http(s) URL.`);
+  }
+
+  return url.replace(/\/+$/, '');
 }
 
 function readPersistence(env: NodeJS.ProcessEnv): Config['persistence'] {

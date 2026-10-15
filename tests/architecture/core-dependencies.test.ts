@@ -103,6 +103,11 @@ describe('core dependency rule', () => {
       // on the proposal (REQ-201, REQ-202), and the names come from IN-01.
       'notification -> proposal',
       'notification -> registry',
+      // V2 section 9C: the access module throws the shared
+      // `BusinessRuleViolation` and nothing else crosses this way. No business
+      // module depends on it: a signed act receives its author as a string
+      // (REQ-216), resolved outside the core.
+      'identity -> proposal',
     ];
 
     const crossings = new Set<string>();

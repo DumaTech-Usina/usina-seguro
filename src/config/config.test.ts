@@ -29,4 +29,22 @@ describe('loadConfig', () => {
   it('rejects an invalid port', () => {
     expect(() => loadConfig({ PORT: '99999' })).toThrow(InvalidConfiguration);
   });
+
+  it('builds the public base URL from host and port when none is given', () => {
+    expect(loadConfig({}).http.publicUrl).toBe('http://127.0.0.1:3000');
+    expect(loadConfig({ HOST: 'localhost', PORT: '8080' }).http.publicUrl).toBe(
+      'http://localhost:8080',
+    );
+  });
+
+  it('reads the public base URL the links of e-mails are built on, without a trailing slash', () => {
+    expect(loadConfig({ APP_BASE_URL: 'https://usina.example/ ' }).http.publicUrl).toBe(
+      'https://usina.example',
+    );
+  });
+
+  it('rejects a public base URL that is not http or https', () => {
+    expect(() => loadConfig({ APP_BASE_URL: 'usina.example' })).toThrow(InvalidConfiguration);
+    expect(() => loadConfig({ APP_BASE_URL: 'ftp://usina.example' })).toThrow(InvalidConfiguration);
+  });
 });

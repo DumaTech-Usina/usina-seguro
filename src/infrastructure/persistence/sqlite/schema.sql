@@ -330,3 +330,54 @@ CREATE TABLE IF NOT EXISTS notification (
   net_premium        TEXT NOT NULL,
   occurred_at        TEXT NOT NULL
 );
+
+-- V2 section 9C: access to the system.
+--
+-- A user is never deleted (REQ-403, REQ-124): the signatures keep its id
+-- (REQ-216). The password is only the `scrypt` result, with its salt and
+-- parameters (REQ-416).
+CREATE TABLE IF NOT EXISTS app_user (
+  id                     TEXT    NOT NULL PRIMARY KEY,
+  -- REQ-400: the login, trimmed and in lower case.
+  email                  TEXT    NOT NULL,
+  name                   TEXT,
+  role                   TEXT    NOT NULL CHECK (role IN ('ADMINISTRATOR', 'USER')),
+  password_hash          TEXT    NOT NULL,
+  status                 TEXT    NOT NULL CHECK (status IN ('ACTIVE', 'DEACTIVATED')),
+  -- REQ-414: failures in a row and the end of a suspension of the login.
+  failed_login_attempts  INTEGER NOT NULL DEFAULT 0,
+  login_suspended_until  TEXT,
+  created_at             TEXT    NOT NULL
+);
+
+-- REQ-421: one active user per e-mail; a deactivated one does not block a new
+-- invitation to the same address. PostgreSQL has the same partial index.
+CREATE UNIQUE INDEX IF NOT EXISTS app_user_active_email
+  ON app_user (email) WHERE status = 'ACTIVE';
+
+-- REQ-420, REQ-421, REQ-422: a single-use link, kept as the SHA-256 of its
+-- token (REQ-416). Expiry is read from `expires_at`, not stored as a status.
+CREATE TABLE IF NOT EXISTS user_invitation (
+  id            TEXT NOT NULL PRIMARY KEY,
+  email         TEXT NOT NULL,
+  role          TEXT NOT NULL CHECK (role IN ('ADMINISTRATOR', 'USER')),
+  token_digest  TEXT NOT NULL UNIQUE,
+  -- Who invited (REQ-420); NULL for the first administrator (REQ-405).
+  invited_by    TEXT REFERENCES app_user (id),
+  invited_at    TEXT NOT NULL,
+  expires_at    TEXT NOT NULL,
+  status        TEXT NOT NULL CHECK (status IN ('PENDING', 'ACCEPTED', 'SUPERSEDED')),
+  accepted_at   TEXT,
+  CHECK ((status = 'ACCEPTED') = (accepted_at IS NOT NULL))
+);
+
+-- REQ-411, REQ-412: the session, kept on the server so that ending it is real.
+-- The cookie holds the token; this table only its SHA-256 (REQ-416).
+CREATE TABLE IF NOT EXISTS user_session (
+  id            TEXT NOT NULL PRIMARY KEY,
+  token_digest  TEXT NOT NULL UNIQUE,
+  user_id       TEXT NOT NULL REFERENCES app_user (id),
+  started_at    TEXT NOT NULL,
+  expires_at    TEXT NOT NULL,
+  ended_at      TEXT
+);

@@ -21,6 +21,14 @@ import type { ParcelledPayoutRepository } from './core/commission/application/pa
 import type { PayoutCommissionRepository } from './core/commission/application/payout-commission-repository.ts';
 import { ReviseParcelledPayoutRates } from './core/commission/application/revise-parcelled-payout-rates.ts';
 import { RevisePayoutRate } from './core/commission/application/revise-payout-rate.ts';
+import { AcceptInvitation } from './core/identity/application/accept-invitation.ts';
+import type { InvitationRepository } from './core/identity/application/invitation-repository.ts';
+import { IssueFirstAdministratorInvitation } from './core/identity/application/issue-first-administrator-invitation.ts';
+import { LogIn } from './core/identity/application/log-in.ts';
+import { LogOut } from './core/identity/application/log-out.ts';
+import { ResolveSession } from './core/identity/application/resolve-session.ts';
+import type { SessionRepository } from './core/identity/application/session-repository.ts';
+import type { UserRepository } from './core/identity/application/user-repository.ts';
 import { ListNotifications } from './core/notification/application/list-notifications.ts';
 import type { NotificationChannel } from './core/notification/application/notification-channel.ts';
 import type { NotificationRepository } from './core/notification/application/notification-repository.ts';
@@ -51,22 +59,30 @@ import { ProposalPdfReader, identifyByText } from './infrastructure/pdf/proposal
 import { ImmediateTransaction } from './infrastructure/persistence/in-memory/immediate-transaction.ts';
 import { InMemoryCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
 import { InMemoryDocumentStorage } from './infrastructure/persistence/in-memory/in-memory-document-storage.ts';
+import { InMemoryInvitationRepository } from './infrastructure/persistence/in-memory/in-memory-invitation-repository.ts';
 import { InMemoryNotificationRepository } from './infrastructure/persistence/in-memory/in-memory-notification-repository.ts';
 import { InMemoryParcelledPayoutRepository } from './infrastructure/persistence/in-memory/in-memory-parcelled-payout-repository.ts';
 import { InMemoryPayoutCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-payout-commission-repository.ts';
 import { InMemoryPolicyRepository } from './infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from './infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { InMemoryReferenceRepository } from './infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
+import { InMemorySessionRepository } from './infrastructure/persistence/in-memory/in-memory-session-repository.ts';
+import { InMemoryUserRepository } from './infrastructure/persistence/in-memory/in-memory-user-repository.ts';
 import { SqliteCommissionRepository } from './infrastructure/persistence/sqlite/sqlite-commission-repository.ts';
 import { openSqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.ts';
 import { SqliteDocumentStorage } from './infrastructure/persistence/sqlite/sqlite-document-storage.ts';
+import { SqliteInvitationRepository } from './infrastructure/persistence/sqlite/sqlite-invitation-repository.ts';
 import { SqliteNotificationRepository } from './infrastructure/persistence/sqlite/sqlite-notification-repository.ts';
 import { SqliteParcelledPayoutRepository } from './infrastructure/persistence/sqlite/sqlite-parcelled-payout-repository.ts';
 import { SqlitePayoutCommissionRepository } from './infrastructure/persistence/sqlite/sqlite-payout-commission-repository.ts';
 import { SqlitePolicyRepository } from './infrastructure/persistence/sqlite/sqlite-policy-repository.ts';
 import { SqliteProposalRepository } from './infrastructure/persistence/sqlite/sqlite-proposal-repository.ts';
 import { SqliteReferenceRepository } from './infrastructure/persistence/sqlite/sqlite-reference-repository.ts';
+import { SqliteSessionRepository } from './infrastructure/persistence/sqlite/sqlite-session-repository.ts';
 import { SqliteTransaction } from './infrastructure/persistence/sqlite/sqlite-transaction.ts';
+import { SqliteUserRepository } from './infrastructure/persistence/sqlite/sqlite-user-repository.ts';
+import { RandomSecretGenerator } from './infrastructure/security/random-secret-generator.ts';
+import { ScryptPasswordHasher } from './infrastructure/security/scrypt-password-hasher.ts';
 
 /**
  * Use cases exposed to the interface layer.
@@ -114,6 +130,15 @@ export interface UseCases {
   readonly registerReference: RegisterReference;
   readonly listReferences: ListReferences;
   readonly listNotifications: ListNotifications;
+  /**
+   * V2 section 9C: access to the system. `issueFirstAdministratorInvitation`
+   * is run by a command on the server (REQ-405), never over HTTP.
+   */
+  readonly issueFirstAdministratorInvitation: IssueFirstAdministratorInvitation;
+  readonly acceptInvitation: AcceptInvitation;
+  readonly logIn: LogIn;
+  readonly logOut: LogOut;
+  readonly resolveSession: ResolveSession;
 }
 
 export interface Application {
@@ -137,11 +162,17 @@ export function composeApplication(config: Config): Application {
     references,
     documents,
     notifications,
+    users,
+    invitations,
+    sessions,
     transaction,
     shutdown,
   } = composePersistence(config);
   const newId = (): string => randomUUID();
   const now = (): Date => new Date();
+  // REQ-416: what is stored in place of a password, a session or a link.
+  const hasher = new ScryptPasswordHasher();
+  const secrets = new RandomSecretGenerator();
 
   // FP-01 step 7. The policy module only sees the port it declared; this is
   // the single place where the two modules meet.
@@ -253,6 +284,26 @@ export function composeApplication(config: Config): Application {
       listReferences: new ListReferences({ references }),
       // OUT-10, REQ-105: what was notified, to whom and when.
       listNotifications: new ListNotifications({ notifications }),
+      // V2 section 9C: access to the system.
+      issueFirstAdministratorInvitation: new IssueFirstAdministratorInvitation({
+        users,
+        invitations,
+        secrets,
+        newId,
+        now,
+      }),
+      acceptInvitation: new AcceptInvitation({
+        users,
+        invitations,
+        hasher,
+        secrets,
+        transaction,
+        newId,
+        now,
+      }),
+      logIn: new LogIn({ users, sessions, hasher, secrets, newId, now }),
+      logOut: new LogOut({ sessions, secrets, now }),
+      resolveSession: new ResolveSession({ users, sessions, secrets, now }),
     },
     shutdown,
   };
@@ -267,6 +318,9 @@ interface Persistence {
   readonly references: ReferenceRepository;
   readonly documents: SourceDocumentStorage;
   readonly notifications: NotificationRepository;
+  readonly users: UserRepository;
+  readonly invitations: InvitationRepository;
+  readonly sessions: SessionRepository;
   readonly transaction: Transaction;
   readonly shutdown: () => Promise<void>;
 }
@@ -283,6 +337,9 @@ function composePersistence(config: Config): Persistence {
         references: new InMemoryReferenceRepository(),
         documents: new InMemoryDocumentStorage(),
         notifications: new InMemoryNotificationRepository(),
+        users: new InMemoryUserRepository(),
+        invitations: new InMemoryInvitationRepository(),
+        sessions: new InMemorySessionRepository(),
         transaction: new ImmediateTransaction(),
         shutdown: async () => {},
       };
@@ -298,6 +355,9 @@ function composePersistence(config: Config): Persistence {
         references: new SqliteReferenceRepository(db),
         documents: new SqliteDocumentStorage(db),
         notifications: new SqliteNotificationRepository(db),
+        users: new SqliteUserRepository(db),
+        invitations: new SqliteInvitationRepository(db),
+        sessions: new SqliteSessionRepository(db),
         transaction: new SqliteTransaction(db),
         shutdown: async () => db.close(),
       };
