@@ -83,6 +83,35 @@ Configuração por ambiente (ver [`.env.example`](./.env.example)); todos têm d
 | `PERSISTENCE_DRIVER` | `sqlite` | `memory` \| `sqlite` \| `postgres` |
 | `SQLITE_FILE` | `./data/usina.sqlite` | Só para o driver `sqlite` |
 | `DATABASE_URL` | — | Obrigatório para `postgres` |
+| `APP_BASE_URL` | `http://HOST:PORT` | Endereço público do sistema: base dos links de convite e de redefinição de senha |
+| `EMAIL_DRIVER` | `smtp` com `SMTP_HOST`, senão `log` | `smtp` \| `log` (escreve o e-mail na saída do servidor) \| `memory` (testes) |
+| `SMTP_HOST` / `SMTP_PORT` | — / `587` | Servidor SMTP da Usina |
+| `SMTP_SECURE` | `false` | `true` para TLS implícito (porta 465); `false` usa STARTTLS |
+| `SMTP_USER` / `SMTP_PASSWORD` | — | Juntos ou nenhum |
+| `SMTP_FROM` | — | Remetente; obrigatório com SMTP |
+
+Em `production` o cookie de sessão sai com `Secure`: o serviço precisa estar atrás de HTTPS.
+
+### Acesso (V2, seção 9C)
+
+Toda operação exige login, exceto `/health`, as páginas de `/app/`, o login, o aceite de
+convite e a redefinição de senha (`REQ-410`). São dois papéis: **Usuário** (todo o
+negócio) e **Administrador** (o mesmo, mais a gestão de usuários em `/app/users/`).
+
+```bash
+# O primeiro administrador: imprime um link de convite (REQ-405)
+npm run first-admin -- admin@usina.com.br
+
+# Ou um usuário já com senha, pedida sem eco — nunca como argumento (REQ-407)
+npm run create-user -- --email=dev@email.com --role=admin [--name="Dev"]
+
+# Login pela API: a sessão fica num cookie HttpOnly
+curl -c cookies.txt -X POST http://127.0.0.1:3000/auth/login \
+  -H 'content-type: application/json' -d '{"email":"dev@email.com","password":"..."}'
+```
+
+Sem SMTP configurado, o link de um convite volta ao administrador na tela, para ele
+repassar (`REQ-436`), e o e-mail de redefinição de senha é escrito na saída do servidor.
 
 Prova de vida:
 
@@ -91,27 +120,51 @@ curl http://127.0.0.1:3000/health
 # {"status":"ok"}
 ```
 
-Fluxo `FP-01` completo:
+Fluxo `FP-01` completo — com a sessão do login acima (`-b cookies.txt` em cada chamada,
+omitido aqui). Quem assina cada ato é o usuário da sessão (`REQ-216`): nada é digitado
+para assinar.
 
 ```bash
+# 0. Cadastrar o corretor (seção 9D da V2): nome e CPF válido e único; o cadastro
+#    e cada alteração ficam no histórico, assinados (REQ-304). Não há exclusão.
+curl -X POST http://127.0.0.1:3000/brokers -H 'content-type: application/json' \
+  -d '{"name":"Corretora Alfa","cpf":"529.982.247-25"}'
+# 201 {"id":"<corretor>","name":"Corretora Alfa","cpf":"52998224725","history":[...]}
+curl 'http://127.0.0.1:3000/brokers?q=alfa'          # busca por nome ou CPF (REQ-306)
+curl -X POST http://127.0.0.1:3000/brokers/<corretor>/revision \
+  -H 'content-type: application/json' -d '{"name":"Corretora Alfa Ltda","cpf":"52998224725"}'
+
 # 1. Registrar a proposta com todos os dados de REQ-202 — só as parcelas são
 #    opcionais com CT integral —, a CT e o seu modo (REQ-213) e o recebimento
 #    direto ou através de intermediária (REQ-220). Quem informa assina (REQ-216).
+#    O corretor é o id de um corretor cadastrado (REQ-307). O cliente vai por nome
+#    e CPF (REQ-317): um CPF já cadastrado usa o cliente existente, sem alterá-lo;
+#    um CPF novo cadastra o cliente, no mesmo ato.
 curl -X POST http://127.0.0.1:3000/proposals -H 'content-type: application/json' -d '{
-  "clientId":"client-1","brokerId":"broker-1","insurerId":"insurer-1","productId":"auto",
+  "client":{"name":"Ana Lima","cpf":"111.444.777-35"},
+  "brokerId":"<corretor>","insurerId":"insurer-1","productId":"auto",
   "paymentMethodId":"bank-slip","proposalNumber":"PRP-9001","netPremium":"1200.00",
   "coverageStart":"2026-10-01","coverageEnd":"2027-10-01",
   "installments":[{"amount":"600.00","dueDate":"2026-10-10"},{"amount":"600.00"}],
-  "workedCommission":"35","workedCommissionMode":"INTEGRAL","intermediary":null,
-  "userId":"ana"
+  "workedCommission":"35","workedCommissionMode":"INTEGRAL","intermediary":null
 }'
-# 201 {"id":"<proposta>","status":"AWAITING_ISSUANCE","proposalNumber":"PRP-9001",
-#      "renewalDate":"2027-10-01","expectedReceipt":{"intermediary":null,"usina":"420.00"},...}
+# 201 {"id":"<proposta>","clientId":"<cliente>","status":"AWAITING_ISSUANCE",
+#      "proposalNumber":"PRP-9001","renewalDate":"2027-10-01",
+#      "expectedReceipt":{"intermediary":null,"usina":"420.00"},...}
+
+# 1a. Clientes (seção 9E da V2): mesmo modelo do corretor — nome e CPF válido e
+#     único, histórico assinado, sem exclusão. Propostas e apólices são buscadas
+#     pelo nome ou CPF do cliente (REQ-319).
+curl 'http://127.0.0.1:3000/clients?q=lima'          # busca por nome ou CPF (REQ-316)
+curl -X POST http://127.0.0.1:3000/clients/<cliente>/revision \
+  -H 'content-type: application/json' -d '{"name":"Ana Lima Souza","cpf":"11144477735"}'
+curl 'http://127.0.0.1:3000/proposals?status=AWAITING_ISSUANCE&client=111.444'
+curl 'http://127.0.0.1:3000/policies?client=lima'
 
 # 2. Enquanto aguarda emissão, a CT pode ser corrigida, com autoria (REQ-214, REQ-215).
 curl -X POST http://127.0.0.1:3000/proposals/<proposta>/worked-commission \
   -H 'content-type: application/json' \
-  -d '{"workedCommission":"40","workedCommissionMode":"INTEGRAL","userId":"bruno"}'
+  -d '{"workedCommission":"40","workedCommissionMode":"INTEGRAL"}'
 # 200 {"workedCommission":"40","expectedReceipt":{"intermediary":null,"usina":"480.00"},...}
 
 # 3. Em aberto, rastreável (REQ-043, OUT-01)
@@ -129,7 +182,7 @@ curl -X POST http://127.0.0.1:3000/proposals/<proposta>/rejection \
 #     (REQ-209). Cria a apólice, que herda todos os dados da proposta — o número
 #     é o da proposta e nada é redigitado (REQ-240, REQ-241, REQ-242).
 curl -X POST http://127.0.0.1:3000/policies -H 'content-type: application/json' \
-  -d '{"proposalId":"<proposta>","userId":"carla.dias"}'
+  -d '{"proposalId":"<proposta>"}'
 # 201 {"id":"<apolice>","policyNumber":"PRP-9001","proposalNumber":"PRP-9001",
 #      "status":"ACTIVE","installments":[{"number":1,...,"status":"PENDING"},...]}
 #     O PDF da apólice pode ir junto ou depois (REQ-247): POST /policies/<apolice>/document
@@ -170,14 +223,14 @@ Comissão acordada e `FP-02`:
 
 ```bash
 # 0a. Cadastros de referência (IN-01): dão nome a quem aparece na operação.
-#     Nada é validado contra eles — uma proposta pode nomear um cliente que
+#     Nada é validado contra eles — uma proposta pode nomear uma seguradora que
 #     ninguém cadastrou (REQ-002); o que falta nesse caso é o nome, não o negócio.
 curl -X POST http://127.0.0.1:3000/references \
   -H 'content-type: application/json' \
-  -d '{"kind":"CLIENT","id":"client-1","name":"Ana Lima"}'
-# kind: CLIENT | BROKER | INSURER | INTERMEDIARY | PRODUCT. Cobertura não existe:
-# nenhuma regra confirmada lê uma cobertura.
-curl 'http://127.0.0.1:3000/references?kind=CLIENT'
+  -d '{"kind":"INSURER","id":"insurer-1","name":"Seguradora Norte"}'
+# kind: INSURER | INTERMEDIARY | PRODUCT. Corretor e cliente têm cadastro próprio
+# (/brokers, /clients). Cobertura não existe: nenhuma regra confirmada lê uma cobertura.
+curl 'http://127.0.0.1:3000/references?kind=INSURER'
 
 # 1. A comissão acordada nasce junto com a apólice, calculada pela CT (ou CT → CTU)
 #    da proposta (REQ-236): nada a chamar.
@@ -191,14 +244,13 @@ curl http://127.0.0.1:3000/commissions
 curl http://127.0.0.1:3000/policies/<apolice>/payout
 # {"situation":"WITHOUT_CR","usinaValue":"480.00","commission":null,...}
 curl -X POST http://127.0.0.1:3000/policies/<apolice>/payout \
-  -H 'content-type: application/json' -d '{"rate":"60","userId":"ana"}'
+  -H 'content-type: application/json' -d '{"rate":"60"}'
 # 201 {"situation":"CALCULATED","commission":{"payout":"288.00","retained":"192.00",...}}
 curl -X POST http://127.0.0.1:3000/policies/<apolice>/payout/revision \
-  -H 'content-type: application/json' -d '{"rate":"50","reason":"renegociado","userId":"bruno"}'
+  -H 'content-type: application/json' -d '{"rate":"50","reason":"renegociado"}'
 
 # 4. Elegibilidade assinada (REQ-281–REQ-283): gera o extrato de elegibilidade.
-curl -X POST http://127.0.0.1:3000/policies/<apolice>/payout/eligibility \
-  -H 'content-type: application/json' -d '{"userId":"carla"}'
+curl -X POST http://127.0.0.1:3000/policies/<apolice>/payout/eligibility
 
 # 5. Consultas (REQ-284, REQ-286).
 curl 'http://127.0.0.1:3000/payouts/eligible?broker=alfa&renewalFrom=2027-01&renewalUntil=2027-12'
@@ -225,12 +277,11 @@ Rejeições, com a regra e o texto traduzido na resposta:
 # Ajuste de comissão sem justificativa (CA-015, REJ-010)
 # 422 {"rule":"REQ-067","message":"Ajuste de comissão por apólice exige justificativa."}
 
-# Reconhecimento da emissão sem identificar quem reconheceu (REJ-205, REQ-216)
-# 422 {"rule":"REQ-216","message":"Informe quem está registrando esta informação."}
+# Sem sessão (REQ-410)
+# 401 {"error":"unauthenticated","message":"Entre no sistema para continuar."}
 
-# Confirmação de recebimento sem usuário (REQ-123)
-# 422 {"rule":"REQ-123",
-#      "message":"Confirmação de pagamento da parcela 1 exige a identificação do usuário."}
+# Usuário na gestão de usuários (REQ-430)
+# 403 {"error":"forbidden","message":"Somente um administrador pode fazer isto."}
 
 # Proposta ou apólice inexistente
 # 404 {"error":"not_found","message":"Proposta não encontrada: '...'."}
@@ -260,6 +311,7 @@ O que existe hoje:
 | Comissões: a comissão acordada de todas as apólices (`OUT-05`) | `/app/commissions/` | Pronta |
 | Repasses: apólices sem CR e comissões elegíveis (`REQ-284`, `REQ-286`) | `/app/payouts/` | Pronta — o pagamento acontece fora do sistema (`REQ-280`) |
 | Cadastros de referência (`IN-01`) | `/app/settings/` | Pronta (cobertura fora) |
+| Clientes: cadastro, busca por nome ou CPF, alteração e histórico (seção 9E da V2) | `/app/clients/` | Pronta — sem exclusão (`REQ-315`) |
 | Apólices: vendidas e a vencer (`OUT-03`, `OUT-04`) | `/app/policies/` | Pronta — o corte por data de renovação é informado pelo operador (`CA-032` não define a janela) |
 | Notificações de emissão efetivada (`OUT-10`, `REQ-100`) | `/app/notifications/` | Pronta — só leitura; a entrega é interna (`REQ-102`) |
 
@@ -271,9 +323,11 @@ emissão (`REQ-100`), com o caminho de volta para a apólice. `FP-01` separa ess
 tempo de propósito: a seguradora responde depois, e o desfecho é registrado na própria
 proposta, não no formulário de cadastro.
 
-Cadastre as **referências de `IN-01`** (cliente, corretor, seguradora, intermediária,
-produto/ramo): é o que faz as telas dizerem *Ana Lima* em vez de `client-1`. Nenhuma tela
-exige esse cadastro — sem ele o identificador aparece como sempre apareceu.
+Cadastre as **referências de `IN-01`** (seguradora, intermediária, produto/ramo): é o que
+faz as telas dizerem *Seguradora Norte* em vez de `insurer-1`. Nenhuma tela exige esse
+cadastro — sem ele o identificador aparece como sempre apareceu. Corretores e clientes têm
+páginas próprias (_Corretores_, _Clientes_); o cliente também é cadastrado ao registrar uma
+proposta com um CPF novo (`REQ-317`).
 
 **Sem build.** Não há bundler, transpilador nem framework: o que é servido é o que está
 em disco — HTML, CSS e ES modules nativos. Por isso o código de browser é `.js` e não
