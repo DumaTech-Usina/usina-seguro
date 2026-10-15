@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
-import { BusinessRuleViolation } from '../domain/errors.ts';
+import { BusinessRuleViolation, PROPOSAL_MESSAGES } from '../domain/errors.ts';
 import { RegisterProposal, type RegisterProposalInput } from './register-proposal.ts';
 
 const NOW = new Date('2026-09-22T12:00:00.000Z');
+
+/** REQ-307: the brokers the registry knows, as the port answers it. */
+function registeredBrokers(...ids: string[]) {
+  return { isRegistered: async (id: string) => ids.includes(id) };
+}
 
 function scenario() {
   const proposals = new InMemoryProposalRepository();
@@ -13,6 +18,7 @@ function scenario() {
   const useCase = new RegisterProposal({
     proposals,
     documents,
+    brokers: registeredBrokers('broker-1'),
     newId: () => (sequence++ === 0 ? 'fixed-id' : `id-${sequence}`),
     now: () => NOW,
   });
@@ -45,6 +51,35 @@ function input(overrides: Partial<RegisterProposalInput> = {}): RegisterProposal
 }
 
 describe('RegisterProposal', () => {
+  it('refuses a broker that is not registered, and stores nothing (REQ-307, REJ-304)', async () => {
+    const { proposals, documents, useCase } = scenario();
+
+    const error = await useCase
+      .execute(
+        input({
+          brokerId: 'Corretora Digitada',
+          sourceDocument: { fileName: 'p.pdf', contentType: 'application/pdf', content: PDF_BYTES },
+        }),
+      )
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(BusinessRuleViolation);
+    expect((error as BusinessRuleViolation).rule).toBe('REQ-307');
+    expect((error as BusinessRuleViolation).messageKey).toBe(
+      PROPOSAL_MESSAGES.BROKER_NOT_REGISTERED,
+    );
+    expect(await proposals.list({})).toEqual([]);
+    expect(await documents.findById('id-2')).toBeNull();
+  });
+
+  it('keeps the id of the broker chosen (REQ-307, CA-304)', async () => {
+    const { proposals, useCase } = scenario();
+
+    await useCase.execute(input());
+
+    expect((await proposals.findById('fixed-id'))?.brokerId).toBe('broker-1');
+  });
+
   it('persists the proposal awaiting issuance and answers what it holds (FP-01 steps 1-6)', async () => {
     const { proposals, useCase } = scenario();
 
@@ -148,6 +183,7 @@ describe('RegisterProposal', () => {
     const useCase = new RegisterProposal({
       proposals,
       documents: new InMemoryDocumentStorage(),
+      brokers: registeredBrokers('broker-1'),
       newId: () => `id-${++next}`,
       now: () => NOW,
     });

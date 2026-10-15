@@ -1,5 +1,7 @@
 import { Authorship } from '../../proposal/domain/authorship.ts';
 import { BusinessRuleViolation } from '../../proposal/domain/errors.ts';
+import { brokerNameOf } from '../../registry/application/broker-name.ts';
+import type { BrokerRepository } from '../../registry/application/broker-repository.ts';
 import { COMMISSION_MESSAGES } from '../domain/errors.ts';
 import {
   type ParcelledPayoutDependencies,
@@ -23,10 +25,15 @@ export interface DeclareInstallmentEligibilityInput {
  * confirmation of its receipt — and its statement is generated. The CRs must
  * exist, even if zero (REQ-288); nothing is paid or moved (REQ-280).
  */
-export class DeclareInstallmentEligibility {
-  private readonly deps: ParcelledPayoutDependencies;
+export interface DeclareInstallmentEligibilityDependencies extends ParcelledPayoutDependencies {
+  /** REQ-308: the statement keeps the broker's name as it is at eligibility. */
+  readonly brokers: BrokerRepository;
+}
 
-  constructor(deps: ParcelledPayoutDependencies) {
+export class DeclareInstallmentEligibility {
+  private readonly deps: DeclareInstallmentEligibilityDependencies;
+
+  constructor(deps: DeclareInstallmentEligibilityDependencies) {
     this.deps = deps;
   }
 
@@ -48,8 +55,9 @@ export class DeclareInstallmentEligibility {
       input.number,
       {
         policyNumber: policy.policyNumber,
-        // DEC-208: the parties are, for now, the names the proposal carries.
-        broker: proposal.brokerId,
+        // REQ-308: the broker's name now, kept as it is. DEC-208 is still open
+        // for the insurer and the client: they are what the proposal carries.
+        broker: await brokerNameOf(this.deps.brokers, proposal.brokerId),
         insurer: proposal.insurerId,
         client: proposal.clientId,
       },

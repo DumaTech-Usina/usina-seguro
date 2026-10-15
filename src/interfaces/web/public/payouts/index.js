@@ -11,6 +11,7 @@
 
 import { ApiError, api } from '/app/shared/api.js';
 import { authorName, loadAuthors } from '/app/shared/authors.js';
+import { brokerName, loadBrokers } from '/app/shared/brokers.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
 import { reportError } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
@@ -89,7 +90,8 @@ function failure(region, title, error) {
 async function loadWithoutRate() {
   let lines;
   try {
-    lines = await api.listPoliciesWithoutPayoutRate();
+    // REQ-308: the lines carry the broker's id; the registry gives the name.
+    [lines] = await Promise.all([api.listPoliciesWithoutPayoutRate(), loadBrokers()]);
   } catch (error) {
     failure(withoutRate, 'Não foi possível carregar as apólices sem CR', error);
     return;
@@ -123,7 +125,7 @@ async function loadWithoutRate() {
         row.append(
           element('td', 'policy-number', line.policyNumber),
           element('td', undefined, line.client),
-          element('td', undefined, line.broker),
+          element('td', undefined, brokerName(line.broker)),
           element('td', 'is-numeric', formatMoney(line.usinaValue)),
           element('td', undefined, formatDate(line.renewalDate)),
           policyLink(line.policyId, 'Informar CR'),
@@ -143,7 +145,7 @@ async function loadWithoutRate() {
 async function loadParcelled() {
   let lines;
   try {
-    lines = await api.listParcelledPolicies();
+    [lines] = await Promise.all([api.listParcelledPolicies(), loadBrokers()]);
   } catch (error) {
     failure(parcelled, 'Não foi possível carregar as apólices parceladas', error);
     return;
@@ -175,7 +177,7 @@ async function loadParcelled() {
         row.append(
           element('td', 'policy-number', line.policyNumber),
           element('td', undefined, line.client),
-          element('td', undefined, line.broker),
+          element('td', undefined, brokerName(line.broker)),
           element('td', undefined, formatDate(line.renewalDate)),
           situation,
           policyLink(line.policyId, 'Abrir apólice'),

@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { chooseBroker, registerBroker } from './support/brokers.ts';
 import { TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
@@ -32,6 +33,8 @@ let directory: string;
 let application: Application;
 let app: FastifyInstance;
 let baseUrl: string;
+/** REQ-307: the registered broker the proposals name. */
+let brokerId: string;
 
 const requests: string[] = [];
 
@@ -83,6 +86,7 @@ beforeAll(async () => {
 
   // REQ-410: every journey starts logged in, as the test user.
   await signIn(application.useCases, baseUrl);
+  brokerId = await registerBroker(baseUrl, 'Corretora Alfa', 1);
 
   const nodeFetch = globalThis.fetch;
   globalThis.fetch = ((input: Untyped, init: Untyped) => {
@@ -221,7 +225,7 @@ const THREE_OF_100 = [{ amount: '100.00' }, { amount: '100.00' }, { amount: '100
 async function awaitingProposal(overrides: Record<string, unknown> = {}): Promise<string> {
   const proposal = await callApi('POST', '/proposals', {
     clientId: 'Ana Lima',
-    brokerId: 'Corretora Alfa',
+    brokerId,
     insurerId: 'ALLIANZ',
     productId: 'Auto',
     paymentMethodId: 'credit',
@@ -305,7 +309,6 @@ describe('registering a parcelled proposal (REQ-290 to REQ-296)', () => {
 
     for (const [name, value] of Object.entries({
       clientId: 'Ana Lima',
-      brokerId: 'Corretora Alfa',
       insurerId: 'ALLIANZ',
       productId: 'Auto',
       paymentMethodId: 'credit',
@@ -316,6 +319,7 @@ describe('registering a parcelled proposal (REQ-290 to REQ-296)', () => {
     })) {
       field('#form-proposal', name).value = value;
     }
+    await chooseBroker(document, window, 'alfa', 'Corretora Alfa');
     choose('#form-proposal', 'workedCommissionMode', 'PARCELLED');
     field('#form-proposal', 'workedCommission').value = '100';
     field('#form-proposal', 'subsequentWorkedCommission').value = '30';
@@ -353,7 +357,6 @@ describe('registering a parcelled proposal (REQ-290 to REQ-296)', () => {
 
     for (const [name, value] of Object.entries({
       clientId: 'Ana Lima',
-      brokerId: 'Corretora Alfa',
       insurerId: 'ALLIANZ',
       productId: 'Auto',
       paymentMethodId: 'credit',
@@ -364,6 +367,7 @@ describe('registering a parcelled proposal (REQ-290 to REQ-296)', () => {
     })) {
       field('#form-proposal', name).value = value;
     }
+    await chooseBroker(document, window, 'alfa', 'Corretora Alfa');
     choose('#form-proposal', 'workedCommissionMode', 'PARCELLED');
     field('#form-proposal', 'workedCommission').value = '100';
     field('#form-proposal', 'subsequentWorkedCommission').value = '30';

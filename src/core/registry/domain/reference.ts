@@ -4,19 +4,20 @@ import { REGISTRY_MESSAGES } from './errors.ts';
 /**
  * The kinds of record IN-01 asks to be maintained.
  *
- * These are the entities the input names one by one — client, broker, insurer,
+ * These are the entities the input names one by one — client, insurer,
  * intermediary, product — so the set is the requirement's, not a shape chosen
- * here. Two of them the document also lists are absent on purpose:
+ * here. The broker left this registry: it has a CPF and a signed history of its
+ * own (`Broker`, V2 section 9D). Two kinds the document also lists are absent
+ * on purpose:
  *
  * - **cobertura**: no confirmed rule reads a coverage anywhere in the system,
  *   so registering one would write rows nothing consumes;
  * - **forma de pagamento**: it is not in IN-01.
  */
-export type ReferenceKind = 'CLIENT' | 'BROKER' | 'INSURER' | 'INTERMEDIARY' | 'PRODUCT';
+export type ReferenceKind = 'CLIENT' | 'INSURER' | 'INTERMEDIARY' | 'PRODUCT';
 
 export const REFERENCE_KINDS: readonly ReferenceKind[] = [
   'CLIENT',
-  'BROKER',
   'INSURER',
   'INTERMEDIARY',
   'PRODUCT',
@@ -26,8 +27,7 @@ export interface ReferenceData {
   readonly kind: ReferenceKind;
   /**
    * The identifier the rest of the system already stores (REQ-022): the same
-   * string a proposal carries in `clientId`, `brokerId`, `insurerId` or
-   * `productId`, and an agreement carries in `intermediaryId`.
+   * string a proposal carries in `clientId`, `insurerId` or `productId`, and an agreement carries in `intermediaryId`.
    *
    * The registry does not hand out identifiers and nothing validates a
    * proposal against it. No requirement says a reference must exist before it
@@ -44,10 +44,10 @@ export interface ReferenceData {
 /**
  * A reference record the Administrator maintains (IN-01, ATR-003).
  *
- * One aggregate for the five kinds because the requirements give them exactly
+ * One aggregate for the four kinds because the requirements give them exactly
  * the same content: an identifier the business already uses and a name. The
  * document says nothing else about any of them — no document number, no
- * address, no contact — and five files differing only in a word would be
+ * address, no contact — and four files differing only in a word would be
  * structure nothing asks for. The day a requirement gives one of them a field
  * of its own, that kind becomes its own aggregate; `kind` is what keeps that
  * split cheap.

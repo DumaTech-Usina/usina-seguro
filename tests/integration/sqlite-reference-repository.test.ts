@@ -80,7 +80,7 @@ describe('the reference registry on SQLite (IN-01)', () => {
 
   it('keeps the same identifier of two different kinds apart', async () => {
     await references.save(reference('CLIENT', 'alfa', 'Alfa Transportes'));
-    await references.save(reference('BROKER', 'alfa', 'Corretora Alfa'));
+    await references.save(reference('INSURER', 'alfa', 'Seguradora Alfa'));
 
     const listed = await new ListReferences({ references }).execute();
 

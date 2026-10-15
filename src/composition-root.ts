@@ -65,8 +65,13 @@ import { ReviseInstallments } from './core/proposal/application/revise-installme
 import { ReviseReceipt } from './core/proposal/application/revise-receipt.ts';
 import { ReviseWorkedCommission } from './core/proposal/application/revise-worked-commission.ts';
 import type { SourceDocumentStorage } from './core/proposal/application/source-document-storage.ts';
+import type { BrokerRepository } from './core/registry/application/broker-repository.ts';
+import { ChangeBroker } from './core/registry/application/change-broker.ts';
+import { GetBroker } from './core/registry/application/get-broker.ts';
+import { ListBrokers } from './core/registry/application/list-brokers.ts';
 import { ListReferences } from './core/registry/application/list-references.ts';
 import type { ReferenceRepository } from './core/registry/application/reference-repository.ts';
+import { RegisterBroker } from './core/registry/application/register-broker.ts';
 import { RegisterReference } from './core/registry/application/register-reference.ts';
 import {
   InMemoryAccessMailer,
@@ -76,6 +81,7 @@ import { LogAccessMailer } from './infrastructure/email/log-access-mailer.ts';
 import { SmtpAccessMailer } from './infrastructure/email/smtp-access-mailer.ts';
 import { ProposalPdfReader, identifyByText } from './infrastructure/pdf/proposal-pdf-reader.ts';
 import { ImmediateTransaction } from './infrastructure/persistence/in-memory/immediate-transaction.ts';
+import { InMemoryBrokerRepository } from './infrastructure/persistence/in-memory/in-memory-broker-repository.ts';
 import { InMemoryCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
 import { InMemoryDocumentStorage } from './infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryInvitationRepository } from './infrastructure/persistence/in-memory/in-memory-invitation-repository.ts';
@@ -89,6 +95,7 @@ import { InMemoryReferenceRepository } from './infrastructure/persistence/in-mem
 import { InMemoryRoleChangeRepository } from './infrastructure/persistence/in-memory/in-memory-role-change-repository.ts';
 import { InMemorySessionRepository } from './infrastructure/persistence/in-memory/in-memory-session-repository.ts';
 import { InMemoryUserRepository } from './infrastructure/persistence/in-memory/in-memory-user-repository.ts';
+import { SqliteBrokerRepository } from './infrastructure/persistence/sqlite/sqlite-broker-repository.ts';
 import { SqliteCommissionRepository } from './infrastructure/persistence/sqlite/sqlite-commission-repository.ts';
 import { openSqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.ts';
 import { SqliteDocumentStorage } from './infrastructure/persistence/sqlite/sqlite-document-storage.ts';
@@ -152,6 +159,11 @@ export interface UseCases {
   readonly listParcelledPolicies: ListParcelledPolicies;
   readonly registerReference: RegisterReference;
   readonly listReferences: ListReferences;
+  /** V2 section 9D: the brokers. There is no removal (REQ-305). */
+  readonly registerBroker: RegisterBroker;
+  readonly changeBroker: ChangeBroker;
+  readonly getBroker: GetBroker;
+  readonly listBrokers: ListBrokers;
   readonly listNotifications: ListNotifications;
   /**
    * V2 section 9C: access to the system. `issueFirstAdministratorInvitation`
@@ -201,6 +213,7 @@ export function composeApplication(config: Config): Application {
     payouts,
     parcelledPayouts,
     references,
+    brokers,
     documents,
     notifications,
     users,
@@ -240,14 +253,27 @@ export function composeApplication(config: Config): Application {
     notifications,
     proposals,
     references,
+    brokers,
     channels: [] as readonly NotificationChannel[],
     newId,
   });
 
+  // REQ-307: the proposal module asks only whether an id is a registered
+  // broker; the registry answers it here.
+  const registeredBrokers = {
+    isRegistered: async (brokerId: string) => (await brokers.findById(brokerId)) !== null,
+  };
+
   return {
     useCases: {
       // REQ-219: the imported PDF is kept with the proposal.
-      registerProposal: new RegisterProposal({ proposals, documents, newId, now }),
+      registerProposal: new RegisterProposal({
+        proposals,
+        documents,
+        brokers: registeredBrokers,
+        newId,
+        now,
+      }),
       reviseWorkedCommission: new ReviseWorkedCommission({ proposals, now }),
       reviseReceipt: new ReviseReceipt({ proposals, now }),
       reviseInstallments: new ReviseInstallments({ proposals, now }),
@@ -290,6 +316,7 @@ export function composeApplication(config: Config): Application {
         policies,
         proposals,
         payouts,
+        brokers,
         newId,
         now,
       }),
@@ -319,6 +346,7 @@ export function composeApplication(config: Config): Application {
         policies,
         proposals,
         parcelledPayouts,
+        brokers,
         newId,
         now,
       }),
@@ -326,6 +354,11 @@ export function composeApplication(config: Config): Application {
       // IN-01: the reference records every listing above resolves names from.
       registerReference: new RegisterReference({ references, now }),
       listReferences: new ListReferences({ references }),
+      // V2 section 9D: the brokers, signed by the session's user (REQ-304).
+      registerBroker: new RegisterBroker({ brokers, newId, now }),
+      changeBroker: new ChangeBroker({ brokers, now }),
+      getBroker: new GetBroker({ brokers }),
+      listBrokers: new ListBrokers({ brokers }),
       // OUT-10, REQ-105: what was notified, to whom and when.
       listNotifications: new ListNotifications({ notifications }),
       // V2 section 9C: access to the system.
@@ -385,6 +418,7 @@ interface Persistence {
   readonly payouts: PayoutCommissionRepository;
   readonly parcelledPayouts: ParcelledPayoutRepository;
   readonly references: ReferenceRepository;
+  readonly brokers: BrokerRepository;
   readonly documents: SourceDocumentStorage;
   readonly notifications: NotificationRepository;
   readonly users: UserRepository;
@@ -406,6 +440,7 @@ function composePersistence(config: Config): Persistence {
         payouts: new InMemoryPayoutCommissionRepository(),
         parcelledPayouts: new InMemoryParcelledPayoutRepository(),
         references: new InMemoryReferenceRepository(),
+        brokers: new InMemoryBrokerRepository(),
         documents: new InMemoryDocumentStorage(),
         notifications: new InMemoryNotificationRepository(),
         users: new InMemoryUserRepository(),
@@ -426,6 +461,7 @@ function composePersistence(config: Config): Persistence {
         payouts: new SqlitePayoutCommissionRepository(db),
         parcelledPayouts: new SqliteParcelledPayoutRepository(db),
         references: new SqliteReferenceRepository(db),
+        brokers: new SqliteBrokerRepository(db),
         documents: new SqliteDocumentStorage(db),
         notifications: new SqliteNotificationRepository(db),
         users: new SqliteUserRepository(db),

@@ -77,6 +77,21 @@ describe('GetPolicy', () => {
     expect(read.installments).toEqual([]);
   });
 
+  it('has the broker of its proposal, read from it and not stored again (REQ-308, CA-304)', async () => {
+    const { proposals, policies, registerPolicy, getPolicy } = scenario();
+    await transmittedProposal(proposals);
+
+    const registered = await registerPolicy.execute({
+      proposalId: 'proposal-1',
+      userId: 'operator',
+    });
+
+    expect(registered.brokerId).toBe('broker-1');
+    expect((await getPolicy.execute(registered.id)).brokerId).toBe('broker-1');
+    // The policy itself holds only the link to its proposal (REQ-241).
+    expect(Object.keys((await policies.findById(registered.id)) ?? {})).not.toContain('brokerId');
+  });
+
   it('reports an unknown policy as not found', async () => {
     const { getPolicy } = scenario();
 

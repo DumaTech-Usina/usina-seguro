@@ -49,8 +49,9 @@
           <form id="form-reference">
             <div class="card__body stack">
               <p class="text-muted">
-                O nome de quem aparece na operação: cliente, corretor, seguradora,
-                intermediária e produto/ramo. O identificador é o mesmo que a proposta já
+                O nome de quem aparece na operação: cliente, seguradora, intermediária e
+                produto/ramo. Os corretores têm a sua própria página,
+                <a href="/app/brokers/">Corretores</a>. O identificador é o mesmo que a proposta já
                 usa — cadastrar aqui não valida nada, apenas dá um nome ao que hoje aparece
                 como código.
               </p>
@@ -58,7 +59,6 @@
                 <div class="field">
                   <select class="field__input" name="kind" required>
                     <option value="CLIENT">Cliente</option>
-                    <option value="BROKER">Corretor</option>
                     <option value="INSURER">Seguradora</option>
                     <option value="INTERMEDIARY">Intermediária</option>
                     <option value="PRODUCT">Produto / ramo</option>

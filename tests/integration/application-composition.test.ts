@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
+import { cpfOf } from '../support/cpf.ts';
 
 let directory: string;
 
@@ -19,10 +20,15 @@ describe('application composition', () => {
   it('composes with the memory driver and runs the use case end to end', async () => {
     const config = loadConfig({ PERSISTENCE_DRIVER: 'memory' });
     const application = composeApplication(config);
+    const broker = await application.useCases.registerBroker.execute({
+      name: 'Corretora Alfa',
+      cpf: cpfOf(1),
+      userId: 'operator',
+    });
 
     const output = await application.useCases.registerProposal.execute({
       clientId: 'client-1',
-      brokerId: 'broker-1',
+      brokerId: broker.id,
       insurerId: 'insurer-1',
       productId: 'product-1',
       paymentMethodId: 'credit-card',
@@ -46,9 +52,14 @@ describe('application composition', () => {
     const config = loadConfig({ PERSISTENCE_DRIVER: 'sqlite', SQLITE_FILE: file });
 
     const first = composeApplication(config);
+    const broker = await first.useCases.registerBroker.execute({
+      name: 'Corretora Alfa',
+      cpf: cpfOf(1),
+      userId: 'operator',
+    });
     const output = await first.useCases.registerProposal.execute({
       clientId: 'client-1',
-      brokerId: 'broker-1',
+      brokerId: broker.id,
       insurerId: 'insurer-1',
       productId: 'product-1',
       paymentMethodId: 'bank-slip',
@@ -68,7 +79,7 @@ describe('application composition', () => {
     const second = composeApplication(config);
     const repeated = await second.useCases.registerProposal.execute({
       clientId: 'client-2',
-      brokerId: 'broker-1',
+      brokerId: broker.id,
       insurerId: 'insurer-1',
       productId: 'product-1',
       paymentMethodId: 'bank-slip',

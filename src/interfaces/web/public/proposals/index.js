@@ -7,6 +7,7 @@
  */
 
 import { ApiError, api } from '/app/shared/api.js';
+import { brokerName, loadBrokers } from '/app/shared/brokers.js';
 import { formatDate, formatMoney, formatPercentage } from '/app/shared/money.js';
 import { reportError } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
@@ -63,7 +64,11 @@ function row(proposal) {
   const number = element('td');
   number.append(
     element('span', 'proposal-number', proposal.proposalNumber),
-    element('div', 'text-muted', `Cliente ${proposal.clientId} · Corretor ${proposal.brokerId}`),
+    element(
+      'div',
+      'text-muted',
+      `Cliente ${proposal.clientId} · Corretor ${brokerName(proposal.brokerId)}`,
+    ),
   );
   line.append(number);
 
@@ -160,7 +165,8 @@ async function load() {
 
   let proposals;
   try {
-    proposals = await api.listProposals(current.status);
+    // REQ-308: the proposal keeps the broker's id; the registry gives the name.
+    [proposals] = await Promise.all([api.listProposals(current.status), loadBrokers()]);
   } catch (error) {
     if (error instanceof ApiError) {
       reportError(error);

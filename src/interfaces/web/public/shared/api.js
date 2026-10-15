@@ -267,12 +267,28 @@ export const api = {
     ),
 
   /**
-   * IN-01: the reference records — client, broker, insurer, intermediary and
-   * product — that give a business a name (REQ-096).
+   * V2 section 9D: the brokers. Registering and changing are signed by the
+   * session (REQ-304); `query` searches by name or CPF (REQ-306). There is no
+   * removal (REQ-305).
+   */
+  registerBroker: (input) => request('/brokers', { method: 'POST', body: input }),
+  changeBroker: (id, input) =>
+    request(`/brokers/${encodeURIComponent(id)}/revision`, { method: 'POST', body: input }),
+  getBroker: (id) => request(`/brokers/${encodeURIComponent(id)}`),
+  listBrokers: (query) =>
+    request(
+      query === undefined || query.trim() === ''
+        ? '/brokers'
+        : `/brokers?q=${encodeURIComponent(query.trim())}`,
+    ),
+
+  /**
+   * IN-01: the reference records — client, insurer, intermediary and product
+   * — that give a business a name (REQ-096). The broker has its own registry.
    *
    * Nothing is validated against them: a proposal may name a client nobody
    * registered (REQ-002), and the screens show the identifier when there is no
-   * name. `kind` narrows the reading to one of the five, or nothing for all.
+   * name. `kind` narrows the reading to one of the kinds, or nothing for all.
    */
   registerReference: (input) => request('/references', { method: 'POST', body: input }),
   listReferences: (kind) =>

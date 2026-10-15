@@ -48,14 +48,14 @@ describe('Reference', () => {
     // The proposal keeps `clientId` as it was typed; the registry is matched
     // against it, so a stray space must not make the two sides miss.
     const reference = Reference.register({
-      kind: 'BROKER',
-      id: '  broker-1  ',
-      name: '  Corretora Alfa  ',
+      kind: 'INSURER',
+      id: '  insurer-1  ',
+      name: '  Seguradora Alfa  ',
       registeredAt: AT,
     });
 
-    expect(reference.id).toBe('broker-1');
-    expect(reference.name).toBe('Corretora Alfa');
+    expect(reference.id).toBe('insurer-1');
+    expect(reference.name).toBe('Seguradora Alfa');
   });
 
   it('restores a persisted record without re-applying the rules (REQ-124)', () => {

@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { registerBroker } from './support/brokers.ts';
 import { signIn } from './support/sign-in.ts';
 
 /**
@@ -15,7 +16,8 @@ import { signIn } from './support/sign-in.ts';
  * where it matters.
  *
  * Until this slice every screen identified a business by the identifier typed
- * on the proposal — `client-1`, `broker-1`, `auto`. REQ-096 asks a
+ * on the proposal — `client-1`, `insurer-1`, `auto`. (The broker has its own
+ * registry since V2 section 9D: `web-brokers-flow.test.ts`.) REQ-096 asks a
  * document to identify it by the *name* of the client, the broker and the
  * ramo, and the checklist recorded the absence of those names as what blocked
  * it. This file walks the loop that closes it: register the names, see the
@@ -38,6 +40,8 @@ let directory: string;
 let application: Application;
 let app: FastifyInstance;
 let baseUrl: string;
+/** REQ-307: the registered broker the proposals of this journey name. */
+let brokerId: string;
 
 /** Every request a page made, in order, as `METHOD path`. */
 const requests: string[] = [];
@@ -63,6 +67,7 @@ beforeAll(async () => {
 
   // REQ-410: every journey starts logged in, as the test user.
   await signIn(application.useCases, baseUrl);
+  brokerId = await registerBroker(baseUrl, 'Corretora Alfa', 1);
 
   const nodeFetch = globalThis.fetch;
   globalThis.fetch = ((input: Untyped, init: Untyped) => {
@@ -189,7 +194,7 @@ async function registeredPolicy(options: {
 }): Promise<void> {
   const proposal = await callApi('POST', '/proposals', {
     clientId: options.clientId,
-    brokerId: 'broker-1',
+    brokerId,
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'credit',
@@ -228,7 +233,6 @@ describe('the reference registry (IN-01)', () => {
 
     for (const [kind, id, name] of [
       ['CLIENT', 'client-1', 'Ana Lima'],
-      ['BROKER', 'broker-1', 'Corretora Alfa'],
       ['INSURER', 'insurer-1', 'Seguradora Norte'],
       ['PRODUCT', 'auto', 'Automóvel'],
     ] as const) {
@@ -239,7 +243,7 @@ describe('the reference registry (IN-01)', () => {
     expect(snackbars().join(' ')).toContain('Automóvel registrado');
     // The listing is re-read from the backend, not patched into the page.
     expect(requests.at(-1)).toBe('GET /references');
-    expect(rows('#list-references')).toHaveLength(4);
+    expect(rows('#list-references')).toHaveLength(3);
 
     const client = rowContaining('#list-references', 'Ana Lima');
     expect(client.textContent).toContain('Cliente');

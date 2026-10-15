@@ -4,6 +4,7 @@ import type {
 } from '../../policy/application/policy-issued-notifier.ts';
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
 import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
+import type { BrokerRepository } from '../../registry/application/broker-repository.ts';
 import { ReferenceNames } from '../../registry/application/reference-names.ts';
 import type { ReferenceRepository } from '../../registry/application/reference-repository.ts';
 import { Notification } from '../domain/notification.ts';
@@ -16,6 +17,8 @@ export interface NotifyPolicyIssuedDependencies {
   readonly proposals: ProposalRepository;
   /** IN-01: the names REQ-100 requires the notification to carry. */
   readonly references: ReferenceRepository;
+  /** REQ-308: the broker's name comes from the broker registry (V2 section 9D). */
+  readonly brokers: BrokerRepository;
   /**
    * REQ-101, REQ-103: every channel the notification is published through.
    *
@@ -68,6 +71,9 @@ export class NotifyPolicyIssued implements PolicyIssuedNotifier {
     }
 
     const names = await ReferenceNames.load(this.deps.references);
+    // REQ-309: a proposal registered before the broker registry names no
+    // registered broker, and the notification carries no name for it.
+    const broker = await this.deps.brokers.findById(proposal.brokerId);
 
     const notification = Notification.issue({
       id: this.deps.newId(),
@@ -78,7 +84,7 @@ export class NotifyPolicyIssued implements PolicyIssuedNotifier {
       policyNumber: event.policyNumber,
       content: {
         client: { id: proposal.clientId, name: names.of('CLIENT', proposal.clientId) },
-        broker: { id: proposal.brokerId, name: names.of('BROKER', proposal.brokerId) },
+        broker: { id: proposal.brokerId, name: broker?.name ?? null },
         product: { id: proposal.productId, name: names.of('PRODUCT', proposal.productId) },
         workedCommission: proposal.workedCommission,
         // REQ-228: a parcelled CT is notified with both of its CTs.

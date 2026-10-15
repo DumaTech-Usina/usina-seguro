@@ -14,6 +14,7 @@ function scenario() {
   const register = new RegisterProposal({
     proposals,
     documents,
+    brokers: { isRegistered: async () => true },
     newId: () => `id-${++sequence}`,
     now: () => new Date('2026-09-22T12:00:00.000Z'),
   });

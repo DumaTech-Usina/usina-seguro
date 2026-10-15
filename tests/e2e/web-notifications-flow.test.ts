@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { registerBroker } from './support/brokers.ts';
 import { signIn } from './support/sign-in.ts';
 
 /**
@@ -36,6 +37,8 @@ let directory: string;
 let application: Application;
 let app: FastifyInstance;
 let baseUrl: string;
+/** REQ-307: the registered brokers the emissions name. */
+const brokers = { alfa: '', beta: '' };
 
 /** Every request a page made, in order, as `METHOD path`. */
 const requests: string[] = [];
@@ -71,10 +74,12 @@ beforeAll(async () => {
 
   window.scrollTo = () => {};
 
-  // IN-01: the three names REQ-100 asks the notification to carry.
+  // The three names REQ-100 asks the notification to carry: the broker's from
+  // the broker registry (REQ-308), the others from IN-01.
+  brokers.alfa = await registerBroker(baseUrl, 'Corretora Alfa', 1);
+  brokers.beta = await registerBroker(baseUrl, 'Corretora Beta', 2);
   for (const reference of [
     { kind: 'CLIENT', id: 'client-1', name: 'Maria Souza' },
-    { kind: 'BROKER', id: 'broker-1', name: 'Corretora Alfa' },
     { kind: 'PRODUCT', id: 'auto', name: 'Automovel' },
   ]) {
     await callApi('POST', '/references', reference);
@@ -191,7 +196,7 @@ interface Emission {
 async function issuePolicy(
   proposalNumber: string,
   policyNumber: string,
-  brokerId = 'broker-1',
+  brokerId = brokers.alfa,
 ): Promise<Emission> {
   const proposal = await callApi('POST', '/proposals', {
     clientId: 'client-1',
@@ -261,27 +266,27 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
   });
 
   it('narrows to one broker with a new reading, not a local slice', async () => {
-    // A second broker, with no name in IN-01: the identifier is what shows.
-    await issuePolicy('PRP-WEB-N3', 'PRP-WEB-N3', 'broker-2');
+    // A second broker (REQ-300: every broker is registered with a name).
+    await issuePolicy('PRP-WEB-N3', 'PRP-WEB-N3', brokers.beta);
 
     await openNotifications();
     expect(rows()).toHaveLength(3);
 
     await filterByRecipient('Corretora Alfa');
 
-    expect(requests).toContain('GET /notifications?recipientId=broker-1');
+    expect(requests).toContain(`GET /notifications?recipientId=${brokers.alfa}`);
     expect(rows()).toHaveLength(2);
     expect(rowOf('PRP-WEB-N1')).toBeDefined();
 
-    await filterByRecipient('broker-2');
-    expect(requests).toContain('GET /notifications?recipientId=broker-2');
+    await filterByRecipient('Corretora Beta');
+    expect(requests).toContain(`GET /notifications?recipientId=${brokers.beta}`);
     expect(rows()).toHaveLength(1);
-    expect(rowOf('PRP-WEB-N3').textContent).toContain('broker-2');
+    expect(rowOf('PRP-WEB-N3').textContent).toContain('Corretora Beta');
   });
 
   it('offers only the brokers that were notified, and keeps the full list', async () => {
     await openNotifications();
-    await filterByRecipient('broker-2');
+    await filterByRecipient('Corretora Beta');
 
     // The options come from the complete reading, so narrowing does not
     // shrink the filter itself: the operator can always go back.
@@ -289,7 +294,7 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
       (option: Untyped) => option.textContent,
     );
     // Ordered by the label a human reads, not by the identifier.
-    expect(labels).toEqual(['Todos os corretores', 'broker-2', 'Corretora Alfa']);
+    expect(labels).toEqual(['Todos os corretores', 'Corretora Alfa', 'Corretora Beta']);
 
     await filterByRecipient('Todos os corretores');
     expect(requests).toContain('GET /notifications');
@@ -300,7 +305,7 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
     await openNotifications();
 
     const link = rowOf('PRP-WEB-N1').querySelector('a.btn');
-    const [notified] = (await callApi('GET', '/notifications?recipientId=broker-1')).filter(
+    const [notified] = (await callApi('GET', `/notifications?recipientId=${brokers.alfa}`)).filter(
       (notification: Untyped) => notification.policyNumber === 'PRP-WEB-N1',
     );
 
@@ -329,7 +334,7 @@ describe('the notification of a parcelled policy', () => {
   it('shows both CTs of a parcelled policy (REQ-228)', async () => {
     const proposal = await callApi('POST', '/proposals', {
       clientId: 'client-1',
-      brokerId: 'broker-1',
+      brokerId: brokers.alfa,
       insurerId: 'insurer-1',
       productId: 'auto',
       paymentMethodId: 'credit',

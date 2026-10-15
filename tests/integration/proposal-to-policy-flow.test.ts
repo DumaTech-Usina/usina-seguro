@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { BusinessRuleViolation } from '../../src/core/proposal/domain/errors.ts';
+import { cpfOf } from '../support/cpf.ts';
 
 /**
  * Application layer against the real SQLite driver: use cases, repositories and
@@ -13,11 +14,19 @@ import { BusinessRuleViolation } from '../../src/core/proposal/domain/errors.ts'
 let directory: string;
 let file: string;
 let application: Application;
+/** REQ-307: the registered brokers the proposals name, by the label each test uses. */
+let brokers: Record<'broker-1' | 'broker-2', string>;
 
-beforeEach(() => {
+beforeEach(async () => {
   directory = mkdtempSync(path.join(tmpdir(), 'usina-flow-'));
   file = path.join(directory, 'usina.sqlite');
   application = open();
+  const register = (name: string, seed: number) =>
+    application.useCases.registerBroker.execute({ name, cpf: cpfOf(seed), userId: 'operator' });
+  brokers = {
+    'broker-1': (await register('Corretora Alfa', 1)).id,
+    'broker-2': (await register('Corretora Beta', 2)).id,
+  };
 });
 
 afterEach(async () => {
@@ -32,7 +41,7 @@ function open(): Application {
 async function registerProposal(proposalNumber = 'PRP-9001'): Promise<string> {
   const proposal = await application.useCases.registerProposal.execute({
     clientId: 'client-1',
-    brokerId: 'broker-1',
+    brokerId: brokers['broker-1'],
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'bank-slip',
@@ -142,7 +151,7 @@ describe('proposal to policy flow on SQLite', () => {
     const policy = await registerPolicy(proposalId);
 
     const [notified] = await application.useCases.listNotifications.execute({
-      recipientId: 'broker-1',
+      recipientId: brokers['broker-1'],
     });
     expect(notified).toMatchObject({
       event: 'POLICY_ISSUED',
@@ -158,16 +167,16 @@ describe('proposal to policy flow on SQLite', () => {
   it('narrows the notifications to one broker, on the driver (OUT-10)', async () => {
     // Three emissions, two brokers. The filter is SQL, not a slice done after
     // reading: the in-memory driver answers the same shape in the unit suite.
-    const emissions: readonly [string, string][] = [
+    const emissions: readonly ['broker-1' | 'broker-2', string][] = [
       ['broker-1', 'PRP-N-1'],
       ['broker-2', 'PRP-N-2'],
       ['broker-1', 'PRP-N-3'],
     ];
 
-    for (const [brokerId, proposalNumber] of emissions) {
+    for (const [broker, proposalNumber] of emissions) {
       const proposal = await application.useCases.registerProposal.execute({
         clientId: 'client-1',
-        brokerId,
+        brokerId: brokers[broker],
         insurerId: 'insurer-1',
         productId: 'auto',
         paymentMethodId: 'bank-slip',
@@ -185,7 +194,7 @@ describe('proposal to policy flow on SQLite', () => {
     }
 
     const mine = await application.useCases.listNotifications.execute({
-      recipientId: 'broker-1',
+      recipientId: brokers['broker-1'],
     });
     expect(mine.map((notification) => notification.policyNumber).sort()).toEqual([
       'PRP-N-1',

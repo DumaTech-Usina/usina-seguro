@@ -64,6 +64,7 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'proposal.rejected_cannot_originate_policy': 'Proposta recusada não origina apólice.',
     'proposal.already_has_policy': 'Proposta já possui apólice registrada.',
     'proposal.not_found': "Proposta não encontrada: '{id}'.",
+    'proposal.broker_not_registered': 'Escolha um corretor cadastrado.',
     'proposal.source_document_not_found': 'A proposta {id} não tem documento de origem guardado.',
     'money.invalid_format':
       "Valor monetário inválido: '{value}'. Use string decimal com até {scale} casas, ex.: '1234.56'.",
@@ -88,6 +89,12 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
       'Confirmação de pagamento da parcela {number} exige a identificação do usuário.',
 
     'registry.reference_field_required': 'Cadastro de referência exige o campo {field}.',
+    'registry.broker_name_required': 'O corretor precisa de um nome.',
+    'registry.broker_cpf_required': 'O corretor precisa de um CPF.',
+    'registry.broker_cpf_invalid':
+      'CPF inválido: informe os 11 dígitos, com dígitos verificadores válidos.',
+    'registry.broker_cpf_taken': 'Já existe um corretor cadastrado com este CPF.',
+    'registry.broker_not_found': "Corretor não encontrado: '{id}'.",
     'commission.not_found': "Apólice '{policyId}' não possui comissão calculada.",
     'commission.override_justification_required':
       'Ajuste de comissão por apólice exige justificativa.',

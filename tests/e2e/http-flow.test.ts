@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { registerBroker } from './support/brokers.ts';
 import { type SignedIn, signIn } from './support/sign-in.ts';
 
 /**
@@ -16,6 +17,8 @@ let directory: string;
 let application: Application;
 let app: FastifyInstance;
 let baseUrl: string;
+/** REQ-307: the registered broker the proposals of this journey name. */
+let brokerId: string;
 let signedIn: SignedIn;
 
 beforeAll(async () => {
@@ -39,6 +42,8 @@ beforeAll(async () => {
 
   // REQ-410: every journey starts logged in, as the test user.
   signedIn = await signIn(application.useCases, baseUrl);
+  brokerId = await registerBroker(baseUrl, 'Corretora Alfa', 1);
+  validProposal.brokerId = brokerId;
 });
 
 afterAll(async () => {

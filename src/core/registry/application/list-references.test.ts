@@ -15,7 +15,6 @@ async function scenario() {
 
   await references.save(reference('CLIENT', 'client-2', 'Maria Souza'));
   await references.save(reference('CLIENT', 'client-1', 'Ana Lima'));
-  await references.save(reference('BROKER', 'broker-1', 'Corretora Alfa'));
   await references.save(reference('INSURER', 'insurer-1', 'Seguradora Norte'));
   await references.save(reference('PRODUCT', 'auto', 'Automovel'));
   await references.save(reference('INTERMEDIARY', 'mega', 'Mega Intermediacao'));
@@ -30,7 +29,6 @@ describe('ListReferences', () => {
     const listed = await useCase.execute();
 
     expect(listed.map((line) => `${line.kind}:${line.id}`)).toEqual([
-      'BROKER:broker-1',
       'CLIENT:client-1',
       'CLIENT:client-2',
       'INSURER:insurer-1',
@@ -78,13 +76,13 @@ describe('ListReferences', () => {
   it('keeps the same identifier of two different kinds apart', async () => {
     const references = new InMemoryReferenceRepository();
     await references.save(reference('CLIENT', 'alfa', 'Alfa Transportes'));
-    await references.save(reference('BROKER', 'alfa', 'Corretora Alfa'));
+    await references.save(reference('INSURER', 'alfa', 'Seguradora Alfa'));
 
     const listed = await new ListReferences({ references }).execute();
 
-    // The key is the pair: nothing says a client and a broker cannot share an
+    // The key is the pair: nothing says a client and an insurer cannot share an
     // identifier, and the registry must not collapse them into one record.
     expect(listed).toHaveLength(2);
-    expect(listed.map((line) => line.name)).toEqual(['Corretora Alfa', 'Alfa Transportes']);
+    expect(listed.map((line) => line.name)).toEqual(['Alfa Transportes', 'Seguradora Alfa']);
   });
 });

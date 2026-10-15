@@ -64,9 +64,10 @@
               <div class="banner">
                 <span class="material-symbols-outlined">info</span>
                 <div class="banner__text">
-                  Cliente, corretor, seguradora e produto são informados por identificador. Os
-                  que já estão em <strong>Cadastros</strong> aparecem como sugestão; um
-                  identificador novo continua sendo aceito.
+                  Cliente, seguradora e produto são informados por identificador. Os que já
+                  estão em <strong>Cadastros</strong> aparecem como sugestão; um identificador
+                  novo continua sendo aceito. O corretor é escolhido entre os
+                  <a href="/app/brokers/">corretores cadastrados</a>.
                 </div>
               </div>
 
@@ -82,16 +83,19 @@
                   <datalist id="client-options"></datalist>
                   <label class="field__label">Cliente</label>
                 </div>
+                <!-- REQ-306, REQ-307: busca por nome ou CPF; guarda o id do escolhido. -->
                 <div class="field">
                   <input
                     class="field__input"
-                    name="brokerId"
+                    name="brokerSearch"
                     placeholder=" "
                     list="broker-options"
-                    required
+                    autocomplete="off"
                   />
                   <datalist id="broker-options"></datalist>
                   <label class="field__label">Corretor</label>
+                  <span class="field__hint" id="broker-hint">Busque por nome ou CPF e escolha da lista.</span>
+                  <input type="hidden" name="brokerId" />
                 </div>
                 <div class="field">
                   <input

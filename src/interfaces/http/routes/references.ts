@@ -3,8 +3,11 @@ import type { UseCases } from '../../../composition-root.ts';
 import type { ListReferencesInput } from '../../../core/registry/application/list-references.ts';
 import type { RegisterReferenceInput } from '../../../core/registry/application/register-reference.ts';
 
-/** The five kinds of IN-01. Shape only: what a record must carry is REQ-096. */
-const KINDS = ['CLIENT', 'BROKER', 'INSURER', 'INTERMEDIARY', 'PRODUCT'] as const;
+/**
+ * The kinds of IN-01. Shape only: what a record must carry is REQ-096. The
+ * broker has its own registry (V2 section 9D, `/brokers`).
+ */
+const KINDS = ['CLIENT', 'INSURER', 'INTERMEDIARY', 'PRODUCT'] as const;
 
 const registerReferenceSchema: FastifySchema = {
   body: {

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { ImmediateTransaction } from '../../../infrastructure/persistence/in-memory/immediate-transaction.ts';
+import { InMemoryBrokerRepository } from '../../../infrastructure/persistence/in-memory/in-memory-broker-repository.ts';
 import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryPayoutCommissionRepository } from '../../../infrastructure/persistence/in-memory/in-memory-payout-commission-repository.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { RegisterPolicy } from '../../policy/application/register-policy.ts';
+import { Authorship } from '../../proposal/domain/authorship.ts';
 import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
@@ -12,6 +14,7 @@ import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal } from '../../proposal/domain/proposal.ts';
 import type { Receipt } from '../../proposal/domain/receipt.ts';
 import type { WorkedCommissionMode } from '../../proposal/domain/worked-commission.ts';
+import { Broker } from '../../registry/domain/broker.ts';
 import { COMMISSION_MESSAGES } from '../domain/errors.ts';
 import { DeclarePayoutEligibility } from './declare-payout-eligibility.ts';
 import { GetPolicyPayout } from './get-policy-payout.ts';
@@ -52,9 +55,11 @@ function scenario() {
     now,
   });
 
-  const deps = { proposals, policies, payouts, newId, now };
+  const brokers = new InMemoryBrokerRepository();
+  const deps = { proposals, policies, payouts, brokers, newId, now };
 
   return {
+    brokers,
     setClock: (iso: string) => {
       clock = new Date(iso);
     },
@@ -297,6 +302,33 @@ describe('RevisePayoutRate (REQ-277, REQ-279)', () => {
 });
 
 describe('DeclarePayoutEligibility (REQ-281 to REQ-283)', () => {
+  it('keeps the name the registered broker has at eligibility, not a later one (REQ-308, CA-305)', async () => {
+    const s = scenario();
+    const broker = Broker.register({
+      id: 'broker-7',
+      name: 'Corretora Gama',
+      cpf: '52998224725',
+      signed: Authorship.of('ana', new Date('2026-09-01T12:00:00.000Z')),
+    });
+    await s.brokers.save(broker);
+    const policyId = await s.policy({ proposalId: 'p1', brokerId: 'broker-7' });
+    await s.inform.execute({ policyId, rate: '60', userId: 'ana' });
+
+    await s.declareEligible.execute({ policyId, userId: 'carla' });
+    await s.brokers.save(
+      broker.change({
+        name: 'Corretora Gama Renomeada',
+        cpf: '52998224725',
+        signed: Authorship.of('ana', new Date('2026-12-01T12:00:00.000Z')),
+      }),
+    );
+
+    expect((await s.get.execute(policyId)).commission?.statement?.broker).toBe('Corretora Gama');
+    expect((await s.listEligible.execute({ broker: 'gama' })).map((line) => line.broker)).toEqual([
+      'Corretora Gama',
+    ]);
+  });
+
   it('signs the eligibility and generates the statement, nothing typed (CA-232, CA-233, CA-237)', async () => {
     const s = scenario();
     const policyId = await s.policy({

@@ -157,14 +157,13 @@ function wire(selector, send, success, reload) {
 /* ---------------------------------------------------------- reference -- */
 
 /**
- * The five kinds of IN-01, in Portuguese.
+ * The kinds of IN-01, in Portuguese (the broker has its own page).
  *
  * Presentation only, like `shared/status.js`: the set is the requirement's and
  * the server refuses anything outside it, so this map never decides anything.
  */
 const REFERENCE_KINDS = {
   CLIENT: 'Cliente',
-  BROKER: 'Corretor',
   INSURER: 'Seguradora',
   INTERMEDIARY: 'Intermediária',
   PRODUCT: 'Produto / ramo',

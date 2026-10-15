@@ -146,11 +146,36 @@ CREATE TABLE IF NOT EXISTS installment (
 -- invalid business.
 CREATE TABLE IF NOT EXISTS reference (
   kind           TEXT NOT NULL
-    CHECK (kind IN ('CLIENT', 'BROKER', 'INSURER', 'INTERMEDIARY', 'PRODUCT')),
+    -- The broker has its own tables (V2 section 9D).
+    CHECK (kind IN ('CLIENT', 'INSURER', 'INTERMEDIARY', 'PRODUCT')),
   id             TEXT NOT NULL,
   name           TEXT NOT NULL,
   registered_at  TEXT NOT NULL,
   PRIMARY KEY (kind, id)
+);
+
+-- Brokers registered by the users of the Usina (V2 section 9D). The row is
+-- the broker's current name and CPF -- the last of its records -- so that
+-- REQ-302 (one broker per CPF) is also a constraint. The proposal's broker_id
+-- holds a broker's id, or, on a proposal registered before this table, the text
+-- that was typed (REQ-309): that is why there is no foreign key from it.
+CREATE TABLE IF NOT EXISTS broker (
+  id    TEXT PRIMARY KEY,
+  name  TEXT NOT NULL,
+  -- The 11 digits, no punctuation (REQ-301).
+  cpf   TEXT NOT NULL UNIQUE
+);
+
+-- REQ-304: the signed history of each broker, append-only. The first record
+-- is the registration.
+CREATE TABLE IF NOT EXISTS broker_record (
+  broker_id  TEXT    NOT NULL REFERENCES broker (id),
+  sequence   INTEGER NOT NULL CHECK (sequence >= 1),
+  name       TEXT    NOT NULL,
+  cpf        TEXT    NOT NULL,
+  signed_by  TEXT    NOT NULL,
+  signed_at  TEXT    NOT NULL,
+  PRIMARY KEY (broker_id, sequence)
 );
 
 -- Agreed commission of a policy (REQ-236).

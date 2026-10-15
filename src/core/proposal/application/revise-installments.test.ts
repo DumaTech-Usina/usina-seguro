@@ -14,6 +14,7 @@ async function scenario(mode: 'INTEGRAL' | 'PARCELLED' = 'INTEGRAL') {
   await new RegisterProposal({
     proposals,
     documents: new InMemoryDocumentStorage(),
+    brokers: { isRegistered: async () => true },
     newId: () => 'proposal-1',
     now: () => REGISTERED_AT,
   }).execute({

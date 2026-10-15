@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { registerBroker } from './support/brokers.ts';
 import { type SignedIn, TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
@@ -31,6 +32,8 @@ let directory: string;
 let application: Application;
 let app: FastifyInstance;
 let baseUrl: string;
+/** REQ-307: the registered broker the proposals of this journey name. */
+let brokerId: string;
 let signedIn: SignedIn;
 
 /** Every request the page made, in order, as `METHOD path`. */
@@ -95,6 +98,7 @@ beforeAll(async () => {
 
   // REQ-410: every journey starts logged in, as the test user.
   signedIn = await signIn(application.useCases, baseUrl);
+  brokerId = await registerBroker(baseUrl, 'Corretora Alfa', 1);
 
   const nodeFetch = globalThis.fetch;
   globalThis.fetch = ((input: Untyped, init: Untyped) => {
@@ -212,7 +216,7 @@ async function registeredPolicy(numbers: {
 }): Promise<string> {
   const proposal = await callApi('POST', '/proposals', {
     clientId: 'client-1',
-    brokerId: 'broker-1',
+    brokerId,
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'credit',

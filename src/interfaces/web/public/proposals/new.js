@@ -9,6 +9,7 @@
  */
 
 import { ApiError, api } from '/app/shared/api.js';
+import { formatCpf } from '/app/shared/brokers.js';
 import { base64Of } from '/app/shared/file.js';
 import { addInstallmentRow, scheduleOf } from '/app/shared/installments.js';
 import { formatDate, formatMoney } from '/app/shared/money.js';
@@ -32,7 +33,6 @@ import { bindWorkedCommissionFields, workedCommissionOf } from '/app/shared/work
 async function offerRegisteredReferences() {
   const fields = [
     ['CLIENT', 'client-options'],
-    ['BROKER', 'broker-options'],
     ['INSURER', 'insurer-options'],
     ['PRODUCT', 'product-options'],
   ];
@@ -65,6 +65,67 @@ async function offerRegisteredReferences() {
 }
 
 const form = document.querySelector('#form-proposal');
+
+/* ------------------------------------------------- broker (REQ-307) -- */
+
+/**
+ * The broker is searched by name or CPF (REQ-306) and chosen from what the
+ * server answers; the proposal carries the chosen broker's id (REQ-307).
+ * Typing alone chooses nothing: until an option is picked the id is empty and
+ * the server refuses the registration with its own sentence.
+ */
+const brokerSearch = form.querySelector('[name="brokerSearch"]');
+const brokerId = form.querySelector('[name="brokerId"]');
+const brokerOptions = document.querySelector('#broker-options');
+const brokerHint = document.querySelector('#broker-hint');
+let brokerChoices = new Map();
+let brokerRequest = 0;
+
+function brokerLabel(broker) {
+  return `${broker.name} · ${formatCpf(broker.cpf)}`;
+}
+
+function syncBrokerChoice() {
+  const chosen = brokerChoices.get(brokerSearch.value);
+  brokerId.value = chosen?.id ?? '';
+  brokerHint.textContent =
+    chosen === undefined
+      ? 'Busque por nome ou CPF e escolha da lista.'
+      : `Corretor escolhido: ${chosen.name}.`;
+}
+
+async function searchBrokers() {
+  syncBrokerChoice();
+  if (brokerId.value !== '') {
+    return;
+  }
+
+  // Only the answer to the latest search is shown.
+  const request = ++brokerRequest;
+  let brokers;
+  try {
+    brokers = await api.listBrokers(brokerSearch.value);
+  } catch {
+    return;
+  }
+  if (request !== brokerRequest) {
+    return;
+  }
+
+  brokerChoices = new Map(brokers.map((broker) => [brokerLabel(broker), broker]));
+  brokerOptions.replaceChildren(
+    ...brokers.map((broker) => {
+      const option = document.createElement('option');
+      option.value = brokerLabel(broker);
+      return option;
+    }),
+  );
+  syncBrokerChoice();
+}
+
+brokerSearch.addEventListener('input', searchBrokers);
+brokerSearch.addEventListener('change', syncBrokerChoice);
+searchBrokers();
 
 offerRegisteredReferences();
 offerRegisteredIntermediaries(document.querySelector('#intermediary-options'));
@@ -127,6 +188,14 @@ const pdfResult = document.querySelector('#pdf-result');
  */
 function fillFromPdf(fields) {
   for (const [name, value] of Object.entries(fields)) {
+    // REQ-310: the broker's name in the PDF only fills the search; the user
+    // chooses the broker.
+    if (name === 'brokerId') {
+      brokerSearch.value = value;
+      brokerSearch.dispatchEvent(new Event('input'));
+      continue;
+    }
+
     if (name === 'installments') {
       installments.replaceChildren();
       for (const installment of value) {

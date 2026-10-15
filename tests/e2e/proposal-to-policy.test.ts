@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { registerBroker } from './support/brokers.ts';
 import { type SignedIn, signIn } from './support/sign-in.ts';
 
 /**
@@ -16,6 +17,8 @@ let directory: string;
 let application: Application;
 let app: FastifyInstance;
 let baseUrl: string;
+/** REQ-307: the registered broker the proposals of this journey name. */
+let brokerId: string;
 let signedIn: SignedIn;
 
 beforeAll(async () => {
@@ -39,6 +42,7 @@ beforeAll(async () => {
 
   // REQ-410: every journey starts logged in, as the test user.
   signedIn = await signIn(application.useCases, baseUrl);
+  brokerId = await registerBroker(baseUrl, 'Corretora Alfa', 1);
 });
 
 afterAll(async () => {
@@ -59,7 +63,7 @@ async function post(url: string, body: unknown): Promise<Response> {
 function proposalBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     clientId: 'client-1',
-    brokerId: 'broker-1',
+    brokerId,
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'bank-slip',
@@ -364,6 +368,16 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
  * HTTP and real SQLite, with the five fields CA-029 requires.
  */
 describe('the notification of an effectuated emission (OUT-10)', () => {
+  // REQ-307: each emission names a registered broker; the notification goes to
+  // the broker's id and carries the broker's name (REQ-308).
+  const brokers = { notified: '', unnamed: '', nothing: '' };
+
+  beforeAll(async () => {
+    brokers.notified = await registerBroker(baseUrl, 'Corretora Notificada', 11);
+    brokers.unnamed = await registerBroker(baseUrl, 'Corretora Sem Cliente', 12);
+    brokers.nothing = await registerBroker(baseUrl, 'Corretora Recusada', 13);
+  });
+
   async function listNotifications(query = ''): Promise<
     Array<{
       recipientId: string;
@@ -383,11 +397,11 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
   }
 
   it('notifies the broker with the five fields when the issuance is recognised (CA-029)', async () => {
-    // IN-01 gives the three references a name; the other two fields are the
-    // worked percentage of REQ-212 and the net premium of REQ-202.
+    // IN-01 gives the client and the product a name, the broker registry the
+    // broker (REQ-308); the other two fields are the worked percentage of
+    // REQ-212 and the net premium of REQ-202.
     for (const reference of [
       { kind: 'CLIENT', id: 'client-notified', name: 'Maria Souza' },
-      { kind: 'BROKER', id: 'broker-notified', name: 'Corretora Alfa' },
       { kind: 'PRODUCT', id: 'auto', name: 'Automovel' },
     ]) {
       expect((await post('/references', reference)).status).toBe(201);
@@ -397,7 +411,7 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
       '/proposals',
       proposalBody({
         clientId: 'client-notified',
-        brokerId: 'broker-notified',
+        brokerId: brokers.notified,
         productId: 'auto',
         paymentMethodId: 'credit',
         proposalNumber: 'PRP-NOTIFY-1',
@@ -408,13 +422,13 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
     const policy = await post('/policies', recognition(proposalId));
     const { id: policyId } = (await policy.json()) as { id: string };
 
-    const [notified] = await listNotifications('?recipientId=broker-notified');
+    const [notified] = await listNotifications(`?recipientId=${brokers.notified}`);
     expect(notified).toMatchObject({
-      recipientId: 'broker-notified',
+      recipientId: brokers.notified,
       policyId,
       policyNumber: 'PRP-NOTIFY-1',
       client: { id: 'client-notified', name: 'Maria Souza' },
-      broker: { id: 'broker-notified', name: 'Corretora Alfa' },
+      broker: { id: brokers.notified, name: 'Corretora Notificada' },
       product: { id: 'auto', name: 'Automovel' },
       workedCommission: '32.5',
       netPremium: '1200.00',
@@ -426,7 +440,7 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
       '/proposals',
       proposalBody({
         clientId: 'client-unnamed',
-        brokerId: 'broker-unnamed',
+        brokerId: brokers.unnamed,
         productId: 'auto',
         paymentMethodId: 'credit',
         proposalNumber: 'PRP-NOTIFY-2',
@@ -435,7 +449,7 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
     const { id: proposalId } = (await proposal.json()) as { id: string };
     await post('/policies', recognition(proposalId));
 
-    const [notified] = await listNotifications('?recipientId=broker-unnamed');
+    const [notified] = await listNotifications(`?recipientId=${brokers.unnamed}`);
     expect(notified?.client).toEqual({ id: 'client-unnamed', name: null });
   });
 
@@ -444,7 +458,7 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
       '/proposals',
       proposalBody({
         clientId: 'client-1',
-        brokerId: 'broker-nothing',
+        brokerId: brokers.nothing,
         productId: 'auto',
         paymentMethodId: 'credit',
         proposalNumber: 'PRP-NOTIFY-3',
@@ -458,15 +472,15 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
     const refused = await post('/policies', recognition(proposalId));
 
     expect(refused.status).toBe(422);
-    expect(await listNotifications('?recipientId=broker-nothing')).toEqual([]);
+    expect(await listNotifications(`?recipientId=${brokers.nothing}`)).toEqual([]);
   });
 
   it('answers every recipient, most recent first (OUT-10, REQ-105)', async () => {
     const every = await listNotifications();
     const recipients = every.map((notification) => notification.recipientId);
 
-    expect(recipients).toContain('broker-notified');
-    expect(recipients).toContain('broker-unnamed');
+    expect(recipients).toContain(brokers.notified);
+    expect(recipients).toContain(brokers.unnamed);
 
     const instants = every.map((notification) => Date.parse(notification.occurredAt));
     expect(instants).toEqual([...instants].sort((a, b) => b - a));

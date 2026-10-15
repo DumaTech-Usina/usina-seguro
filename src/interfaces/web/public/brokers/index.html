@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Corretores — Usina do Seguro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500&family=Roboto:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/app/shared/base.css" />
+    <link rel="stylesheet" href="/app/settings/index.css" />
+  </head>
+  <body class="shell" data-nav="brokers">
+    <main class="content">
+      <div class="content__inner">
+        <div class="page-head">
+          <div class="page-head__text">
+            <h1 class="text-display">Corretores</h1>
+            <p class="text-muted">
+              Os corretores que a proposta identifica. Todo cadastro e toda alteração ficam
+              no histórico, com quem fez e quando. Um corretor não é excluído.
+            </p>
+          </div>
+        </div>
+
+        <!-- REQ-300–REQ-302: novo corretor. -->
+        <section class="card">
+          <div class="card__header">
+            <span class="material-symbols-outlined">person_add</span>
+            <h2 class="text-title">Novo corretor</h2>
+          </div>
+          <form id="form-broker">
+            <div class="card__body stack">
+              <div class="form-grid">
+                <div class="field">
+                  <input class="field__input" name="name" placeholder=" " required />
+                  <label class="field__label">Nome</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="cpf" placeholder=" " required />
+                  <label class="field__label">CPF</label>
+                  <span class="field__hint">Com ou sem pontuação.</span>
+                </div>
+              </div>
+            </div>
+            <div class="card__footer">
+              <button class="btn btn--filled" type="submit">Cadastrar corretor</button>
+            </div>
+          </form>
+        </section>
+
+        <!-- REQ-306: lista e busca por nome ou CPF. -->
+        <section class="card">
+          <div class="card__header">
+            <span class="material-symbols-outlined">badge</span>
+            <h2 class="text-title">Corretores cadastrados</h2>
+          </div>
+          <form id="form-broker-search">
+            <div class="card__body">
+              <div class="field">
+                <input class="field__input" name="q" type="search" placeholder=" " />
+                <label class="field__label">Buscar por nome ou CPF</label>
+              </div>
+            </div>
+          </form>
+          <div class="registry" id="list-brokers"></div>
+        </section>
+
+        <!-- REQ-303, REQ-304: alteração e histórico do corretor escolhido. -->
+        <section class="card hidden" id="broker-detail">
+          <div class="card__header">
+            <span class="material-symbols-outlined">edit</span>
+            <h2 class="text-title">Alterar corretor</h2>
+          </div>
+          <form id="form-broker-change">
+            <div class="card__body stack">
+              <div class="form-grid">
+                <div class="field">
+                  <input class="field__input" name="name" placeholder=" " required />
+                  <label class="field__label">Nome</label>
+                </div>
+                <div class="field">
+                  <input class="field__input" name="cpf" placeholder=" " required />
+                  <label class="field__label">CPF</label>
+                </div>
+              </div>
+            </div>
+            <div class="card__footer">
+              <button class="btn btn--filled" type="submit">Salvar alteração</button>
+            </div>
+          </form>
+          <div class="registry" id="broker-history"></div>
+        </section>
+      </div>
+    </main>
+
+    <script type="module" src="/app/shared/shell.js"></script>
+    <script type="module" src="/app/brokers/index.js"></script>
+  </body>
+</html>

@@ -26,6 +26,12 @@ export interface PolicyView {
   readonly policyNumber: string;
   readonly proposalId: string;
   readonly proposalNumber: string | null;
+  /**
+   * REQ-308: the broker of the proposal the policy came from (REQ-241) — read
+   * from it, never stored again on the policy. The id of a registered broker,
+   * or the text of a proposal registered before the registry (REQ-309).
+   */
+  readonly brokerId: string;
   readonly status: string;
   readonly premium: string;
   readonly coverageStart: string;
@@ -49,6 +55,7 @@ export function toPolicyView(policy: Policy, proposal: Proposal): PolicyView {
     policyNumber: policy.policyNumber,
     proposalId: policy.proposalId,
     proposalNumber: proposal.proposalNumber,
+    brokerId: proposal.brokerId,
     status: policy.status,
     premium: policy.premium.toString(),
     coverageStart: policy.coverageStart.toString(),

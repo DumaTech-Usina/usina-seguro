@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { BusinessRuleViolation } from '../../src/core/proposal/domain/errors.ts';
+import { cpfOf } from '../support/cpf.ts';
 
 /**
  * FP-02 against the real SQLite driver: the CR, its recalculation and the
@@ -15,11 +16,20 @@ import { BusinessRuleViolation } from '../../src/core/proposal/domain/errors.ts'
 let directory: string;
 let file: string;
 let application: Application;
+/** REQ-307: the registered broker the proposals name. */
+let brokerId: string;
 
-beforeEach(() => {
+beforeEach(async () => {
   directory = mkdtempSync(path.join(tmpdir(), 'usina-payout-'));
   file = path.join(directory, 'usina.sqlite');
   application = open();
+  brokerId = (
+    await application.useCases.registerBroker.execute({
+      name: 'Corretora Alfa',
+      cpf: cpfOf(1),
+      userId: 'operator',
+    })
+  ).id;
 });
 
 afterEach(async () => {
@@ -35,7 +45,7 @@ async function policy(proposalNumber: string, mode: 'INTEGRAL' | 'PARCELLED' = '
   const { useCases } = application;
   const proposal = await useCases.registerProposal.execute({
     clientId: 'Ana Lima',
-    brokerId: 'Corretora Alfa',
+    brokerId,
     insurerId: 'ALLIANZ',
     productId: 'Auto',
     paymentMethodId: 'credit',

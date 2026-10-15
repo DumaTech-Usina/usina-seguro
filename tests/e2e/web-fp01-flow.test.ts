@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { chooseBroker, registerBroker } from './support/brokers.ts';
 import { type SignedIn, TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
@@ -43,6 +44,8 @@ let directory: string;
 let application: Application;
 let app: FastifyInstance;
 let baseUrl: string;
+/** REQ-307: the registered broker the proposals name. */
+let brokerId: string;
 let signedIn: SignedIn;
 
 /** Every request the pages made, in order, as `METHOD path`. */
@@ -69,6 +72,7 @@ beforeAll(async () => {
 
   // REQ-410: every journey starts logged in, as the test user.
   signedIn = await signIn(application.useCases, baseUrl);
+  brokerId = await registerBroker(baseUrl, 'Corretora Alfa', 1);
 
   // The pages call the API by path, the way the browser does when the page and
   // the API share an origin. Here the origin is the test server.
@@ -149,7 +153,7 @@ async function callApi(method: string, apiPath: string, body?: unknown): Promise
 function proposalBody(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     clientId: 'client-1',
-    brokerId: 'broker-1',
+    brokerId,
     insurerId: 'insurer-1',
     productId: 'auto',
     paymentMethodId: 'bank-slip',
@@ -169,10 +173,13 @@ async function awaitingProposal(overrides: Record<string, unknown> = {}): Promis
   return proposal.id;
 }
 
-/** Fills the registration form of `new.html` with a complete, valid proposal. */
-function fillRegistration(): void {
+/**
+ * Fills the registration form of `new.html` with a complete, valid proposal;
+ * the broker is searched and chosen, as the operator does (REQ-306, REQ-307).
+ */
+async function fillRegistration(): Promise<void> {
+  await chooseBroker(document, window, 'alfa', 'Corretora Alfa');
   field('#form-proposal', 'clientId').value = 'client-web';
-  field('#form-proposal', 'brokerId').value = 'broker-1';
   field('#form-proposal', 'insurerId').value = 'insurer-1';
   field('#form-proposal', 'productId').value = 'auto';
   field('#form-proposal', 'paymentMethodId').value = 'bank-slip';
@@ -212,7 +219,7 @@ describe('FP-01 through the web interface', () => {
     // REQ-216: the registration is signed by the session; nobody types who signs.
     expect(document.querySelector('#form-proposal [name="userId"]')).toBeNull();
 
-    fillRegistration();
+    await fillRegistration();
     // REQ-204, FA-205: one installment, with no due date.
     click('#add-installment');
     field('#installments', 'amount').value = '100.00';
@@ -268,7 +275,7 @@ describe('FP-01 through the web interface', () => {
     openPage('proposals/new.html');
     await import('/app/proposals/new.js');
 
-    fillRegistration();
+    await fillRegistration();
     choose('#form-proposal', 'receiptKind', 'INTERMEDIARY');
     field('#form-proposal', 'intermediaryId').value = 'intermediary-1';
     submit('#form-proposal');
@@ -295,7 +302,7 @@ describe('FP-01 through the web interface', () => {
     openPage('proposals/new.html');
     await import('/app/proposals/new.js');
 
-    fillRegistration();
+    await fillRegistration();
     field('#form-proposal', 'coverageStart').value = '2027-10-01';
     field('#form-proposal', 'coverageEnd').value = '2026-10-01';
     submit('#form-proposal');
@@ -313,7 +320,7 @@ describe('FP-01 through the web interface', () => {
     openPage('proposals/new.html');
     await import('/app/proposals/new.js');
 
-    fillRegistration();
+    await fillRegistration();
     click('#add-installment');
     field('#installments', 'amount').value = '0.00';
     submit('#form-proposal');
@@ -604,7 +611,7 @@ describe('keeping the imported PDF with the proposal (REQ-219)', () => {
       },
     );
 
-    fillRegistration();
+    await fillRegistration();
     field('#form-proposal', 'proposalNumber').value = 'PRP-SRC-WEB';
     submit('#form-proposal');
 
@@ -670,7 +677,7 @@ describe('keeping the imported PDF with the proposal (REQ-219)', () => {
       });
     });
 
-    fillRegistration();
+    await fillRegistration();
     field('#form-proposal', 'proposalNumber').value = 'PRP-SRC-FAILED';
     submit('#form-proposal');
 
@@ -706,7 +713,7 @@ describe('keeping the imported PDF with the proposal (REQ-219)', () => {
       });
     });
 
-    fillRegistration();
+    await fillRegistration();
     field('#form-proposal', 'proposalNumber').value = 'PRP-SRC-LAST';
     submit('#form-proposal');
 
@@ -751,7 +758,16 @@ describe('filling the proposal from its PDF (REQ-218)', () => {
       // What never comes from the document is said, for the user to inform.
       expect(text('#pdf-result')).toContain('comissão trabalhada');
 
-      // The user reviews, completes what the PDF does not carry, and registers.
+      // REQ-310: the broker's name only fills the search; nothing is chosen.
+      expect(field('#form-proposal', 'brokerSearch').value).toBe(
+        'PAISSANDU CORRETORA DE SEGUROS LTDA',
+      );
+      expect(field('#form-proposal', 'brokerId').value).toBe('');
+
+      // The user reviews, chooses the broker, completes what the PDF does not
+      // carry, and registers.
+      await registerBroker(baseUrl, 'PAISSANDU CORRETORA DE SEGUROS LTDA', 2);
+      await chooseBroker(document, window, 'PAISSANDU', 'PAISSANDU CORRETORA DE SEGUROS LTDA');
       field('#form-proposal', 'workedCommission').value = '20';
       submit('#form-proposal');
 
@@ -802,6 +818,44 @@ describe('filling the proposal from its PDF (REQ-218)', () => {
     expect(field('#form-proposal', 'proposalNumber').value).toBe('555');
     // Not found is not erased: what the user had stays for them to review.
     expect(field('#form-proposal', 'netPremium').value).toBe('100.00');
+  });
+
+  it('puts the broker read from the PDF in the search, and chooses nothing (REQ-310)', async () => {
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: Untyped, init: Untyped) =>
+      String(input).endsWith('/proposals/pdf-reading')
+        ? new Response(
+            JSON.stringify({
+              status: 'PARTIAL',
+              fields: { brokerId: 'Corretora Alfa' },
+              missing: ['netPremium'],
+            }),
+            { status: 200, headers: { 'content-type': 'application/json' } },
+          )
+        : realFetch(input, init)) as typeof globalThis.fetch;
+
+    try {
+      sendPdf(new Uint8Array([1, 2, 3]));
+      await vi.waitFor(() => {
+        expect(text('#pdf-result')).toContain('PDF lido parcialmente.');
+      });
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+
+    expect(field('#form-proposal', 'brokerSearch').value).toBe('Corretora Alfa');
+    // The matching broker is offered to be chosen (REQ-306), never chosen for the user.
+    await vi.waitFor(() => {
+      expect(
+        [...document.querySelectorAll('#broker-options option')].map(
+          (option: Untyped) => option.value,
+        ),
+      ).toContain('Corretora Alfa · 100.000.001-08');
+    });
+    expect(field('#form-proposal', 'brokerId').value).toBe('');
   });
 
   it('says the reading failed and fills nothing (CA-222)', async () => {

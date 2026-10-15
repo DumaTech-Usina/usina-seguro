@@ -1,5 +1,7 @@
 import { Authorship } from '../../proposal/domain/authorship.ts';
 import { BusinessRuleViolation } from '../../proposal/domain/errors.ts';
+import { brokerNameOf } from '../../registry/application/broker-name.ts';
+import type { BrokerRepository } from '../../registry/application/broker-repository.ts';
 import { COMMISSION_MESSAGES } from '../domain/errors.ts';
 import type { PolicyPayoutView } from './payout-commission-view.ts';
 import {
@@ -19,10 +21,15 @@ export interface DeclarePayoutEligibilityInput {
  * ELIGIBLE for good and the statement is generated (REQ-281 to REQ-283).
  * Nothing is paid or moved (REQ-280).
  */
-export class DeclarePayoutEligibility {
-  private readonly deps: PayoutDependencies;
+export interface DeclarePayoutEligibilityDependencies extends PayoutDependencies {
+  /** REQ-308: the statement keeps the broker's name as it is at eligibility. */
+  readonly brokers: BrokerRepository;
+}
 
-  constructor(deps: PayoutDependencies) {
+export class DeclarePayoutEligibility {
+  private readonly deps: DeclarePayoutEligibilityDependencies;
+
+  constructor(deps: DeclarePayoutEligibilityDependencies) {
     this.deps = deps;
   }
 
@@ -40,9 +47,9 @@ export class DeclarePayoutEligibility {
     const commission = context.commission.declareEligible(
       {
         policyNumber: policy.policyNumber,
-        // DEC-208: the broker and the client are, for now, the names the
-        // proposal carries.
-        broker: proposal.brokerId,
+        // REQ-308: the broker's name now, kept as it is. DEC-208 is still open
+        // for the client: it is the name the proposal carries.
+        broker: await brokerNameOf(this.deps.brokers, proposal.brokerId),
         client: proposal.clientId,
         netPremium: proposal.netPremium,
         workedCommission: proposal.workedCommission,

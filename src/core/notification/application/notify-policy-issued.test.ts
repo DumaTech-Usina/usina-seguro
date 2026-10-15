@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { InMemoryBrokerRepository } from '../../../infrastructure/persistence/in-memory/in-memory-broker-repository.ts';
 import { InMemoryNotificationRepository } from '../../../infrastructure/persistence/in-memory/in-memory-notification-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { InMemoryReferenceRepository } from '../../../infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
 import type { PolicyIssuedEvent } from '../../policy/application/policy-issued-notifier.ts';
+import { Authorship } from '../../proposal/domain/authorship.ts';
 import { CalendarDate } from '../../proposal/domain/calendar-date.ts';
 import { RecordNotFound } from '../../proposal/domain/errors.ts';
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal, type ProposalRegistration } from '../../proposal/domain/proposal.ts';
+import { Broker } from '../../registry/domain/broker.ts';
 import { Reference, type ReferenceKind } from '../../registry/domain/reference.ts';
 import type { NotificationChannel } from './notification-channel.ts';
 import type { NotificationView } from './notification-view.ts';
@@ -37,17 +40,19 @@ function scenario(channels: readonly NotificationChannel[] = []) {
   const notifications = new InMemoryNotificationRepository();
   const proposals = new InMemoryProposalRepository();
   const references = new InMemoryReferenceRepository();
+  const brokers = new InMemoryBrokerRepository();
   let sequence = 0;
 
   const useCase = new NotifyPolicyIssued({
     notifications,
     proposals,
     references,
+    brokers,
     channels,
     newId: () => `notification-${++sequence}`,
   });
 
-  return { notifications, proposals, references, useCase };
+  return { notifications, proposals, references, brokers, useCase };
 }
 
 function transmitted(overrides: Partial<ProposalRegistration> = {}): Proposal {
@@ -72,10 +77,22 @@ function transmitted(overrides: Partial<ProposalRegistration> = {}): Proposal {
   });
 }
 
-async function registerNames(references: InMemoryReferenceRepository): Promise<void> {
+async function registerNames(
+  references: InMemoryReferenceRepository,
+  brokers: InMemoryBrokerRepository,
+): Promise<void> {
+  // REQ-308: the broker's name comes from the broker registry (V2 section 9D).
+  await brokers.save(
+    Broker.register({
+      id: 'broker-1',
+      name: 'Corretora Alfa',
+      cpf: '52998224725',
+      signed: Authorship.of('operator', new Date('2026-09-01T00:00:00.000Z')),
+    }),
+  );
+
   const named: readonly [ReferenceKind, string, string][] = [
     ['CLIENT', 'client-1', 'Maria Souza'],
-    ['BROKER', 'broker-1', 'Corretora Alfa'],
     ['PRODUCT', 'auto', 'Automovel'],
   ];
 
@@ -98,9 +115,9 @@ function event(overrides: Partial<PolicyIssuedEvent> = {}): PolicyIssuedEvent {
 
 describe('NotifyPolicyIssued', () => {
   it('notifies the broker with the five fields of REQ-100 (CA-029)', async () => {
-    const { notifications, proposals, references, useCase } = scenario();
+    const { notifications, proposals, references, brokers, useCase } = scenario();
     await proposals.save(transmitted());
-    await registerNames(references);
+    await registerNames(references, brokers);
 
     await useCase.notify(event());
 
@@ -117,9 +134,9 @@ describe('NotifyPolicyIssued', () => {
   });
 
   it('records what was notified, to whom and when (REQ-105)', async () => {
-    const { notifications, proposals, references, useCase } = scenario();
+    const { notifications, proposals, references, brokers, useCase } = scenario();
     await proposals.save(transmitted());
-    await registerNames(references);
+    await registerNames(references, brokers);
 
     await useCase.notify(event());
 
@@ -135,9 +152,9 @@ describe('NotifyPolicyIssued', () => {
   });
 
   it('copies the names instead of joining them later (REQ-105, REJ-011)', async () => {
-    const { notifications, proposals, references, useCase } = scenario();
+    const { notifications, proposals, references, brokers, useCase } = scenario();
     await proposals.save(transmitted());
-    await registerNames(references);
+    await registerNames(references, brokers);
 
     await useCase.notify(event());
 
@@ -169,9 +186,9 @@ describe('NotifyPolicyIssued', () => {
 
   it('publishes through the single contract, whatever the channel (REQ-101)', async () => {
     const email = new RecordingChannel('email');
-    const { proposals, references, useCase } = scenario([email]);
+    const { proposals, references, brokers, useCase } = scenario([email]);
     await proposals.save(transmitted());
-    await registerNames(references);
+    await registerNames(references, brokers);
 
     await useCase.notify(event());
 

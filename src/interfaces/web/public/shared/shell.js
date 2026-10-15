@@ -79,6 +79,8 @@ const NAV = [
   {
     group: 'Administração',
     items: [
+      // V2 section 9D: the brokers, for every user (REQ-401).
+      { id: 'brokers', label: 'Corretores', icon: 'badge', href: '/app/brokers/', ready: true },
       { id: 'settings', label: 'Cadastros', icon: 'tune', href: '/app/settings/', ready: true },
       // REQ-440: only an administrator sees it — a convenience; the server is
       // what refuses anyone else (REQ-430).

@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { registerBroker } from './support/brokers.ts';
 import { type SignedIn, signIn } from './support/sign-in.ts';
 
 /**
@@ -22,6 +23,8 @@ let directory: string;
 let application: Application;
 let app: FastifyInstance;
 let baseUrl: string;
+/** REQ-307: the registered broker the proposals of this journey name. */
+let brokerId: string;
 let signedIn: SignedIn;
 
 beforeAll(async () => {
@@ -44,6 +47,10 @@ beforeAll(async () => {
   baseUrl = `http://127.0.0.1:${address.port}`;
 
   signedIn = await signIn(application.useCases, baseUrl);
+
+  brokerId = await registerBroker(baseUrl, 'Corretora Alfa', 1);
+
+  PROPOSAL.brokerId = brokerId;
 });
 
 afterAll(async () => {

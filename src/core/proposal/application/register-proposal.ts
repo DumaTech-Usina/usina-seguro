@@ -1,4 +1,5 @@
 import { CalendarDate } from '../domain/calendar-date.ts';
+import { BusinessRuleViolation, PROPOSAL_MESSAGES } from '../domain/errors.ts';
 import { Money } from '../domain/money.ts';
 import { Percentage } from '../domain/percentage.ts';
 import { Proposal } from '../domain/proposal.ts';
@@ -6,6 +7,7 @@ import { declareReceipt } from '../domain/receipt.ts';
 import type { WorkedCommissionMode } from '../domain/worked-commission.ts';
 import type { ProposalRepository } from './proposal-repository.ts';
 import { type ProposalView, toProposalView } from './proposal-view.ts';
+import type { RegisteredBrokers } from './registered-brokers.ts';
 import type { SourceDocumentStorage } from './source-document-storage.ts';
 
 /** REQ-221: an intermediary and its CTU, as the user declared them. */
@@ -28,6 +30,7 @@ export interface RegisterProposalInstallmentInput {
  */
 export interface RegisterProposalInput {
   readonly clientId: string;
+  /** REQ-307: the id of a registered broker. */
   readonly brokerId: string;
   readonly insurerId: string;
   readonly productId: string;
@@ -63,6 +66,7 @@ export interface SourceDocumentInput {
 export interface RegisterProposalDependencies {
   readonly proposals: ProposalRepository;
   readonly documents: SourceDocumentStorage;
+  readonly brokers: RegisteredBrokers;
   readonly newId: () => string;
   readonly now: () => Date;
 }
@@ -107,8 +111,13 @@ export class RegisterProposal {
       registeredAt: this.deps.now(),
     });
 
-    // Only once the domain accepted the proposal: a refused registration
-    // leaves no document behind.
+    // REQ-307, REJ-304: the broker is one the registry knows.
+    if (!(await this.deps.brokers.isRegistered(proposal.brokerId))) {
+      throw new BusinessRuleViolation('REQ-307', PROPOSAL_MESSAGES.BROKER_NOT_REGISTERED);
+    }
+
+    // Only once the proposal was accepted: a refused registration leaves no
+    // document behind.
     if (source !== null && documentId !== null) {
       await this.deps.documents.save({ id: documentId, ...source });
     }
