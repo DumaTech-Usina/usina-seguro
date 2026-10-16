@@ -66,6 +66,11 @@
 > cadastrado**, com **nome e CPF**, no modelo do corretor (seção 9E). No registro da proposta o
 > usuário informa nome e CPF do cliente; o sistema usa o cliente que já tem aquele CPF ou cadastra
 > um novo, no mesmo ato. Propostas e apólices passam a ser buscadas pelo nome ou CPF do cliente.
+> Em **2026-10-16** o negócio definiu que a **intermediária da proposta é uma intermediária
+> cadastrada** (`REQ-229`): a proposta recusa uma intermediária que não esteja no cadastro de
+> referências, e a tela mostra o nome cadastrado. A Mega, única intermediária hoje, é um registro
+> desse cadastro. O cadastro continua como está — identificador e nome. Ficou em aberto mostrar a
+> intermediária na tela da apólice (`Q-224`).
 > A V1 (`requisitos_refinados.md`) é preservada como registro do entendimento anterior e
 > **não é fonte da verdade** para o que está escrito aqui. Onde as duas divergem, **vale a
 > V2** — o mapa da seção 12 diz o que foi mantido, alterado ou descartado.
@@ -366,6 +371,16 @@ emissão**. Depois da emissão, não.
 
 `REQ-226` A informação da intermediária **passa para a apólice** junto com o resto
 (`REQ-241`).
+
+`REQ-229` **A intermediária é uma intermediária cadastrada** (2026-10-16). A proposta só aceita
+uma intermediária que esteja no **cadastro de referências**, como intermediária — no registro
+(`REQ-222`) e na alteração antes da emissão (`REQ-225`). Uma intermediária não cadastrada é
+**recusada**, com mensagem para o usuário, e nada é gravado. O cadastro é o de referências que já
+existe: **identificador e nome**; não ganha campo, situação nem histórico próprio. Incluir uma nova
+intermediária é cadastrá-la, sem mudança no sistema. Nenhuma regra de cálculo depende de **qual**
+é a intermediária (`REQ-231`). A tela mostra o **nome** cadastrado da intermediária; uma proposta
+registrada antes desta regra, com uma intermediária que o cadastro não conhece, é exibida com o
+identificador, como está.
 
 ---
 
@@ -1426,6 +1441,7 @@ proposta (`REQ-317`).
 | `EX-213` | CR da parcelada maior que o seu CT       | Recusada pelo backend; a tela exibe o erro (`REQ-263`) |
 | `EX-214` | Elegibilidade de parcela sem CR          | Recusada (`REQ-288`) |
 | `EX-215` | Só uma das duas CRs da parcelada informada | Recusada (`REQ-287`) |
+| `EX-216` | Intermediária não cadastrada | Recusada, nada é gravado (`REQ-229`) |
 | `EX-401` | Operação sem sessão válida               | Recusada; a tela leva ao login (`REQ-410`, `REQ-431`) |
 | `EX-402` | Operação sem o papel exigido             | Recusada, com mensagem (`REQ-430`, `REQ-431`) |
 | `EX-403` | Link de convite ou de redefinição expirado, usado, substituído ou desconhecido | Recusado com uma única mensagem (`REQ-422`, `REQ-426`) |
@@ -1452,6 +1468,7 @@ proposta (`REQ-317`).
 | `CA-212` | Uma proposta recusada registra o motivo e **não** origina apólice                                                                  | `REQ-253`            |
 | `CA-213` | Uma proposta aceita no máximo **uma** intermediária                                                                                | `REQ-220`            |
 | `CA-214` | Retirar a intermediária antes da emissão faz o valor esperado voltar a ser prêmio × CT                                             | `REQ-230`, `REQ-252` |
+| `CA-269` | Com a Mega cadastrada, a proposta através da Mega é aceita e mostra o nome cadastrado; uma intermediária não cadastrada é recusada, no registro e na alteração | `REQ-229` |
 | `CA-216` | Uma proposta sem parcelas é aceita; sem qualquer outro dado de `REQ-202` ou sem o modo da CT, é recusada                           | `REQ-202`            |
 | `CA-217` | O modo da CT pode ser corrigido antes da emissão, com autor e data                                                                 | `REQ-214`, `REQ-215` |
 | `CA-218` | Proposta com prêmio líquido 0,00 ou negativo é recusada                                                                            | `REQ-217`            |
@@ -1550,6 +1567,7 @@ proposta (`REQ-317`).
 | `REJ-207` | Calcular o repasse ao corretor dentro do FP-01                            | `REQ-233`                                                       |
 | `REJ-208` | Registrar recusa sem motivo                                               | `REQ-253`                                                       |
 | `REJ-209` | Declarar mais de uma intermediária na mesma proposta                      | `REQ-220`                                                       |
+| `REJ-246` | Declarar uma intermediária que não está no cadastro                       | `REQ-229`                                                       |
 | `REJ-210` | Originar apólice de uma proposta recusada                                 | `REQ-253`                                                       |
 | `REJ-211` | Alterar prêmio líquido, número ou vigência depois do registro, ou parcelas depois da emissão | `REQ-261`, `REQ-254` |
 | `REJ-212` | Alterar uma proposta recusada                                             | `REQ-253`                                                       |
@@ -1697,6 +1715,7 @@ apólice; os dois números seguem consultáveis) · `REQ-120`, `REQ-121` (precis
 
 | ID      | Pergunta | Onde |
 | ------- | -------- | ---- |
+| `Q-224` | **Intermediária na tela da apólice** — a informação passa para a apólice (`REQ-226`), mas a tela da apólice não a mostra; mostrar ou não ainda não foi decidido (2026-10-16) | `REQ-226`, `REQ-229` |
 | `Q-415` | **Comando de criação de usuário** — detalhes ainda não especificados: papel padrão (hoje Usuário, com opção de Administrador), se deve existir em produção, se registra quem o executou | `REQ-407` |
 
 **Respondidas em 2026-10-14** (seção 9C): `Q-401` (`REQ-401`), `Q-402` (`REQ-402`), `Q-403`
