@@ -8,6 +8,7 @@ import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { registerBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
+import { registerIntermediary } from './support/intermediaries.ts';
 import { type SignedIn, signIn } from './support/sign-in.ts';
 
 /**
@@ -50,6 +51,8 @@ beforeAll(async () => {
   signedIn = await signIn(application.useCases, baseUrl);
 
   brokerId = await registerBroker(baseUrl, 'Corretora Alfa', 1);
+  // REQ-229: the intermediary the proposals are received through.
+  await registerIntermediary(baseUrl, 'mega', 'Mega Intermediação');
 
   PROPOSAL.brokerId = brokerId;
 });
@@ -107,7 +110,7 @@ describe('the author of a signed act is the session user, by id (REQ-216, CA-415
       workedCommissionMode: 'INTEGRAL',
     });
     await ok('POST', `/proposals/${proposal.id}/receipt`, {
-      intermediary: { intermediaryId: 'intermediary-1', ctu: '50' },
+      intermediary: { intermediaryId: 'mega', ctu: '50' },
     });
     await ok('POST', `/proposals/${proposal.id}/installments`, {
       installments: [{ amount: '1000.00' }],

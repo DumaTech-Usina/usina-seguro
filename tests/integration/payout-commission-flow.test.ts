@@ -30,6 +30,12 @@ beforeEach(async () => {
       userId: 'operator',
     })
   ).id;
+  // REQ-229: the intermediary the integral proposals are received through.
+  await application.useCases.registerReference.execute({
+    kind: 'INTERMEDIARY',
+    id: 'Mega',
+    name: 'Mega Intermediação',
+  });
 });
 
 afterEach(async () => {

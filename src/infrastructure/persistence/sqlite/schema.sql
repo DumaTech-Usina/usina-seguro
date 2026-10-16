@@ -140,10 +140,10 @@ CREATE TABLE IF NOT EXISTS installment (
 -- Reference records the Administrator maintains (IN-01). One row per entity
 -- the Usina works with, holding the identifier the rest of the schema already
 -- stores and the name REQ-096 has to print. Nothing references this table by
--- foreign key on purpose: no requirement says a proposal must name a
--- registered client, and REQ-002 makes this system reflect a control that
--- happens outside it -- an unregistered reference is a missing name, not an
--- invalid business.
+-- foreign key on purpose: only the intermediary must be registered (REQ-229),
+-- and the use cases check it; the receipt keeps the identifier, so a proposal
+-- registered before that rule still reads. No requirement says a proposal
+-- must name a registered insurer or product.
 CREATE TABLE IF NOT EXISTS reference (
   kind           TEXT NOT NULL
     -- The broker and the client have their own tables (V2 sections 9D, 9E).

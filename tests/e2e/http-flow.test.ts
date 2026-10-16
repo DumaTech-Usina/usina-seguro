@@ -8,6 +8,7 @@ import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { registerBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
+import { registerIntermediary } from './support/intermediaries.ts';
 import { type SignedIn, signIn } from './support/sign-in.ts';
 
 /**
@@ -44,6 +45,8 @@ beforeAll(async () => {
   // REQ-410: every journey starts logged in, as the test user.
   signedIn = await signIn(application.useCases, baseUrl);
   brokerId = await registerBroker(baseUrl, 'Corretora Alfa', 1);
+  // REQ-229: the intermediary the proposals are received through.
+  await registerIntermediary(baseUrl, 'mega', 'Mega Intermediação');
   validProposal.brokerId = brokerId;
 });
 
@@ -197,11 +200,11 @@ describe('proposal API (V2)', () => {
     const response = await post({
       ...validProposal,
       netPremium: '100.00',
-      intermediary: { intermediaryId: 'intermediary-1', ctu: '50' },
+      intermediary: { intermediaryId: 'mega', ctu: '50' },
     });
 
     expect(await response.json()).toMatchObject({
-      intermediaryId: 'intermediary-1',
+      intermediaryId: 'mega',
       ctu: '50',
       expectedReceipt: { intermediary: '20.00', usina: '10.00' },
     });
@@ -217,6 +220,20 @@ describe('proposal API (V2)', () => {
     expect(await response.json()).toMatchObject({
       rule: 'REQ-221',
       message: 'Com intermediária, a CTU (comissão trabalhada da Usina) é obrigatória.',
+    });
+  });
+
+  it('refuses an unregistered intermediary with 422, in Portuguese (REQ-229, REJ-246)', async () => {
+    const response = await post({
+      ...validProposal,
+      proposalNumber: 'PRP-UNKNOWN-INTERMEDIARY',
+      intermediary: { intermediaryId: 'Intermediaria Digitada', ctu: '50' },
+    });
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      rule: 'REQ-229',
+      message: 'Escolha uma intermediária cadastrada.',
     });
   });
 
@@ -345,7 +362,7 @@ describe('proposal API (V2)', () => {
     const id = await registered({ netPremium: '100.00' });
 
     const declared = await post(
-      { intermediary: { intermediaryId: 'intermediary-1', ctu: '50' } },
+      { intermediary: { intermediaryId: 'mega', ctu: '50' } },
       `/proposals/${id}/receipt`,
     );
     expect(await declared.json()).toMatchObject({ expectedReceipt: { usina: '10.00' } });

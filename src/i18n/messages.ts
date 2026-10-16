@@ -65,6 +65,7 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'proposal.already_has_policy': 'Proposta já possui apólice registrada.',
     'proposal.not_found': "Proposta não encontrada: '{id}'.",
     'proposal.broker_not_registered': 'Escolha um corretor cadastrado.',
+    'proposal.intermediary_not_registered': 'Escolha uma intermediária cadastrada.',
     'proposal.source_document_not_found': 'A proposta {id} não tem documento de origem guardado.',
     'money.invalid_format':
       "Valor monetário inválido: '{value}'. Use string decimal com até {scale} casas, ex.: '1234.56'.",

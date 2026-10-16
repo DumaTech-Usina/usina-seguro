@@ -16,6 +16,7 @@ async function scenario(mode: 'INTEGRAL' | 'PARCELLED' = 'INTEGRAL') {
     proposals,
     documents: new InMemoryDocumentStorage(),
     brokers: { isRegistered: async () => true },
+    intermediaries: { isRegistered: async () => true },
     clients: {
       resolve: async () => 'client-1',
       matching: async () => new Set<string>(),

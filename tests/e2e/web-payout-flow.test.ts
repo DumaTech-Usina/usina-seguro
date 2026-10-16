@@ -10,6 +10,7 @@ import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { registerBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
+import { registerIntermediary } from './support/intermediaries.ts';
 import { TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
@@ -99,6 +100,8 @@ beforeAll(async () => {
   await signIn(application.useCases, baseUrl);
   brokers.alfa = await registerBroker(baseUrl, 'Corretora Alfa', 1);
   brokers.beta = await registerBroker(baseUrl, 'Corretora Beta', 2);
+  // REQ-229: the intermediary of CA-226.
+  await registerIntermediary(baseUrl, 'Mega', 'Mega Intermediação');
 
   const nodeFetch = globalThis.fetch;
   globalThis.fetch = ((input: Untyped, init: Untyped) => {

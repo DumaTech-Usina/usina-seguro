@@ -10,6 +10,7 @@ import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { chooseBroker, registerBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
+import { registerIntermediary } from './support/intermediaries.ts';
 import { type SignedIn, TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
@@ -74,6 +75,9 @@ beforeAll(async () => {
   // REQ-410: every journey starts logged in, as the test user.
   signedIn = await signIn(application.useCases, baseUrl);
   brokerId = await registerBroker(baseUrl, 'Corretora Alfa', 1);
+  // REQ-229: Mega, the one intermediary the Usina works with today.
+  await registerIntermediary(baseUrl, 'mega', 'Mega Intermediação');
+  await registerIntermediary(baseUrl, 'zeta', 'Zeta Intermediação');
 
   // The pages call the API by path, the way the browser does when the page and
   // the API share an origin. Here the origin is the test server.
@@ -209,6 +213,13 @@ async function openProposal(id: string): Promise<void> {
   });
 }
 
+/** Waits until the intermediary dropdown of `form` holds the registry's options. */
+async function intermediariesOffered(form: string): Promise<void> {
+  await vi.waitFor(() => {
+    expect(document.querySelectorAll(`${form} [name="intermediaryId"] option`).length).toBe(2);
+  });
+}
+
 function hidden(selector: string): boolean {
   return document.querySelector(selector)?.classList.contains('hidden') ?? true;
 }
@@ -227,8 +238,9 @@ describe('FP-01 through the web interface', () => {
     click('#add-installment');
     field('#installments', 'amount').value = '100.00';
     // REQ-220, REQ-221: through the one intermediary, with its CTU.
+    // REQ-229: the first registered intermediary is the one chosen by default.
     choose('#form-proposal', 'receiptKind', 'INTERMEDIARY');
-    field('#form-proposal', 'intermediaryId').value = 'intermediary-1';
+    await intermediariesOffered('#form-proposal');
     field('#form-proposal', 'ctu').value = '50';
     submit('#form-proposal');
 
@@ -248,7 +260,7 @@ describe('FP-01 through the web interface', () => {
       installments: [{ number: 1, amount: '100.00', dueDate: null }],
       workedCommission: '20',
       workedCommissionMode: 'INTEGRAL',
-      intermediaryId: 'intermediary-1',
+      intermediaryId: 'mega',
       ctu: '50',
       expectedReceipt: { intermediary: '20.00', usina: '10.00' },
     });
@@ -284,7 +296,7 @@ describe('FP-01 through the web interface', () => {
 
     await fillRegistration();
     choose('#form-proposal', 'receiptKind', 'INTERMEDIARY');
-    field('#form-proposal', 'intermediaryId').value = 'intermediary-1';
+    await intermediariesOffered('#form-proposal');
     submit('#form-proposal');
 
     await vi.waitFor(() => {
@@ -295,6 +307,23 @@ describe('FP-01 through the web interface', () => {
     );
     expect(snackbars()[0]).toContain('REQ-221');
     expect(hidden('[data-panel="done"]')).toBe(true);
+  });
+
+  it('offers the registered intermediaries in a dropdown, the first chosen by default (REQ-229)', async () => {
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+
+    const select = field('#form-proposal', 'intermediaryId');
+    // Nothing to type: only what the registry knows can be chosen.
+    expect(select.tagName).toBe('SELECT');
+    await intermediariesOffered('#form-proposal');
+    expect(
+      [...select.options].map((option: Untyped) => [option.value, option.textContent]),
+    ).toEqual([
+      ['mega', 'Mega Intermediação'],
+      ['zeta', 'Zeta Intermediação'],
+    ]);
+    expect(select.value).toBe('mega');
   });
 
   it('does not ask for the customer acceptance, which the proposal no longer holds (REQ-201)', async () => {
@@ -373,7 +402,7 @@ describe('FP-01 through the web interface', () => {
     const id = await awaitingProposal({
       proposalNumber: 'PRP-SHOW-1',
       installments: [{ amount: '100.00', dueDate: '2026-10-10' }],
-      intermediary: { intermediaryId: 'intermediary-1', ctu: '50' },
+      intermediary: { intermediaryId: 'mega', ctu: '50' },
     });
 
     await openProposal(id);
@@ -386,13 +415,16 @@ describe('FP-01 through the web interface', () => {
     expect(page).toContain('10/10/2026');
     expect(text('[data-definition="workedCommission"]')).toContain('20%');
     expect(text('[data-definition="workedCommission"]')).toContain('Integral');
-    expect(text('[data-definition="receipt"]')).toContain('intermediary-1');
+    // REQ-229: the intermediary is shown by its registered name.
+    expect(text('[data-definition="receipt"]')).toContain('Mega Intermediação');
+    expect(text('[data-definition="receipt"]')).not.toContain('Através de mega');
     expect(text('[data-definition="receipt"]')).toContain('50%');
     expect(text('#expected')).toContain('R$ 20,00');
     expect(text('#expected')).toContain('R$ 10,00');
     // REQ-216: the author is shown by name, never by the id the backend keeps.
     expect(text('#history')).toContain(TEST_USER.name);
     expect(text('#history')).not.toContain(signedIn.user.id);
+    expect(text('#history')).toContain('Mega Intermediação');
   });
 
   it('corrects the CT and its mode before issuance, signed (FA-203, CA-204, CA-217)', async () => {
@@ -441,14 +473,14 @@ describe('FP-01 through the web interface', () => {
     await openProposal(id);
 
     choose('#form-receipt', 'receiptKind', 'INTERMEDIARY');
-    field('#form-receipt', 'intermediaryId').value = 'intermediary-1';
+    field('#form-receipt', 'intermediaryId').value = 'mega';
     field('#form-receipt', 'ctu').value = '50';
     submit('#form-receipt');
 
     await vi.waitFor(() => {
       expect(text('#expected')).toContain('R$ 10,00');
     });
-    expect(text('[data-definition="receipt"]')).toContain('intermediary-1');
+    expect(text('[data-definition="receipt"]')).toContain('Mega Intermediação');
 
     choose('#form-receipt', 'receiptKind', 'DIRECT');
     submit('#form-receipt');
@@ -462,9 +494,43 @@ describe('FP-01 through the web interface', () => {
     const stored = await callApi('GET', `/proposals/${id}`);
     expect(stored.receiptHistory.map((entry: Untyped) => entry.intermediaryId)).toEqual([
       null,
-      'intermediary-1',
+      'mega',
       null,
     ]);
+  });
+
+  it('corrects the intermediary from the dropdown, starting at the one the proposal has (REQ-225, REQ-229)', async () => {
+    const id = await awaitingProposal({
+      proposalNumber: 'PRP-INT-ZETA',
+      intermediary: { intermediaryId: 'zeta', ctu: '50' },
+    });
+    await openProposal(id);
+
+    const select = field('#form-receipt', 'intermediaryId');
+    expect(select.tagName).toBe('SELECT');
+    expect(select.value).toBe('zeta');
+    expect(text('[data-definition="receipt"]')).toContain('Zeta Intermediação');
+
+    choose('#form-receipt', 'intermediaryId', 'mega');
+    submit('#form-receipt');
+
+    await vi.waitFor(() => {
+      expect(text('[data-definition="receipt"]')).toContain('Mega Intermediação');
+    });
+    const stored = await callApi('GET', `/proposals/${id}`);
+    expect(stored.receiptHistory.map((entry: Untyped) => entry.intermediaryId)).toEqual([
+      'zeta',
+      'mega',
+    ]);
+  });
+
+  it('starts the dropdown of a direct proposal at the first registered intermediary (REQ-229)', async () => {
+    const id = await awaitingProposal({ proposalNumber: 'PRP-INT-DEFAULT' });
+    await openProposal(id);
+
+    choose('#form-receipt', 'receiptKind', 'INTERMEDIARY');
+
+    expect(field('#form-receipt', 'intermediaryId').value).toBe('mega');
   });
 
   it('refuses a rejection with no reason, records one with it, and then offers nothing (REQ-253)', async () => {

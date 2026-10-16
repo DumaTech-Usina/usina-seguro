@@ -22,13 +22,14 @@ export interface ReferenceData {
   readonly kind: ReferenceKind;
   /**
    * The identifier the rest of the system already stores (REQ-022): the same
-   * string a proposal carries in `insurerId` or `productId`, and an agreement carries in `intermediaryId`.
+   * string a proposal carries in `insurerId`, `productId` or, in its receipt,
+   * `intermediaryId`.
    *
-   * The registry does not hand out identifiers and nothing validates a
-   * proposal against it. No requirement says a reference must exist before it
-   * is used, and REQ-002 makes this system a reflection of a control that
-   * happens outside it — a proposal whose client was never registered is a
-   * proposal with no name to show, not a proposal to refuse.
+   * The registry does not hand out identifiers. Only the intermediary is
+   * validated against it: a proposal refuses one the registry does not know
+   * (REQ-229). The insurer and the product are not — no requirement says they
+   * must exist before they are used, and REQ-002 makes this system a
+   * reflection of a control that happens outside it.
    */
   readonly id: string;
   /** REQ-096: what the report and the receipt have to identify. */

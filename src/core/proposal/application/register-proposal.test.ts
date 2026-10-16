@@ -14,6 +14,23 @@ function registeredBrokers(...ids: string[]) {
 }
 
 /**
+ * REQ-229: the intermediaries the reference registry knows, as the port
+ * answers it. Every id asked is kept, so a test can see whether it was asked.
+ */
+function registeredIntermediaries(...ids: string[]) {
+  const asked: string[] = [];
+  return {
+    asked,
+    port: {
+      isRegistered: async (id: string) => {
+        asked.push(id);
+        return ids.includes(id);
+      },
+    },
+  };
+}
+
+/**
  * REQ-317: the client registry as the port answers it — one id per CPF digits,
  * created on first sight. Every call is kept so a test can see what was asked.
  */
@@ -44,17 +61,19 @@ function scenario() {
   const proposals = new InMemoryProposalRepository();
   const documents = new InMemoryDocumentStorage();
   const clients = clientRegistry();
+  const intermediaries = registeredIntermediaries('mega', 'alfa');
   let sequence = 0;
   const useCase = new RegisterProposal({
     proposals,
     documents,
     brokers: registeredBrokers('broker-1'),
+    intermediaries: intermediaries.port,
     clients: clients.port,
     transaction: new ImmediateTransaction(),
     newId: () => (sequence++ === 0 ? 'fixed-id' : `id-${sequence}`),
     now: () => NOW,
   });
-  return { proposals, documents, clients, useCase };
+  return { proposals, documents, clients, intermediaries, useCase };
 }
 
 const PDF_BYTES = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]);
@@ -209,10 +228,10 @@ describe('RegisterProposal', () => {
     const { useCase } = scenario();
 
     const view = await useCase.execute(
-      input({ intermediary: { intermediaryId: 'intermediary-1', ctu: '50' } }),
+      input({ intermediary: { intermediaryId: 'mega', ctu: '50' } }),
     );
 
-    expect(view.intermediaryId).toBe('intermediary-1');
+    expect(view.intermediaryId).toBe('mega');
     expect(view.ctu).toBe('50');
     expect(view.expectedReceipt).toEqual({ intermediary: '20.00', usina: '10.00' });
   });
@@ -225,6 +244,82 @@ describe('RegisterProposal', () => {
     ).rejects.toThrow(BusinessRuleViolation);
 
     expect(await proposals.findById('fixed-id')).toBeNull();
+  });
+
+  describe('the registered intermediary (REQ-229)', () => {
+    it('refuses an intermediary the registry does not know, and stores nothing (REJ-246, EX-216)', async () => {
+      const { proposals, documents, useCase } = scenario();
+
+      const error = await useCase
+        .execute(
+          input({
+            intermediary: { intermediaryId: 'Intermediaria Digitada', ctu: '50' },
+            sourceDocument: {
+              fileName: 'p.pdf',
+              contentType: 'application/pdf',
+              content: PDF_BYTES,
+            },
+          }),
+        )
+        .catch((thrown: unknown) => thrown);
+
+      expect(error).toBeInstanceOf(BusinessRuleViolation);
+      expect((error as BusinessRuleViolation).rule).toBe('REQ-229');
+      expect((error as BusinessRuleViolation).messageKey).toBe(
+        PROPOSAL_MESSAGES.INTERMEDIARY_NOT_REGISTERED,
+      );
+      expect(await proposals.list({})).toEqual([]);
+      expect(await documents.findById('id-2')).toBeNull();
+    });
+
+    it('matches the identifier exactly: Mega is not mega (REQ-229, CA-269)', async () => {
+      const { useCase } = scenario();
+
+      await expect(
+        useCase.execute(input({ intermediary: { intermediaryId: 'Mega', ctu: '50' } })),
+      ).rejects.toMatchObject({ rule: 'REQ-229' });
+    });
+
+    it('asks the registry for the identifier as it is kept, without the surrounding spaces (REQ-220)', async () => {
+      const { intermediaries, useCase } = scenario();
+
+      const view = await useCase.execute(
+        input({ intermediary: { intermediaryId: '  mega ', ctu: '50' } }),
+      );
+
+      expect(intermediaries.asked).toEqual(['mega']);
+      expect(view.intermediaryId).toBe('mega');
+    });
+
+    it('never asks the registry for a direct receipt (REQ-220, FA-201)', async () => {
+      const { intermediaries, useCase } = scenario();
+
+      await useCase.execute(input({ intermediary: null }));
+
+      expect(intermediaries.asked).toEqual([]);
+    });
+
+    it('accepts a second registered intermediary with the same rules (CA-269, REQ-231)', async () => {
+      const { useCase } = scenario();
+
+      const view = await useCase.execute(
+        input({ intermediary: { intermediaryId: 'alfa', ctu: '50' } }),
+      );
+
+      expect(view.intermediaryId).toBe('alfa');
+      expect(view.expectedReceipt).toEqual({ intermediary: '20.00', usina: '10.00' });
+    });
+
+    it('still answers a missing CTU before asking the registry (REQ-221, REJ-202)', async () => {
+      const { intermediaries, useCase } = scenario();
+
+      await expect(
+        useCase.execute(
+          input({ intermediary: { intermediaryId: 'Intermediaria Digitada', ctu: null } }),
+        ),
+      ).rejects.toMatchObject({ rule: 'REQ-221' });
+      expect(intermediaries.asked).toEqual([]);
+    });
   });
 
   it('refuses an unsigned registration (REQ-216, REJ-206)', async () => {
@@ -248,6 +343,7 @@ describe('RegisterProposal', () => {
       proposals,
       documents: new InMemoryDocumentStorage(),
       brokers: registeredBrokers('broker-1'),
+      intermediaries: registeredIntermediaries().port,
       clients: clientRegistry().port,
       transaction: new ImmediateTransaction(),
       newId: () => `id-${++next}`,
@@ -364,7 +460,7 @@ describe('RegisterProposal', () => {
         useCase.execute(
           input({ ...PARCELLED, intermediary: { intermediaryId: 'intermediary-1', ctu: '50' } }),
         ),
-      ).rejects.toThrow(BusinessRuleViolation);
+      ).rejects.toMatchObject({ rule: 'REQ-296' });
 
       expect(await proposals.findById('fixed-id')).toBeNull();
     });

@@ -22,6 +22,8 @@ import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/s
 import { viewPdfOnClick } from '/app/shared/pdf-viewer.js';
 import {
   bindReceiptFields,
+  chooseIntermediary,
+  intermediaryName,
   intermediaryOf,
   offerRegisteredIntermediaries,
 } from '/app/shared/receipt.js';
@@ -134,7 +136,7 @@ function workedCommissionText(workedCommission, subsequentWorkedCommission, mode
 function receiptText(intermediaryId, ctu) {
   return intermediaryId === null
     ? 'Direto da seguradora'
-    : `Através de ${intermediaryId} — CTU ${formatPercentage(ctu)}`;
+    : `Através de ${intermediaryName(intermediaryId)} — CTU ${formatPercentage(ctu)}`;
 }
 
 function summaryCard(proposal) {
@@ -450,7 +452,6 @@ const syncWorkedCommission = bindWorkedCommissionFields(commissionForm);
 document
   .querySelector('#add-installment-correction')
   .addEventListener('click', () => addInstallmentRow(installmentRows));
-offerRegisteredIntermediaries(document.querySelector('#intermediary-options'));
 
 // FA-203: the CT and its mode, signed by the session user (REQ-214, REQ-215, REQ-216).
 commissionForm.addEventListener('submit', (event) => {
@@ -569,7 +570,7 @@ function fillCorrections(proposal) {
   const kind = receiptForm.querySelector('[name="receiptKind"]');
   kind.value = proposal.intermediaryId === null ? 'DIRECT' : 'INTERMEDIARY';
   kind.dispatchEvent(new Event('change'));
-  receiptForm.querySelector('[name="intermediaryId"]').value = proposal.intermediaryId ?? '';
+  chooseIntermediary(receiptForm.querySelector('[name="intermediaryId"]'), proposal.intermediaryId);
   receiptForm.querySelector('[name="ctu"]').value = proposal.ctu ?? '';
 }
 
@@ -595,12 +596,14 @@ async function render() {
   let proposal;
   try {
     // REQ-216: the signatures keep ids; the directory gives the names to show.
-    // REQ-308: likewise the broker's id and its name.
+    // REQ-308: likewise the broker's id and its name; REQ-229, the intermediary's,
+    // which also fill the dropdown before the form is set to the proposal.
     [proposal] = await Promise.all([
       api.getProposal(proposalId),
       loadAuthors(),
       loadBrokers(),
       loadClients(),
+      offerRegisteredIntermediaries(document.querySelector('#intermediary-options')),
     ]);
   } catch (error) {
     notFound(error instanceof ApiError ? error.message : 'Falha ao consultar a proposta.');

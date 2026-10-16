@@ -10,6 +10,7 @@ import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { chooseBroker, registerBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
+import { registerIntermediary } from './support/intermediaries.ts';
 import { TEST_USER, signIn } from './support/sign-in.ts';
 
 /**
@@ -88,6 +89,8 @@ beforeAll(async () => {
   // REQ-410: every journey starts logged in, as the test user.
   await signIn(application.useCases, baseUrl);
   brokerId = await registerBroker(baseUrl, 'Corretora Alfa', 1);
+  // REQ-229: the intermediary an integral proposal is received through.
+  await registerIntermediary(baseUrl, 'Mega', 'Mega Intermediação');
 
   const nodeFetch = globalThis.fetch;
   globalThis.fetch = ((input: Untyped, init: Untyped) => {
@@ -380,7 +383,10 @@ describe('registering a parcelled proposal (REQ-290 to REQ-296)', () => {
       input.value = '100.00';
     }
     choose('#form-proposal', 'receiptKind', 'INTERMEDIARY');
-    field('#form-proposal', 'intermediaryId').value = 'Mega';
+    // REQ-229: the dropdown starts at the first registered intermediary.
+    await vi.waitFor(() => {
+      expect(field('#form-proposal', 'intermediaryId').value).toBe('Mega');
+    });
     field('#form-proposal', 'ctu').value = '50';
     submit('#form-proposal');
 

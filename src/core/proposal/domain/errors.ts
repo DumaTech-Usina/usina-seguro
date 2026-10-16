@@ -16,6 +16,7 @@ export const PROPOSAL_MESSAGES = {
   PROPOSAL_NUMBER_REQUIRED: 'proposal.proposal_number_required',
   AUTHOR_REQUIRED: 'proposal.author_required',
   BROKER_NOT_REGISTERED: 'proposal.broker_not_registered',
+  INTERMEDIARY_NOT_REGISTERED: 'proposal.intermediary_not_registered',
   INTERMEDIARY_REQUIRES_CTU: 'proposal.intermediary_requires_ctu',
   PARCELLED_REQUIRES_SUBSEQUENT_CT: 'proposal.parcelled_requires_subsequent_ct',
   INTEGRAL_HAS_SINGLE_CT: 'proposal.integral_has_single_ct',

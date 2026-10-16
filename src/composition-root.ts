@@ -279,6 +279,15 @@ export function composeApplication(config: Config): Application {
     isRegistered: async (brokerId: string) => (await brokers.findById(brokerId)) !== null,
   };
 
+  // REQ-229: the proposal module asks only whether an id is a registered
+  // intermediary; the reference registry answers it here.
+  const registeredIntermediaries = {
+    isRegistered: async (intermediaryId: string) =>
+      (await references.list({ kind: 'INTERMEDIARY' })).some(
+        (reference) => reference.id === intermediaryId,
+      ),
+  };
+
   // REQ-317, REQ-319: the proposal module asks for the client of a CPF and for
   // the clients a search term matches; the registry answers both here.
   const resolveClient = new ResolveClient({ clients, newId, now });
@@ -296,13 +305,18 @@ export function composeApplication(config: Config): Application {
         proposals,
         documents,
         brokers: registeredBrokers,
+        intermediaries: registeredIntermediaries,
         clients: proposalClients,
         transaction,
         newId,
         now,
       }),
       reviseWorkedCommission: new ReviseWorkedCommission({ proposals, now }),
-      reviseReceipt: new ReviseReceipt({ proposals, now }),
+      reviseReceipt: new ReviseReceipt({
+        proposals,
+        intermediaries: registeredIntermediaries,
+        now,
+      }),
       reviseInstallments: new ReviseInstallments({ proposals, now }),
       rejectProposal: new RejectProposal({ proposals }),
       // DEC-208: the identifiers are the text of the document until a formal

@@ -3,7 +3,12 @@ import { PROPOSAL_MESSAGES, RecordNotFound } from '../domain/errors.ts';
 import { declareReceipt } from '../domain/receipt.ts';
 import type { ProposalRepository } from './proposal-repository.ts';
 import { type ProposalView, toProposalView } from './proposal-view.ts';
-import { type IntermediaryDeclarationInput, toIntermediary } from './register-proposal.ts';
+import {
+  type IntermediaryDeclarationInput,
+  ensureRegisteredIntermediary,
+  toIntermediary,
+} from './register-proposal.ts';
+import type { RegisteredIntermediaries } from './registered-intermediaries.ts';
 
 export interface ReviseReceiptInput {
   readonly proposalId: string;
@@ -15,13 +20,15 @@ export interface ReviseReceiptInput {
 
 export interface ReviseReceiptDependencies {
   readonly proposals: ProposalRepository;
+  readonly intermediaries: RegisteredIntermediaries;
   readonly now: () => Date;
 }
 
 /**
  * FP-01 step 7, FA-204, FA-209: declares, replaces or removes the
  * intermediary and its CTU while the proposal awaits issuance (REQ-225),
- * signed by who declared it (REQ-223).
+ * signed by who declared it (REQ-223), through a registered intermediary
+ * (REQ-229).
  */
 export class ReviseReceipt {
   private readonly deps: ReviseReceiptDependencies;
@@ -41,6 +48,8 @@ export class ReviseReceipt {
       receipt: declareReceipt(toIntermediary(input.intermediary)),
       declared: Authorship.of(input.author, this.deps.now()),
     });
+
+    await ensureRegisteredIntermediary(revised.receipt, this.deps.intermediaries);
 
     await this.deps.proposals.save(revised);
 

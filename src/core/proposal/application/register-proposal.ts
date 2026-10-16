@@ -3,12 +3,13 @@ import { BusinessRuleViolation, PROPOSAL_MESSAGES } from '../domain/errors.ts';
 import { Money } from '../domain/money.ts';
 import { Percentage } from '../domain/percentage.ts';
 import { Proposal } from '../domain/proposal.ts';
-import { declareReceipt } from '../domain/receipt.ts';
+import { type Receipt, declareReceipt } from '../domain/receipt.ts';
 import type { WorkedCommissionMode } from '../domain/worked-commission.ts';
 import type { ProposalClientInput, ProposalClients } from './proposal-clients.ts';
 import type { ProposalRepository } from './proposal-repository.ts';
 import { type ProposalView, toProposalView } from './proposal-view.ts';
 import type { RegisteredBrokers } from './registered-brokers.ts';
+import type { RegisteredIntermediaries } from './registered-intermediaries.ts';
 import type { SourceDocumentStorage } from './source-document-storage.ts';
 import type { Transaction } from './transaction.ts';
 
@@ -70,6 +71,7 @@ export interface RegisterProposalDependencies {
   readonly proposals: ProposalRepository;
   readonly documents: SourceDocumentStorage;
   readonly brokers: RegisteredBrokers;
+  readonly intermediaries: RegisteredIntermediaries;
   readonly clients: ProposalClients;
   readonly transaction: Transaction;
   readonly newId: () => string;
@@ -130,6 +132,8 @@ export class RegisterProposal {
       throw new BusinessRuleViolation('REQ-307', PROPOSAL_MESSAGES.BROKER_NOT_REGISTERED);
     }
 
+    await ensureRegisteredIntermediary(proposal.receipt, this.deps.intermediaries);
+
     // Only once the proposal was accepted: a refused registration leaves no
     // document behind.
     if (source !== null && documentId !== null) {
@@ -166,6 +170,23 @@ export function toWorkedCommissionRates(input: {
     subsequentWorkedCommission:
       subsequent === null ? null : Percentage.fromStringWithoutCeiling(subsequent),
   };
+}
+
+/**
+ * Shared with `ReviseReceipt`. REQ-229, REJ-246: the intermediary is one the
+ * reference registry knows, asked by the identifier as the receipt keeps it.
+ * A direct receipt has nothing to ask.
+ */
+export async function ensureRegisteredIntermediary(
+  receipt: Receipt,
+  intermediaries: RegisteredIntermediaries,
+): Promise<void> {
+  if (
+    receipt.kind === 'INTERMEDIARY' &&
+    !(await intermediaries.isRegistered(receipt.intermediaryId))
+  ) {
+    throw new BusinessRuleViolation('REQ-229', PROPOSAL_MESSAGES.INTERMEDIARY_NOT_REGISTERED);
+  }
 }
 
 /** Shared with `ReviseReceipt`: the CTU only becomes a percentage when present. */

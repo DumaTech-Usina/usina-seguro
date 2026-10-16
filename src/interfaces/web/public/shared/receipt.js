@@ -43,12 +43,16 @@ export function intermediaryOf(form) {
   };
 }
 
+let names = new Map();
+
 /**
- * Offers the intermediaries already registered (IN-01) as suggestions. The
- * intermediary is a registry reference (REQ-220); a registry that cannot be
- * read leaves the field as free text.
+ * Fills the intermediary dropdown with the registered intermediaries (IN-01),
+ * by name, keeping the id as the value; the first one is chosen by default.
+ * Only what the registry knows can be chosen (REQ-229). It also keeps the
+ * names for `intermediaryName`. A registry that cannot be read leaves the
+ * dropdown empty, and the server answers what is sent.
  */
-export async function offerRegisteredIntermediaries(list) {
+export async function offerRegisteredIntermediaries(select) {
   let references;
   try {
     references = await api.listReferences('INTERMEDIARY');
@@ -56,13 +60,34 @@ export async function offerRegisteredIntermediaries(list) {
     return;
   }
 
-  list.replaceChildren(
+  names = new Map(references.map((reference) => [reference.id, reference.name]));
+  select.replaceChildren(
     ...references.map((reference) => {
       const option = document.createElement('option');
       option.value = reference.id;
-      option.label = reference.name;
       option.textContent = reference.name;
       return option;
     }),
   );
+}
+
+/**
+ * REQ-229: chooses `id` in the dropdown, or the first intermediary when the
+ * registry does not know it — a direct receipt, or a proposal registered
+ * before the rule.
+ */
+export function chooseIntermediary(select, id) {
+  select.value = id ?? '';
+  if (select.selectedIndex === -1 && select.options.length > 0) {
+    select.selectedIndex = 0;
+  }
+}
+
+/**
+ * REQ-229: the proposal keeps the intermediary's id; the screen shows its
+ * registered name. A proposal registered before the rule may name one the
+ * registry does not know: it is shown as it is.
+ */
+export function intermediaryName(id) {
+  return names.get(id) ?? id;
 }
