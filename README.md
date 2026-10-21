@@ -179,13 +179,15 @@ curl -X POST http://127.0.0.1:3000/proposals/<proposta>/rejection \
 # 200 {"status":"REJECTED","rejectionReason":"perfil de risco"}
 
 # 4b. Desfecho emitida: reconhecimento da emissão, assinado por quem identificou
-#     (REQ-209). Cria a apólice, que herda todos os dados da proposta — o número
-#     é o da proposta e nada é redigitado (REQ-240, REQ-241, REQ-242).
+#     (REQ-209). Exige o PDF da apólice (REQ-247) e o número da apólice, lido desse
+#     PDF e revisado (REQ-248): POST /policies/pdf-reading {"content":"<base64>"}.
+#     Os demais dados vêm da proposta (REQ-240, REQ-241, REQ-242).
 curl -X POST http://127.0.0.1:3000/policies -H 'content-type: application/json' \
-  -d '{"proposalId":"<proposta>"}'
-# 201 {"id":"<apolice>","policyNumber":"PRP-9001","proposalNumber":"PRP-9001",
+  -d '{"proposalId":"<proposta>","policyNumber":"5177202641312121285",
+       "document":{"fileName":"apolice.pdf","content":"<base64>"}}'
+# 201 {"id":"<apolice>","policyNumber":"5177202641312121285","proposalNumber":"PRP-9001",
 #      "status":"ACTIVE","installments":[{"number":1,...,"status":"PENDING"},...]}
-#     O PDF da apólice pode ir junto ou depois (REQ-247): POST /policies/<apolice>/document
+#     Um novo PDF pode ser enviado depois (REQ-247): POST /policies/<apolice>/document
 
 # 5. Consultar: os dois números e o cronograma (REQ-050, REQ-241)
 curl http://127.0.0.1:3000/policies/<apolice>
@@ -501,7 +503,8 @@ Vigência, data de renovação e vencimento de parcela são **dias de calendári
 instantes: `CalendarDate` guarda `AAAA-MM-DD` sem fuso, para que um vencimento não mude
 de dia conforme onde o processo roda.
 
-O número da proposta — e, portanto, o da apólice — **não é único** (`DEC-207`).
+O número da proposta **não é único**, e o número da apólice, informado no reconhecimento
+da emissão (`REQ-248`), também não (`DEC-207`).
 
 Registrar a apólice altera três registros por um único fato de negócio (a proposta vira
 `ISSUED`, a apólice nasce e a comissão acordada é calculada). O reconhecimento da emissão
