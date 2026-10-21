@@ -59,19 +59,22 @@ async function transmittedProposal(proposals: InMemoryProposalRepository): Promi
 }
 
 describe('GetPolicy', () => {
-  it('returns both numbers and the schedule (REQ-050, REQ-241, OUT-03)', async () => {
+  it('returns both numbers, which differ, and the schedule (REQ-050, REQ-241, REQ-248, OUT-03)', async () => {
     const { proposals, registerPolicy, getPolicy } = scenario();
     await transmittedProposal(proposals);
 
     const registered = await registerPolicy.execute({
       proposalId: 'proposal-1',
       userId: 'operator',
+      // REQ-247, REQ-248: the recognition carries the policy number and its PDF.
+      policyNumber: 'APL-1',
+      document: { fileName: 'apolice.pdf', content: new Uint8Array([0x25, 0x50, 0x44, 0x46]) },
     });
 
     const read = await getPolicy.execute(registered.id);
 
     expect(read).toEqual(registered);
-    expect(read.policyNumber).toBe('PRP-9001');
+    expect(read.policyNumber).toBe('APL-1');
     expect(read.proposalNumber).toBe('PRP-9001');
     // REQ-241: the schedule is the proposal's, which has none here.
     expect(read.installments).toEqual([]);
@@ -84,6 +87,9 @@ describe('GetPolicy', () => {
     const registered = await registerPolicy.execute({
       proposalId: 'proposal-1',
       userId: 'operator',
+      // REQ-247, REQ-248: the recognition carries the policy number and its PDF.
+      policyNumber: 'APL-1',
+      document: { fileName: 'apolice.pdf', content: new Uint8Array([0x25, 0x50, 0x44, 0x46]) },
     });
 
     expect(registered.brokerId).toBe('broker-1');

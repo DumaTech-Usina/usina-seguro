@@ -156,6 +156,12 @@ export const api = {
   // proposal (REQ-240, REQ-241). Then the policy worked on afterwards.
   // `input.document` is the PDF of the policy, optional (REQ-247).
   registerPolicy: (input) => request('/policies', { method: 'POST', body: input }),
+  /**
+   * REQ-248: reads the policy PDF and answers the policy number it found, for
+   * the issuance form to fill. Registers nothing. `content` is base64.
+   */
+  readPolicyPdf: (content) =>
+    request('/policies/pdf-reading', { method: 'POST', body: { content } }),
   getPolicy: (id) => request(`/policies/${encodeURIComponent(id)}`),
   /**
    * REQ-247: sends the PDF of a policy that exists, signed. The last one sent

@@ -12,7 +12,7 @@ import { ApiError, api } from '/app/shared/api.js';
 import { formatCpf } from '/app/shared/brokers.js';
 import { base64Of } from '/app/shared/file.js';
 import { addInstallmentRow, scheduleOf } from '/app/shared/installments.js';
-import { formatDate, formatMoney } from '/app/shared/money.js';
+import { formatDate, formatMoney, maskMoney, moneyValue } from '/app/shared/money.js';
 import {
   bindReceiptFields,
   intermediaryOf,
@@ -64,6 +64,7 @@ async function offerRegisteredReferences() {
 }
 
 const form = document.querySelector('#form-proposal');
+maskMoney(form.querySelector('[name="netPremium"]'));
 
 /* ------------------------------------------------- broker (REQ-307) -- */
 
@@ -347,7 +348,7 @@ form.addEventListener('submit', (event) => {
       productId: value('productId'),
       paymentMethodId: value('paymentMethodId'),
       proposalNumber: value('proposalNumber'),
-      netPremium: value('netPremium'),
+      netPremium: moneyValue(value('netPremium')),
       coverageStart: value('coverageStart'),
       coverageEnd: value('coverageEnd'),
       installments: scheduleOf(installments),

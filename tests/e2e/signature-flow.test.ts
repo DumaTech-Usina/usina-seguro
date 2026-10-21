@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { recognitionBody } from '../support/policy-recognition.ts';
 import { registerBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
 import { registerIntermediary } from './support/intermediaries.ts';
@@ -138,6 +139,7 @@ describe('the author of a signed act is the session user, by id (REQ-216, CA-415
     });
     const policy = await ok<{ id: string }>('POST', '/policies', {
       proposalId: proposal.id,
+      policyNumber: 'APL-2',
       document: { fileName: 'apolice.pdf', content: PDF },
     });
     await ok('POST', `/policies/${policy.id}/document`, { fileName: 'nova.pdf', content: PDF });
@@ -171,7 +173,11 @@ describe('the author of a signed act is the session user, by id (REQ-216, CA-415
       ...PROPOSAL,
       proposalNumber: 'PRP-3',
     });
-    const policy = await ok<{ id: string }>('POST', '/policies', { proposalId: proposal.id });
+    const policy = await ok<{ id: string }>(
+      'POST',
+      '/policies',
+      recognitionBody(proposal.id, 'APL-TESTE'),
+    );
     await ok('POST', `/policies/${policy.id}/payout`, { rate: '60' });
     await ok('POST', `/policies/${policy.id}/payout/revision`, { rate: '70', reason: 'revisto' });
     await ok('POST', `/policies/${policy.id}/payout/eligibility`);
@@ -190,7 +196,11 @@ describe('the author of a signed act is the session user, by id (REQ-216, CA-415
       workedCommission: '100',
       subsequentWorkedCommission: '30',
     });
-    const policy = await ok<{ id: string }>('POST', '/policies', { proposalId: proposal.id });
+    const policy = await ok<{ id: string }>(
+      'POST',
+      '/policies',
+      recognitionBody(proposal.id, 'APL-TESTE'),
+    );
     await ok('POST', `/policies/${policy.id}/parcelled-payout`, {
       firstRate: '100',
       subsequentRate: '15',
@@ -220,7 +230,7 @@ describe('an author sent by the request never becomes the author (CA-416, REJ-40
       userId: 'impostor',
     });
     const policy = await ok<{ id: string }>('POST', '/policies', {
-      proposalId: proposal.id,
+      ...recognitionBody(proposal.id, 'APL-5'),
       userId: 'impostor',
     });
     await ok('POST', `/policies/${policy.id}/commission/override`, {
@@ -241,7 +251,11 @@ describe('an author sent by the request never becomes the author (CA-416, REJ-40
       ...PROPOSAL,
       proposalNumber: 'PRP-7',
     });
-    const policy = await ok<{ id: string }>('POST', '/policies', { proposalId: proposal.id });
+    const policy = await ok<{ id: string }>(
+      'POST',
+      '/policies',
+      recognitionBody(proposal.id, 'APL-TESTE'),
+    );
 
     await ok('POST', `/policies/${policy.id}/installments/1/payment`, { userId: 'impostor' });
     await ok('POST', `/policies/${policy.id}/payout`, { rate: '60' });

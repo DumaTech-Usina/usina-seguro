@@ -6,6 +6,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { BusinessRuleViolation } from '../../src/core/proposal/domain/errors.ts';
 import { cpfOf } from '../support/cpf.ts';
+import { recognitionInput } from '../support/policy-recognition.ts';
 
 /**
  * Application layer against the real SQLite driver: use cases, repositories and
@@ -61,9 +62,18 @@ async function registerProposal(proposalNumber = 'PRP-9001'): Promise<string> {
   return proposal.id;
 }
 
-/** REQ-209: the recognition of issuance, which creates the policy (REQ-240). */
-async function registerPolicy(proposalId: string, userId = 'carla.dias') {
-  return application.useCases.registerPolicy.execute({ proposalId, userId });
+/**
+ * REQ-209: the recognition of issuance, which creates the policy (REQ-240),
+ * with the policy number and PDF it carries (REQ-247, REQ-248).
+ */
+async function registerPolicy(
+  proposalId: string,
+  userId = 'carla.dias',
+  policyNumber = 'APL-9001',
+) {
+  return application.useCases.registerPolicy.execute(
+    recognitionInput(proposalId, userId, policyNumber),
+  );
 }
 
 describe('proposal to policy flow on SQLite', () => {
@@ -73,7 +83,8 @@ describe('proposal to policy flow on SQLite', () => {
     const policy = await registerPolicy(proposalId);
 
     expect(policy).toMatchObject({
-      policyNumber: 'PRP-9001',
+      // REQ-248: the informed number; the proposal's stays consultable.
+      policyNumber: 'APL-9001',
       proposalNumber: 'PRP-9001',
       status: 'ACTIVE',
       premium: '1200.00',
@@ -152,7 +163,7 @@ describe('proposal to policy flow on SQLite', () => {
     expect(notified).toMatchObject({
       event: 'POLICY_ISSUED',
       policyId: policy.id,
-      policyNumber: 'PRP-9001',
+      policyNumber: 'APL-9001',
       // REQ-318: the client registered with the proposal (REQ-317).
       client: { id: clientId, name: 'Maria Souza' },
       // REQ-212: the CT informed on the proposal, with its scale (REQ-121).
@@ -187,15 +198,15 @@ describe('proposal to policy flow on SQLite', () => {
         intermediary: null,
         author: 'operator',
       });
-      await registerPolicy(proposal.id);
+      await registerPolicy(proposal.id, 'carla.dias', proposalNumber.replace('PRP', 'APL'));
     }
 
     const mine = await application.useCases.listNotifications.execute({
       recipientId: brokers['broker-1'],
     });
     expect(mine.map((notification) => notification.policyNumber).sort()).toEqual([
-      'PRP-N-1',
-      'PRP-N-3',
+      'APL-N-1',
+      'APL-N-3',
     ]);
 
     // REQ-105: most recent first, as the contract of the repository promises.

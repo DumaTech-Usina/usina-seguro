@@ -9,6 +9,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
 import { cpfOf } from '../support/cpf.ts';
+import { recognitionBody } from '../support/policy-recognition.ts';
 import { chooseBroker, registerBroker } from './support/brokers.ts';
 import { TEST_USER, signIn } from './support/sign-in.ts';
 
@@ -439,12 +440,12 @@ describe('proposals and policies by client (REQ-318, REQ-319)', () => {
     const [proposal] = (await callApi('GET', '/proposals')).filter(
       (candidate: Untyped) => candidate.proposalNumber === 'PRP-CLI-1',
     );
-    const policy = await callApi('POST', '/policies', { proposalId: proposal.id });
+    const policy = await callApi('POST', '/policies', recognitionBody(proposal.id, 'APL-TESTE'));
     expect(policy.clientId).toBe(proposal.clientId);
     const other = (await callApi('GET', '/proposals')).find(
       (candidate: Untyped) => candidate.proposalNumber === 'PRP-CLI-2',
     );
-    await callApi('POST', '/policies', { proposalId: other.id });
+    await callApi('POST', '/policies', recognitionBody(other.id, 'APL-TESTE'));
 
     openPage('policies/index.html');
     await import('/app/policies/index.js');

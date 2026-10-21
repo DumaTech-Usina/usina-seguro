@@ -171,29 +171,34 @@
               </button>
             </div>
 
-            <!-- Reconhecimento da emissão (REQ-209): cria a apólice, que herda todos
-                 os dados da proposta (REQ-240, REQ-241); nada é redigitado (REQ-242). -->
+            <!-- Reconhecimento da emissão (REQ-209): cria a apólice com o número
+                 informado (REQ-248), lido do PDF da apólice, obrigatório (REQ-247);
+                 os demais dados vêm da proposta (REQ-241, REQ-242). -->
             <form id="form-issuance">
               <div class="stack">
                 <div class="banner">
                   <span class="material-symbols-outlined">info</span>
                   <div class="banner__text">
-                    A apólice herda todos os dados da proposta. Depois do reconhecimento,
-                    nenhum dado da proposta pode ser alterado.
+                    A apólice herda os dados da proposta; o número da apólice é o da
+                    seguradora, lido do PDF. Depois do reconhecimento, nenhum dado da
+                    proposta pode ser alterado.
                   </div>
                 </div>
+                <!-- PDF da apólice (REQ-247): obrigatório; um novo pode ser enviado
+                     depois, na apólice. -->
+                <label class="stack">
+                  <span class="text-label">PDF da apólice</span>
+                  <input type="file" name="policyPdf" accept="application/pdf" required />
+                </label>
                 <div class="form-grid">
                   <div class="field">
-                    <input class="field__input" name="policyNumber" placeholder=" " readonly />
+                    <input class="field__input" name="policyNumber" placeholder=" " required />
                     <label class="field__label">Número da apólice</label>
-                    <span class="field__hint">É o número da proposta.</span>
+                    <span class="field__hint" id="policy-number-hint">
+                      Lido do PDF da apólice. Confira antes de reconhecer.
+                    </span>
                   </div>
                 </div>
-                <!-- PDF da apólice (REQ-247): opcional; pode ser enviado depois, na apólice. -->
-                <label class="stack">
-                  <span class="text-label">PDF da apólice (opcional)</span>
-                  <input type="file" name="policyPdf" accept="application/pdf" />
-                </label>
               </div>
               <div
                 class="card__footer"

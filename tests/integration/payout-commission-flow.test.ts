@@ -7,6 +7,7 @@ import { type Application, composeApplication } from '../../src/composition-root
 import { loadConfig } from '../../src/config/config.ts';
 import { BusinessRuleViolation } from '../../src/core/proposal/domain/errors.ts';
 import { cpfOf } from '../support/cpf.ts';
+import { recognitionInput } from '../support/policy-recognition.ts';
 
 /**
  * FP-02 against the real SQLite driver: the CR, its recalculation and the
@@ -75,7 +76,9 @@ async function policy(proposalNumber: string, mode: 'INTEGRAL' | 'PARCELLED' = '
     author: 'operator',
   });
 
-  return useCases.registerPolicy.execute({ proposalId: proposal.id, userId: 'operator' });
+  return useCases.registerPolicy.execute(
+    recognitionInput(proposal.id, 'operator', proposal.proposalNumber),
+  );
 }
 
 describe('payout commission on SQLite (FP-02)', () => {

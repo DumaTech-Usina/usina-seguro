@@ -32,6 +32,10 @@
   max-width: 360px;
 }
 
+.proposal-cell {
+  min-width: 200px;
+}
+
 .proposal-number {
   font-family: var(--font-mono);
   font-weight: 500;

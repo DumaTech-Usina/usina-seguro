@@ -30,10 +30,23 @@ const registerPolicySchema: FastifySchema = {
     type: 'object',
     required: ['proposalId'],
     additionalProperties: false,
+    // REQ-247, REQ-248: the number and the PDF may be absent here so that the
+    // domain, not the schema, answers REJ-247 and REJ-248.
     properties: {
       proposalId: { type: 'string' },
+      policyNumber: { type: 'string' },
       document: policyDocumentProperty,
     },
+  },
+};
+
+/** REQ-248: the policy PDF, base64-encoded like the proposal's reading. */
+const readPolicyPdfSchema: FastifySchema = {
+  body: {
+    type: 'object',
+    required: ['content'],
+    additionalProperties: false,
+    properties: { content: { type: 'string' } },
   },
 };
 
@@ -109,6 +122,7 @@ export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): 
     async (request, reply) => {
       const body = request.body as {
         proposalId: string;
+        policyNumber?: string;
         document?: PolicyDocumentBody;
       };
 
@@ -116,9 +130,22 @@ export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): 
         proposalId: body.proposalId,
         // REQ-209, REQ-216: who recognised the issuance is the session user.
         userId: authorOf(request),
+        policyNumber: body.policyNumber ?? '',
         document: body.document === undefined ? null : documentOf(body.document),
       });
       return reply.code(201).send(output);
+    },
+  );
+
+  // REQ-248: reads the policy PDF and answers the number it found, for the
+  // issuance form to fill. Nothing is registered: a document that cannot be
+  // read is an outcome, so the answer is 200 even when the reading FAILED.
+  app.post(
+    '/policies/pdf-reading',
+    { schema: readPolicyPdfSchema, bodyLimit: PDF_BODY_LIMIT },
+    async (request) => {
+      const { content } = request.body as { content: string };
+      return useCases.readPolicyPdf.read(new Uint8Array(Buffer.from(content, 'base64')));
     },
   );
 

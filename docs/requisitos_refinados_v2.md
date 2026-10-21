@@ -30,6 +30,11 @@
 > o envio do PDF da apólice (`REQ-247`) e deixou em aberto o conteúdo desse PDF
 > (`DEC-213`), o cadastro manual de corretores (`DEC-214`) e o CPF do cliente na proposta
 > (`DEC-215`).
+> Em **2026-10-16** o negócio **revogou** que o número da apólice é o da proposta: na
+> maioria dos casos **são diferentes**. O número da apólice passa a ser **informado** no
+> reconhecimento da emissão, **lido do PDF da apólice**, que se torna **obrigatório** nesse
+> ato (`REQ-241`, `REQ-242`, `REQ-247`, `REQ-248`). Os exemplos de PDF são amostras, não
+> modelos: a leitura deve aceitar formatos diferentes, inclusive da mesma seguradora.
 > Em **2026-10-05** o negócio definiu a **CT parcelada** como um **fluxo próprio, paralelo
 > ao da CT integral e aditivo**: o fluxo da CT integral, já validado, **não muda**. A CT
 > parcelada tem dois CTs, base na parcela, valor esperado por parcela, arredondamento pela
@@ -568,12 +573,17 @@ responde, sem decidir por conta própria.
 `REQ-240` O **reconhecimento da emissão** transforma a proposta em apólice. É o mesmo ato:
 não existe um estado intermediário entre "emitida" e "apólice criada".
 
-`REQ-241` A apólice **herda todos os dados da proposta**: número, prêmio líquido, CT, modo
-da CT, intermediária, CTU, vigência, renovação, parcelas e dados do produto. O **número da
-apólice é o número da proposta**.
+`REQ-241` A apólice **herda os dados da proposta**: prêmio líquido, CT, modo da CT,
+intermediária, CTU, vigência, renovação, parcelas e dados do produto. O **número da apólice
+não é herdado**: é o número que a seguradora deu à apólice, informado no reconhecimento da
+emissão (`REQ-248`). A apólice continua ligada à proposta e o número da proposta continua
+consultável nela.
 
-`REQ-242` **Nada é redigitado** na criação da apólice. Ela não recebe valores informados de
-novo que pudessem contradizer a proposta.
+> Até **2026-10-16** esta regra dizia que o número da apólice é o número da proposta. O
+> negócio revogou: na maioria dos casos são diferentes.
+
+`REQ-242` **Nada mais é redigitado** na criação da apólice. Além do número da apólice
+(`REQ-248`), ela não recebe valores informados de novo que pudessem contradizer a proposta.
 
 > `REQ-243` **foi retirada nesta rodada.** Ela dizia que uma divergência entre proposta e
 > apólice seria sinalizada. Como a apólice apenas herda e **nada é redigitado**
@@ -594,16 +604,37 @@ a expectativa; a apólice fixa o valor.
 `REQ-247` **PDF da apólice.** O usuário da Usina pode enviar o **arquivo PDF da apólice**,
 que fica guardado **associado à apólice** e disponível para consulta nela.
 
-- **Quando**: junto com o **reconhecimento da emissão** (`REQ-209`), de forma opcional, ou
-  **depois**, na apólice já criada.
+- **Quando**: **obrigatoriamente** junto com o **reconhecimento da emissão** (`REQ-209`) —
+  sem o PDF a emissão não é reconhecida (desde 2026-10-16; antes era opcional). Um novo
+  PDF pode ser enviado **depois**, na apólice já criada, e passa a ser o da apólice.
 - **Uma apólice, um PDF: o último enviado.** Um novo envio passa a ser o PDF da apólice. O
   arquivo anterior não é apagado (`REQ-124` da V1, mantida), mas deixa de ser o da apólice.
 - **Cada envio é assinado** (`REQ-216`): registra quem enviou e a data e a hora do momento
   do envio — não são informadas. Enviado com o reconhecimento, a assinatura é a do
   reconhecimento.
-- O arquivo é tratado como **PDF**. O sistema **não lê nem valida o seu conteúdo**: não
-  extrai dados e não confere campos. Quais informações o PDF da apólice deve conter **não
-  foi definido** (`DEC-213`).
+- O arquivo é tratado como **PDF**. O sistema **lê dele apenas o número da apólice**, para
+  preencher o formulário (`REQ-248`); **não valida o conteúdo** nem confere outros campos.
+  O que mais o PDF da apólice deve conter **não foi definido** (`DEC-213`).
+
+`REQ-248` **Número da apólice, lido do PDF da apólice** (2026-10-16). No reconhecimento da
+emissão, o usuário envia o PDF da apólice (`REQ-247`) e o sistema **busca nele o número da
+apólice** e **preenche o campo** do formulário. Como na leitura da proposta (`REQ-218`), a
+leitura é um **acelerador, não a fonte da verdade**: o usuário revisa o número e registra.
+Ler o PDF **nunca registra** nada.
+
+- **O número é obrigatório** no reconhecimento da emissão. **Não é validado como único**
+  (`DEC-207`).
+- **O leitor é conservador**: um número que aparece mais de uma vez só é preenchido se
+  todas as ocorrências concordam; o que não identifica fica **ausente**, nunca estimado.
+  Não confunde o número da apólice com o da proposta, do endosso ou da **apólice
+  anterior** (renovação).
+- **Os PDFs de exemplo não são modelo.** A leitura não depende de um layout: procura o
+  número pelos **rótulos** com que as seguradoras o imprimem (ex.: `Nº Apólice`,
+  `Apólice Nº`, `Número da Apólice`). Um formato novo, inclusive de uma seguradora já
+  conhecida, é atendido **ampliando o dicionário de rótulos**.
+- **Resultado da leitura**: `SUCCESS` quando o número foi identificado; `PARTIAL` quando o
+  PDF foi lido e o número não; `FAILED` quando o documento não pôde ser lido ou não tem
+  texto. Em `PARTIAL` e `FAILED` o usuário **digita** o número.
 
 ---
 
@@ -1307,11 +1338,13 @@ proposta (`REQ-317`).
    (`REQ-252`).
 8. A seguradora responde, e um usuário da Usina identifica o desfecho no sistema dela:
    - **emitida** → registra o **reconhecimento**, com data, hora e autoria (`REQ-209`), e
-     pode enviar o **PDF da apólice** (`REQ-247`);
+     envia o **PDF da apólice**, obrigatório, de onde é lido o **número da apólice**
+     (`REQ-247`, `REQ-248`);
    - **recusada** → registra a recusa com o **motivo obrigatório**; o fluxo encerra sem
      apólice (`REQ-253`).
 
-9. A **apólice é criada**, herdando todos os dados (`REQ-240`, `REQ-241`). A proposta passa
+9. A **apólice é criada** com o número informado, herdando os demais dados (`REQ-240`,
+   `REQ-241`, `REQ-248`). A proposta passa
    a **`EMITIDA`** e fica congelada (`REQ-244`).
 10. A base de comissionamento é **canonizada na apólice** (`REQ-245`). O repasse ao corretor
     segue pelo FP-02 (`REQ-233`).
@@ -1458,7 +1491,7 @@ proposta (`REQ-317`).
 | `CA-202` | Prêmio líquido 100,00 com CT 20% e CTU 50% faz a intermediária receber 20,00 e a Usina esperar 10,00                               | `REQ-231`            |
 | `CA-203` | A proposta exibe o valor esperado **antes** da emissão                                                                             | `REQ-232`            |
 | `CA-204` | A CT pode ser corrigida enquanto a proposta aguarda emissão, e a correção registra autor e data                                    | `REQ-214`, `REQ-215` |
-| `CA-205` | Reconhecida a emissão, a apólice é criada com **os mesmos** número, prêmio, CT, intermediária, CTU, vigência, renovação e parcelas | `REQ-241`            |
+| `CA-205` | Reconhecida a emissão, a apólice é criada com **os mesmos** prêmio, CT, intermediária, CTU, vigência, renovação e parcelas | `REQ-241`            |
 | `CA-206` | A data de renovação da apólice é igual à data de fim da vigência                                                                   | `REQ-203`            |
 | `CA-207` | O reconhecimento da emissão registra data, hora e quem identificou                                                                 | `REQ-209`            |
 | `CA-208` | Uma parcela sem vencimento é aceita                                                                                                | `REQ-204`            |
@@ -1497,6 +1530,9 @@ proposta (`REQ-317`).
 | `CA-241` | Prêmio 100,05 e CT 15%: valor da Usina 15,01. Com CTU 50%: intermediária 15,01 e valor da Usina **7,50** (ABNT NBR 5891 — era 7,51 até 2026-10-05) | `REQ-237`, `REQ-298` |
 | `CA-243` | O PDF da apólice, enviado no reconhecimento ou depois, fica guardado e pode ser aberto na apólice, com quem o enviou e quando       | `REQ-247`            |
 | `CA-244` | Enviados dois PDFs para a mesma apólice, o da apólice é o último                                                                     | `REQ-247`            |
+| `CA-270` | O PDF de exemplo da apólice preenche o número da apólice, diferente do número da proposta e do número da apólice anterior            | `REQ-248`            |
+| `CA-271` | A apólice criada guarda o número informado no reconhecimento; o número da proposta continua consultável nela                         | `REQ-241`, `REQ-248` |
+| `CA-272` | Um PDF sem número de apólice identificável deixa o campo vazio para o usuário digitar, e diz que não encontrou                        | `REQ-248`            |
 | `CA-245` | CT integral exibe um campo de CT; CT parcelada exibe dois — da primeira e das subsequentes                                           | `REQ-291`            |
 | `CA-246` | Parcelas de 100,00 e CT 100/30: parcela 1 espera 100,00; cada uma das demais espera 30,00; nenhum total é exibido                    | `REQ-293`            |
 | `CA-247` | A base da CT parcelada é o valor da parcela, não o prêmio líquido                                                                    | `REQ-293`            |
@@ -1561,13 +1597,15 @@ proposta (`REQ-317`).
 | `REJ-201` | Alterar qualquer dado da proposta depois da emissão                       | `REQ-260`                                                       |
 | `REJ-202` | Declarar intermediária sem informar a CTU                                 | `REQ-221`                                                       |
 | `REJ-203` | Usar o percentual do acordo comercial cadastrado no lugar da CT informada | `REQ-212`                                                       |
-| `REJ-204` | Criar a apólice com qualquer valor diferente do da proposta               | `REQ-242` — é a **única** guarda, já que `REQ-243` foi retirada |
+| `REJ-204` | Criar a apólice com qualquer valor diferente do da proposta, exceto o número da apólice (`REQ-248`) | `REQ-242` — é a **única** guarda, já que `REQ-243` foi retirada |
 | `REJ-205` | Registrar a emissão sem identificar quem a reconheceu                     | `REQ-209`                                                       |
 | `REJ-206` | Informar ou alterar CT sem registrar autoria                              | `REQ-215`                                                       |
 | `REJ-207` | Calcular o repasse ao corretor dentro do FP-01                            | `REQ-233`                                                       |
 | `REJ-208` | Registrar recusa sem motivo                                               | `REQ-253`                                                       |
 | `REJ-209` | Declarar mais de uma intermediária na mesma proposta                      | `REQ-220`                                                       |
 | `REJ-246` | Declarar uma intermediária que não está no cadastro                       | `REQ-229`                                                       |
+| `REJ-247` | Reconhecer a emissão sem o PDF da apólice                                 | `REQ-247`                                                       |
+| `REJ-248` | Reconhecer a emissão sem o número da apólice                              | `REQ-248`                                                       |
 | `REJ-210` | Originar apólice de uma proposta recusada                                 | `REQ-253`                                                       |
 | `REJ-211` | Alterar prêmio líquido, número ou vigência depois do registro, ou parcelas depois da emissão | `REQ-261`, `REQ-254` |
 | `REJ-212` | Alterar uma proposta recusada                                             | `REQ-253`                                                       |
@@ -1656,6 +1694,7 @@ proposta (`REQ-317`).
 | `REQ-055` — data de renovação informada                                          | `REQ-203` — é a data de fim da vigência                                                                          |
 | `DEC-013` — origem dos dados da proposta indefinida                              | `REQ-206`, `REQ-207` — digitação **e** importação de PDF                                                         |
 | `REQ-082`, `CA-019` — número da proposta único, validado na "transmissão"        | `DEC-207` — sem restrição por ora                                                                                |
+| `REQ-241` (versão até 2026-10-15) — o número da apólice é o da proposta; `REQ-247` — PDF da apólice opcional | `REQ-241`, `REQ-247`, `REQ-248` (2026-10-16) — o número da apólice é **informado**, lido do PDF da apólice, que é **obrigatório** no reconhecimento |
 | `DEC-015` — outros dados devolvidos pela seguradora                              | `REQ-205` — existem, variam por produto, informativos; catálogo em `DEC-201`                                     |
 | FP-03 — repasse ao corretor, da liberação ao pagamento registrado                | FP-02 — da CR à **elegibilidade**; o pagamento acontece fora do sistema (`REQ-280`)                              |
 | `REQ-094`, `REQ-095`, `REQ-096` — relatório de repasse, recibo, registro do pagamento | **Suspensas**, não descartadas: aguardam os fluxos posteriores à elegibilidade (`DEC-211`). O repasse da V1 (abertura, liberação, pagamento, comprovante, extrato por corretor) foi **removido do sistema** em 2026-09-25; volta, sob a V2, quando `DEC-211` for decidida |
@@ -1705,11 +1744,11 @@ apólice; os dois números seguem consultáveis) · `REQ-120`, `REQ-121` (precis
 | `DEC-217` | **Alterar a CT ou a CR de uma parcela no momento da elegibilidade** — hipótese ainda não levantada | Por ora o ato só **exibe** a CT e a CR da parcela (`REQ-288`) |
 | `DEC-211` | **Depois da elegibilidade** — estorno e outras possibilidades ainda não levantadas; relatório de repasse, recibo e registro do pagamento (`REQ-094`–`REQ-096` da V1, suspensas) | A comissão elegível é final e só consultável (`REQ-282`) |
 | `DEC-212` | **Valor efetivamente recebido diferente do valor da Usina** — a CR incide sobre o valor da Usina calculado da apólice (`REQ-274`); o que acontece se a Usina receber outro valor **não foi discutido** | Nenhuma regra: a elegibilidade não registra o valor efetivamente recebido |
-| `DEC-213` | **Conteúdo do PDF da apólice** — quais informações o PDF da apólice deve conter, e se o sistema deve ler, extrair ou conferir algum dado dele. Deixado em aberto para uma rodada futura de levantamento de requisitos | `REQ-247`: o arquivo é guardado como enviado; nenhum conteúdo é lido nem validado |
+| `DEC-213` | **Conteúdo do PDF da apólice** — quais informações o PDF da apólice deve conter, e se o sistema deve ler, extrair ou conferir algum dado dele. **Respondida em parte em 2026-10-16**: o número da apólice é lido (`REQ-248`). O restante segue em aberto | `REQ-247`: o arquivo é guardado como enviado; só o número da apólice é lido, nada é validado |
 | `DEC-214` | **Cadastro manual de corretores** — **respondida** em 2026-10-15 (seção 9D) | — |
 | `DEC-215` | **CPF do cliente na proposta** — **respondida** em 2026-10-15 (seção 9E) | — |
 | `DEC-401` | **Assinatura da recusa** — com login, se a recusa da proposta (`REQ-253`) passa a registrar **quem** recusou e quando. Hoje não registra, e `REQ-216` não a inclui. Deixada para uma rodada futura (`Q-409`, 2026-10-14) | A recusa continua sem autor, só com o motivo |
-| `DEC-207` | **Unicidade do número da proposta** — se dois registros podem ter o mesmo número. **Por ora, sem restrição**; relacionada a `DEC-205` (o número "voltar a ficar disponível")          | Nenhuma unicidade é validada no registro. Confirmado: quando a conciliação busca pelo número e há repetição, vale a proposta **registrada primeiro**. Como o número da apólice é o da proposta (`REQ-241`), ele **também não é validado como único** por ora |
+| `DEC-207` | **Unicidade do número da proposta** — se dois registros podem ter o mesmo número. **Por ora, sem restrição**; relacionada a `DEC-205` (o número "voltar a ficar disponível")          | Nenhuma unicidade é validada no registro. Confirmado: quando a conciliação busca pelo número e há repetição, vale a proposta **registrada primeiro**. O número da apólice, informado desde 2026-10-16 (`REQ-248`), **também não é validado como único** por ora |
 
 ### 13.2 Confirmações pendentes
 

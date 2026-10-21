@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { recognitionBody } from '../support/policy-recognition.ts';
 import { registerBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
 import { registerIntermediary } from './support/intermediaries.ts';
@@ -499,7 +500,7 @@ describe('parcelled payout API (V2 section 9B)', () => {
       ...PARCELLED,
       installments: [{ amount: '100.00' }, { amount: '100.00' }, { amount: '100.00' }],
     });
-    const response = await post({ proposalId }, '/policies');
+    const response = await post(recognitionBody(proposalId, 'APL-PARC'), '/policies');
     expect(response.status).toBe(201);
     return ((await response.json()) as { id: string }).id;
   }

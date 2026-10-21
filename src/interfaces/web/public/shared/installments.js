@@ -8,6 +8,8 @@
  * (REQ-292) — is the domain's answer, so nothing here refuses it.
  */
 
+import { formatMoney, maskMoney, moneyValue } from '/app/shared/money.js';
+
 function renumber(container) {
   [...container.querySelectorAll('.installment-row')].forEach((row, index) => {
     row.querySelector('.installment-row__number').textContent = String(index + 1);
@@ -21,8 +23,8 @@ export function addInstallmentRow(container, amount = '', dueDate = '') {
   row.innerHTML = `
     <div class="installment-row__number"></div>
     <div class="field">
-      <input class="field__input" name="amount" placeholder=" " inputmode="decimal"
-             pattern="\\d+(\\.\\d{1,2})?" required />
+      <input class="field__input" name="amount" placeholder=" " inputmode="numeric"
+             pattern="R\\$ \\d{1,3}(\\.\\d{3})*,\\d{2}" required />
       <label class="field__label">Valor</label>
     </div>
     <div class="field installment-row__date">
@@ -37,7 +39,9 @@ export function addInstallmentRow(container, amount = '', dueDate = '') {
     row.remove();
     renumber(container);
   });
-  row.querySelector('[name="amount"]').value = amount;
+  const amountField = row.querySelector('[name="amount"]');
+  maskMoney(amountField);
+  amountField.value = amount === '' ? '' : formatMoney(amount);
   row.querySelector('[name="dueDate"]').value = dueDate ?? '';
 
   container.append(row);
@@ -49,7 +53,7 @@ export function scheduleOf(container) {
   return [...container.querySelectorAll('.installment-row')].map((row) => {
     const dueDate = row.querySelector('[name="dueDate"]').value;
     return {
-      amount: row.querySelector('[name="amount"]').value,
+      amount: moneyValue(row.querySelector('[name="amount"]').value),
       dueDate: dueDate === '' ? null : dueDate,
     };
   });

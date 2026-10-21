@@ -1,7 +1,12 @@
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
 import type { SourceDocumentStorage } from '../../proposal/application/source-document-storage.ts';
 import { Authorship } from '../../proposal/domain/authorship.ts';
-import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
+import {
+  BusinessRuleViolation,
+  PROPOSAL_MESSAGES,
+  RecordNotFound,
+} from '../../proposal/domain/errors.ts';
+import { POLICY_MESSAGES } from '../domain/errors.ts';
 import { Installment } from '../domain/installment.ts';
 import { Policy } from '../domain/policy.ts';
 import type { AgreedCommissionCalculator } from './agreed-commission-calculator.ts';
@@ -11,8 +16,9 @@ import { type PolicyView, toPolicyView } from './policy-view.ts';
 import type { Transaction } from './transaction.ts';
 
 /**
- * REQ-247: the PDF of a policy, as uploaded. Nothing reads or checks its
- * content: what it must hold is `DEC-213`.
+ * REQ-247: the PDF of a policy, as uploaded. Nothing here reads or checks its
+ * content: the number read from it (REQ-248) arrives as `policyNumber`, after
+ * the user reviewed it, and what else it must hold is `DEC-213`.
  */
 export interface PolicyDocumentInput {
   readonly fileName: string;
@@ -23,17 +29,19 @@ export interface PolicyDocumentInput {
 export const POLICY_DOCUMENT_CONTENT_TYPE = 'application/pdf';
 
 /**
- * The recognition of issuance carries nothing but who recognised it: every
- * datum of the policy comes from the proposal (REQ-241) and nothing is typed
- * again (REQ-242, REJ-204). The PDF of the policy may travel with it
- * (REQ-247): a document, not a datum.
+ * The recognition of issuance carries who recognised it, the policy number and
+ * the policy PDF. The number is the one the insurer gave the policy, read from
+ * the PDF and reviewed by the user (REQ-248); every other datum comes from the
+ * proposal (REQ-241) and nothing else is typed again (REQ-242, REJ-204).
  */
 export interface RegisterPolicyInput {
   readonly proposalId: string;
   /** REQ-209, REQ-216: who identified the issuance, typed in the act. */
   readonly userId: string;
-  /** REQ-247: optional; signed by the same user, at the same moment. */
-  readonly document?: PolicyDocumentInput | null;
+  /** REQ-248: required; not checked for uniqueness (DEC-207). */
+  readonly policyNumber: string;
+  /** REQ-247: required; signed by the same user, at the same moment. */
+  readonly document: PolicyDocumentInput | null;
 }
 
 export interface RegisterPolicyDependencies {
@@ -53,14 +61,13 @@ export interface RegisterPolicyDependencies {
 /**
  * FP-01 steps 8 and 9: a user recognises that the insurer issued the proposal,
  * and that same act creates the policy (REQ-240). The proposal becomes ISSUED,
- * signed by who identified it at the moment it is recorded (REQ-209), and the
- * policy inherits every datum of the proposal (REQ-241): the number is the
- * proposal number, the premium is the net premium, the renewal is the end of
- * coverage (REQ-203) and the installments are the proposal's, due date
+ * signed by who identified it at the moment it is recorded (REQ-209). The
+ * policy takes the informed number (REQ-248) and inherits every other datum of
+ * the proposal (REQ-241): the premium is the net premium, the renewal is the
+ * end of coverage (REQ-203) and the installments are the proposal's, due date
  * included or not (REQ-204).
  *
- * The number is not checked for uniqueness: proposal numbers may repeat
- * (DEC-207), and so may the policy numbers that inherit them.
+ * The number is not checked for uniqueness (DEC-207).
  */
 export class RegisterPolicy {
   private readonly deps: RegisterPolicyDependencies;
@@ -76,17 +83,25 @@ export class RegisterPolicy {
       throw new RecordNotFound(PROPOSAL_MESSAGES.NOT_FOUND, { id: input.proposalId });
     }
 
+    // REJ-247, REJ-248: checked before anything changes.
+    if (input.document === null) {
+      throw new BusinessRuleViolation('REQ-247', POLICY_MESSAGES.DOCUMENT_REQUIRED);
+    }
+    if (input.policyNumber.trim() === '') {
+      throw new BusinessRuleViolation('REQ-248', POLICY_MESSAGES.POLICY_NUMBER_REQUIRED);
+    }
+
     const recognizedAt = this.deps.now();
     const recognition = Authorship.of(input.userId, recognizedAt);
     const issued = proposal.recognizeIssuance(recognition);
     const policyId = this.deps.newId();
-    const source = input.document ?? null;
-    const documentId = source === null ? null : this.deps.newId();
+    const source = input.document;
+    const documentId = this.deps.newId();
 
     const policy = Policy.register({
       id: policyId,
       proposalId: issued.id,
-      policyNumber: issued.proposalNumber,
+      policyNumber: input.policyNumber,
       premium: issued.netPremium,
       coverageStart: issued.coverageStart,
       coverageEnd: issued.coverageEnd,
@@ -101,10 +116,7 @@ export class RegisterPolicy {
           dueDate: installment.dueDate,
         }),
       ),
-      document:
-        source === null || documentId === null
-          ? null
-          : { documentId, fileName: source.fileName, attached: recognition },
+      document: { documentId, fileName: source.fileName, attached: recognition },
     });
 
     // One business fact, four writes: see `Transaction`. The agreed commission
@@ -118,14 +130,12 @@ export class RegisterPolicy {
     // admit asynchronous delivery precisely so an outbound adapter hands the
     // payload to a queue and returns.
     await this.deps.transaction.run(async () => {
-      if (source !== null && documentId !== null) {
-        await this.deps.documents.save({
-          id: documentId,
-          fileName: source.fileName,
-          contentType: POLICY_DOCUMENT_CONTENT_TYPE,
-          content: source.content,
-        });
-      }
+      await this.deps.documents.save({
+        id: documentId,
+        fileName: source.fileName,
+        contentType: POLICY_DOCUMENT_CONTENT_TYPE,
+        content: source.content,
+      });
       await this.deps.policies.save(policy);
       await this.deps.proposals.save(issued);
       await this.deps.agreedCommission.calculateFor({

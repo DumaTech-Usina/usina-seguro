@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { recognitionBody } from '../support/policy-recognition.ts';
 import { chooseBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
 import { TEST_USER, signIn } from './support/sign-in.ts';
@@ -311,7 +312,7 @@ describe('the broker of a proposal and of its policy (REQ-307, REQ-308)', () => 
 
   it('shows on the policy the current name of the broker of its proposal (REQ-308, CA-304)', async () => {
     const [proposal] = await callApi('GET', '/proposals');
-    const policy = await callApi('POST', '/policies', { proposalId: proposal.id });
+    const policy = await callApi('POST', '/policies', recognitionBody(proposal.id, 'APL-TESTE'));
     expect(policy.brokerId).toBe(proposal.brokerId);
 
     // A later change of the broker reaches the policy: it is read, not copied.

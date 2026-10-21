@@ -8,6 +8,7 @@ import { BusinessRuleViolation, RecordNotFound } from '../../proposal/domain/err
 import { Money } from '../../proposal/domain/money.ts';
 import { Percentage } from '../../proposal/domain/percentage.ts';
 import { Proposal } from '../../proposal/domain/proposal.ts';
+import { Policy } from '../domain/policy.ts';
 import { AttachPolicyDocument } from './attach-policy-document.ts';
 import { GetPolicyDocument } from './get-policy-document.ts';
 import { RegisterPolicy } from './register-policy.ts';
@@ -16,6 +17,8 @@ const RECOGNIZED_AT = new Date('2026-09-20T10:00:00.000Z');
 const FIRST_SENT_AT = new Date('2026-09-21T10:00:00.000Z');
 const SECOND_SENT_AT = new Date('2026-09-22T10:00:00.000Z');
 
+/** REQ-247: the PDF every recognition carries. */
+const ISSUED = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x30]);
 const FIRST = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x31]);
 const SECOND = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x32]);
 
@@ -59,7 +62,12 @@ async function scenario() {
     notifier: { notify: async () => {} },
     newId,
     now,
-  }).execute({ proposalId: 'proposal-1', userId: 'carla.dias' });
+  }).execute({
+    proposalId: 'proposal-1',
+    userId: 'carla.dias',
+    policyNumber: 'APL-1',
+    document: { fileName: 'apolice-emitida.pdf', content: ISSUED },
+  });
 
   return {
     policyId: policy.id,
@@ -128,7 +136,7 @@ describe('AttachPolicyDocument — the PDF sent after the policy exists (REQ-247
     expect((await documents.findById(earlierId))?.content).toEqual(FIRST);
   });
 
-  it('refuses a sending nobody signed, and keeps nothing (REQ-216)', async () => {
+  it('refuses a sending nobody signed, and keeps the PDF of the recognition (REQ-216)', async () => {
     const { policyId, policies, attach } = await scenario();
 
     expect(
@@ -141,7 +149,7 @@ describe('AttachPolicyDocument — the PDF sent after the policy exists (REQ-247
       ),
     ).toBe('REQ-216');
 
-    expect((await policies.findById(policyId))?.document).toBeNull();
+    expect((await policies.findById(policyId))?.document?.fileName).toBe('apolice-emitida.pdf');
   });
 
   it('reports an unknown policy as not found', async () => {
@@ -158,10 +166,33 @@ describe('AttachPolicyDocument — the PDF sent after the policy exists (REQ-247
 });
 
 describe('GetPolicyDocument (REQ-247)', () => {
-  it('answers not found for a policy nobody sent a PDF for', async () => {
+  it('answers the PDF sent with the recognition (REQ-247, CA-243)', async () => {
     const { policyId, read } = await scenario();
 
-    await expect(read.execute(policyId)).rejects.toThrow(RecordNotFound);
+    expect(await read.execute(policyId)).toMatchObject({
+      fileName: 'apolice-emitida.pdf',
+      content: ISSUED,
+    });
+  });
+
+  it('answers not found for a policy recorded before the PDF was required', async () => {
+    const { policies, read } = await scenario();
+    await policies.save(
+      Policy.register({
+        id: 'legacy-policy',
+        proposalId: 'proposal-legacy',
+        policyNumber: 'PRP-OLD',
+        premium: Money.fromString('100.00'),
+        coverageStart: CalendarDate.fromString('2026-10-01'),
+        coverageEnd: CalendarDate.fromString('2027-10-01'),
+        renewalDate: CalendarDate.fromString('2027-10-01'),
+        installments: [],
+        document: null,
+        registeredAt: RECOGNIZED_AT,
+      }),
+    );
+
+    await expect(read.execute('legacy-policy')).rejects.toThrow(RecordNotFound);
   });
 
   it('answers not found for an unknown policy', async () => {

@@ -65,6 +65,9 @@ describe('GetPolicyByProposal', () => {
     const registered = await registerPolicy.execute({
       proposalId: 'proposal-1',
       userId: 'operator',
+      // REQ-247, REQ-248: the recognition carries the policy number and its PDF.
+      policyNumber: 'APL-1',
+      document: { fileName: 'apolice.pdf', content: new Uint8Array([0x25, 0x50, 0x44, 0x46]) },
     });
 
     await expect(useCase.execute('proposal-1')).resolves.toEqual(registered);

@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { recognitionBody } from '../support/policy-recognition.ts';
 import { chooseBroker, registerBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
 import { registerIntermediary } from './support/intermediaries.ts';
@@ -224,6 +225,17 @@ function hidden(selector: string): boolean {
   return document.querySelector(selector)?.classList.contains('hidden') ?? true;
 }
 
+/** The example policy (REQ-248): personal data, at the root and ignored by git. */
+const POLICY_EXAMPLE_PDF = path.resolve(import.meta.dirname, '../../apolice-exemplo.pdf');
+
+/** Chooses the policy PDF on the issuance form, as the file picker does. */
+function choosePolicyPdf(bytes: Uint8Array): void {
+  const input = field('#form-issuance', 'policyPdf');
+  const file = new window.File([bytes], 'apolice.pdf', { type: 'application/pdf' });
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  input.dispatchEvent(new Event('change'));
+}
+
 /* -------------------------------------------------------------- tests -- */
 
 describe('FP-01 through the web interface', () => {
@@ -273,6 +285,34 @@ describe('FP-01 through the web interface', () => {
 
     const link = document.querySelector('#done-body a.btn--filled');
     expect(link?.href).toContain(`/app/proposals/detail.html?id=${stored.id}`);
+  });
+
+  it('shows the money fields in reais while typed, and sends the API its decimal', async () => {
+    openPage('proposals/new.html');
+    await import('/app/proposals/new.js');
+
+    await fillRegistration();
+    field('#form-proposal', 'proposalNumber').value = 'PRP-WEB-BRL';
+    const premium = field('#form-proposal', 'netPremium');
+    premium.value = '123450';
+    premium.dispatchEvent(new Event('input'));
+    expect(premium.value).toBe('R$ 1.234,50');
+
+    click('#add-installment');
+    const amount = field('#installments', 'amount');
+    amount.value = '1254';
+    amount.dispatchEvent(new Event('input'));
+    expect(amount.value).toBe('R$ 12,54');
+    submit('#form-proposal');
+
+    await vi.waitFor(() => {
+      expect(text('#done-body')).toContain('PRP-WEB-BRL');
+    });
+    const stored = (await callApi('GET', '/proposals?status=AWAITING_ISSUANCE')).find(
+      (proposal: Untyped) => proposal.proposalNumber === 'PRP-WEB-BRL',
+    );
+    expect(stored.netPremium).toBe('1234.50');
+    expect(stored.installments).toMatchObject([{ amount: '12.54' }]);
   });
 
   it('asks for the CTU only when the receipt goes through an intermediary (REQ-221)', async () => {
@@ -396,6 +436,38 @@ describe('FP-01 through the web interface', () => {
     });
     expect(requests).toContain('GET /proposals?status=REJECTED');
     expect(text('#list')).toContain('perfil de risco');
+  });
+
+  it('lists the broker and the intermediary of each proposal by name, or a direct transaction (REQ-220, REQ-229, REQ-308)', async () => {
+    await awaitingProposal({ proposalNumber: 'PRP-COL-DIRECT' });
+    await awaitingProposal({
+      proposalNumber: 'PRP-COL-MEGA',
+      intermediary: { intermediaryId: 'mega', ctu: '50' },
+    });
+
+    openPage('proposals/index.html');
+    await import('/app/proposals/index.js');
+    await vi.waitFor(() => {
+      expect(text('#list')).toContain('PRP-COL-MEGA');
+    });
+
+    const headers = [...document.querySelectorAll('#list th')].map((th: Untyped) =>
+      th.textContent.trim(),
+    );
+    expect(headers).toContain('Corretor');
+    expect(headers).toContain('Intermediária');
+
+    const cells = (number: string): string[] => {
+      const line = [...document.querySelectorAll('#list tbody tr')].find((row: Untyped) =>
+        row.textContent.includes(number),
+      ) as Untyped;
+      return [...line.querySelectorAll('td')].map((td: Untyped) => td.textContent.trim());
+    };
+    const column = (label: string): number => headers.indexOf(label);
+
+    expect(cells('PRP-COL-DIRECT')[column('Corretor')]).toBe('Corretora Alfa');
+    expect(cells('PRP-COL-DIRECT')[column('Intermediária')]).toBe('Transação direta');
+    expect(cells('PRP-COL-MEGA')[column('Intermediária')]).toBe('Mega Intermediação');
   });
 
   it('shows everything the proposal holds and who informed it (REQ-202, REQ-215, CA-203)', async () => {
@@ -565,23 +637,33 @@ describe('FP-01 through the web interface', () => {
     expect(stored.rejectionReason).toBe('perfil de risco');
   });
 
-  it('recognises the issuance, signed, and the policy inherits the proposal (FP-01 steps 8-9, REQ-209, REQ-241)', async () => {
+  it('recognises the issuance, signed, with the policy number typed when the PDF has none (FP-01 steps 8-9, REQ-209, REQ-241, REQ-248, CA-272)', async () => {
     const proposalId = await awaitingProposal({
       proposalNumber: 'PRP-ACCEPT-1',
       installments: [{ amount: '100.00', dueDate: null }],
     });
     await openProposal(proposalId);
 
-    // The policy number is the proposal number (REQ-241): shown, not typed.
+    // REQ-248: the number is not the proposal's; it starts empty, to be read or typed.
     const policyNumber = field('#form-issuance', 'policyNumber');
-    expect(policyNumber.value).toBe('PRP-ACCEPT-1');
-    expect(policyNumber.readOnly).toBe(true);
-    expect(text('#form-issuance')).not.toContain('Pode coincidir');
-    expect(text('#form-issuance')).toContain('É o número da proposta.');
-    // REQ-242: nothing of the policy is typed again.
+    expect(policyNumber.value).toBe('');
+    expect(policyNumber.readOnly).toBe(false);
+    expect(policyNumber.required).toBe(true);
+    // REQ-247: the PDF is required.
+    expect(field('#form-issuance', 'policyPdf').required).toBe(true);
+    // REQ-242: nothing else of the policy is typed again.
     for (const name of ['premium', 'coverageStart', 'coverageEnd', 'renewalDate', 'amount']) {
       expect(document.querySelector(`#form-issuance [name="${name}"]`)).toBeNull();
     }
+
+    // CA-272: a PDF with no number in it says so and leaves the field to be typed.
+    choosePolicyPdf(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31]));
+    await vi.waitFor(() => {
+      expect(text('#policy-number-hint')).toContain('não encontrado no PDF');
+    });
+    expect(requests).toContain('POST /policies/pdf-reading');
+    expect(policyNumber.value).toBe('');
+    policyNumber.value = 'APL-ACCEPT-1';
 
     submit('#form-issuance');
 
@@ -599,7 +681,8 @@ describe('FP-01 through the web interface', () => {
     expect(proposal.issuanceRecognizedBy).toBe(signedIn.user.id);
     const policy = await callApi('GET', `/proposals/${proposalId}/policy`);
     expect(policy).toMatchObject({
-      policyNumber: 'PRP-ACCEPT-1',
+      policyNumber: 'APL-ACCEPT-1',
+      proposalNumber: 'PRP-ACCEPT-1',
       premium: '100.00',
       coverageEnd: '2027-10-01',
       renewalDate: '2027-10-01',
@@ -614,9 +697,8 @@ describe('FP-01 through the web interface', () => {
     const proposalId = await awaitingProposal({ proposalNumber: 'PRP-ACCEPT-PDF' });
     await openProposal(proposalId);
 
-    const input = field('#form-issuance', 'policyPdf');
-    const file = new window.File([PDF], 'apolice.pdf', { type: 'application/pdf' });
-    Object.defineProperty(input, 'files', { value: [file], configurable: true });
+    choosePolicyPdf(PDF);
+    field('#form-issuance', 'policyNumber').value = 'APL-ACCEPT-PDF';
     submit('#form-issuance');
 
     await vi.waitFor(() => {
@@ -629,6 +711,45 @@ describe('FP-01 through the web interface', () => {
     });
     const download = await fetch(`${baseUrl}/policies/${policy.id}/document`);
     expect(new Uint8Array(await download.arrayBuffer())).toEqual(PDF);
+  });
+
+  it.skipIf(!existsSync(POLICY_EXAMPLE_PDF))(
+    'fills the policy number read from the example policy PDF, not the proposal number (REQ-248, CA-270)',
+    async () => {
+      const proposalId = await awaitingProposal({ proposalNumber: '140839725' });
+      await openProposal(proposalId);
+
+      choosePolicyPdf(new Uint8Array(readFileSync(POLICY_EXAMPLE_PDF)));
+
+      await vi.waitFor(() => {
+        expect(field('#form-issuance', 'policyNumber').value).toBe('5177202641312121285');
+      });
+      expect(text('#policy-number-hint')).toContain('Confira');
+      submit('#form-issuance');
+
+      await vi.waitFor(() => {
+        expect(text('#page')).toContain('Apólice registrada');
+      });
+      const policy = await callApi('GET', `/proposals/${proposalId}/policy`);
+      expect(policy).toMatchObject({
+        policyNumber: '5177202641312121285',
+        proposalNumber: '140839725',
+      });
+    },
+  );
+
+  it('shows the refusal of a recognition without the policy PDF, in Portuguese (REQ-247, REJ-247)', async () => {
+    const proposalId = await awaitingProposal({ proposalNumber: 'PRP-NO-PDF' });
+    await openProposal(proposalId);
+
+    field('#form-issuance', 'policyNumber').value = 'APL-NO-PDF';
+    submit('#form-issuance');
+
+    await vi.waitFor(() => {
+      expect(snackbars().length).toBeGreaterThan(0);
+    });
+    expect(snackbars().at(-1)).toContain('O reconhecimento da emissão exige o PDF da apólice.');
+    expect((await callApi('GET', `/proposals/${proposalId}`)).status).toBe('AWAITING_ISSUANCE');
   });
 
   it('asks nobody to type who recognised the issuance: it is the session user (REJ-205, REQ-216)', async () => {
@@ -825,13 +946,14 @@ describe('filling the proposal from its PDF (REQ-218)', () => {
       expect(field('#form-proposal', 'clientCpf').value).toMatch(/^\d{11}$/);
       expect(field('#form-proposal', 'insurerId').value).toBe('ALLIANZ');
       expect(field('#form-proposal', 'productId').value).toBe('Auto');
-      expect(field('#form-proposal', 'netPremium').value).toBe('643.85');
+      // Shown in reais; the API still receives '643.85' (checked below).
+      expect(field('#form-proposal', 'netPremium').value).toBe('R$ 643,85');
       expect(field('#form-proposal', 'coverageStart').value).toBe('2026-09-17');
       expect(field('#form-proposal', 'coverageEnd').value).toBe('2027-09-17');
       expect(text('#renewal')).toBe('17/09/2027');
       const amounts: Untyped[] = [...document.querySelectorAll('#installments [name="amount"]')];
       expect(amounts).toHaveLength(10);
-      expect(amounts[9].value).toBe('69.10');
+      expect(amounts[9].value).toBe('R$ 69,10');
       // What never comes from the document is said, for the user to inform.
       expect(text('#pdf-result')).toContain('comissão trabalhada');
 
@@ -1028,7 +1150,7 @@ describe('the commercial progression on screen', () => {
 
   it('carries the issued proposal into the policy stage, both ways', async () => {
     const proposalId = await awaitingProposal({ proposalNumber: 'PRP-STAGE-3' });
-    const policy = await callApi('POST', '/policies', { proposalId });
+    const policy = await callApi('POST', '/policies', recognitionBody(proposalId, 'APL-TESTE'));
 
     await openProposal(proposalId);
     expect(stage().current).toBe('policy');

@@ -85,6 +85,7 @@ import {
 } from './infrastructure/email/in-memory-access-mailer.ts';
 import { LogAccessMailer } from './infrastructure/email/log-access-mailer.ts';
 import { SmtpAccessMailer } from './infrastructure/email/smtp-access-mailer.ts';
+import { PolicyPdfReader } from './infrastructure/pdf/policy-pdf-reader.ts';
 import { ProposalPdfReader, identifyByText } from './infrastructure/pdf/proposal-pdf-reader.ts';
 import { ImmediateTransaction } from './infrastructure/persistence/in-memory/immediate-transaction.ts';
 import { InMemoryBrokerRepository } from './infrastructure/persistence/in-memory/in-memory-broker-repository.ts';
@@ -143,6 +144,11 @@ export interface UseCases {
   readonly getProposalSourceDocument: GetProposalSourceDocument;
   readonly listProposals: ListProposals;
   readonly registerPolicy: RegisterPolicy;
+  /**
+   * REQ-248: fills the policy number of the recognition from the policy PDF.
+   * Like `readProposalPdf`, an aid to the form that saves nothing.
+   */
+  readonly readPolicyPdf: PolicyPdfReader;
   readonly getPolicy: GetPolicy;
   readonly getPolicyByProposal: GetPolicyByProposal;
   /** REQ-247: the PDF of a policy, sent after it exists, and read back. */
@@ -325,6 +331,7 @@ export function composeApplication(config: Config): Application {
       getProposal: new GetProposal({ proposals }),
       getProposalSourceDocument: new GetProposalSourceDocument({ proposals, documents }),
       listProposals: new ListProposals({ proposals, clients: proposalClients }),
+      readPolicyPdf: new PolicyPdfReader(),
       registerPolicy: new RegisterPolicy({
         proposals,
         policies,

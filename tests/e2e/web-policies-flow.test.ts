@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { recognitionBody } from '../support/policy-recognition.ts';
 import { registerBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
 import { signIn } from './support/sign-in.ts';
@@ -206,9 +207,7 @@ async function registeredPolicy(
     intermediary: null,
   });
 
-  const policy = await callApi('POST', '/policies', {
-    proposalId: proposal.id,
-  });
+  const policy = await callApi('POST', '/policies', recognitionBody(proposal.id, policyNumber));
 
   return policy.id as string;
 }

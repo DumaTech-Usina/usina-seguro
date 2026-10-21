@@ -71,7 +71,7 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
       "Valor monetário inválido: '{value}'. Use string decimal com até {scale} casas, ex.: '1234.56'.",
     'percentage.invalid_format': "Percentual inválido: '{value}'. Use string decimal, ex.: '32.5'.",
     'percentage.out_of_range': "Percentual fora da faixa de 0 a 100: '{value}'.",
-    'policy.policy_number_required': 'Apólice exige número de apólice.',
+    'policy.policy_number_required': 'Informe o número da apólice.',
     'policy.premium_must_be_positive': 'Prêmio da apólice deve ser positivo.',
     'policy.coverage_end_must_follow_start':
       'Fim da vigência ({end}) deve ser posterior ao início ({start}).',
@@ -83,6 +83,7 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'policy.not_found_for_proposal': "Proposta '{proposalId}' ainda não possui apólice registrada.",
     'calendar_date.invalid_format': "Data inválida: '{value}'. Use o formato AAAA-MM-DD.",
     'policy.document_not_found': 'A apólice {id} não tem PDF guardado.',
+    'policy.document_required': 'O reconhecimento da emissão exige o PDF da apólice.',
     'policy.installment_not_found': "Parcela {number} não encontrada na apólice '{policyNumber}'.",
     'policy.only_pending_can_be_paid':
       'Somente parcela pendente pode ser confirmada como paga. Parcela {number} está {status}.',

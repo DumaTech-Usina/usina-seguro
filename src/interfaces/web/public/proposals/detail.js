@@ -494,18 +494,54 @@ receiptForm.addEventListener('submit', (event) => {
   });
 });
 
-// FP-01 step 8 (REQ-209): signed by the session user (REQ-216); the policy is created
-// from the proposal (REQ-240, REQ-241) — no datum is sent again (REQ-242).
-// The PDF of the policy may go with it (REQ-247): a document, not a datum.
+const policyPdfField = issuanceForm.querySelector('[name="policyPdf"]');
+const policyNumberField = issuanceForm.querySelector('[name="policyNumber"]');
+const policyNumberHint = issuanceForm.querySelector('#policy-number-hint');
+let policyPdfReading = 0;
+
+// REQ-248: choosing the policy PDF reads its number into the field, for the user
+// to review. A number not found leaves the field as it is, to be typed (CA-272).
+policyPdfField.addEventListener('change', async () => {
+  const reading = ++policyPdfReading;
+  const [file] = policyPdfField.files ?? [];
+  if (file === undefined) {
+    return;
+  }
+
+  policyNumberHint.textContent = 'Lendo o PDF da apólice…';
+  let found;
+  try {
+    found = (await api.readPolicyPdf(await base64Of(file))).fields.policyNumber;
+  } catch {
+    found = undefined;
+  }
+  // Only the last file chosen fills the field.
+  if (reading !== policyPdfReading) {
+    return;
+  }
+
+  if (found === undefined) {
+    policyNumberHint.textContent = 'Número da apólice não encontrado no PDF. Digite-o.';
+    return;
+  }
+  policyNumberField.value = found;
+  policyNumberHint.textContent = 'Lido do PDF da apólice. Confira antes de reconhecer.';
+});
+
+// FP-01 step 8 (REQ-209): signed by the session user (REQ-216). The policy takes
+// the informed number (REQ-248) and its PDF (REQ-247); every other datum comes
+// from the proposal (REQ-240, REQ-241, REQ-242). Whether a missing PDF or number
+// is acceptable is the domain's answer (REJ-247, REJ-248).
 issuanceForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  const [file] = issuanceForm.querySelector('[name="policyPdf"]').files ?? [];
+  const [file] = policyPdfField.files ?? [];
 
   submitting(issuanceForm, async () => {
     const pdf =
       file === undefined ? undefined : { fileName: file.name, content: await base64Of(file) };
     const policy = await api.registerPolicy({
       proposalId,
+      policyNumber: policyNumberField.value,
       ...(pdf === undefined ? {} : { document: pdf }),
     });
 
@@ -630,8 +666,6 @@ async function render() {
   } else {
     fillCorrections(proposal);
     show(['corrections', 'outcome']);
-    // REQ-241: the policy number is the proposal number.
-    issuanceForm.querySelector('[name="policyNumber"]').value = proposal.proposalNumber;
   }
 
   page.replaceChildren(...sections);

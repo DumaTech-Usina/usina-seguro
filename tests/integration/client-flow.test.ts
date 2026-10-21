@@ -7,6 +7,7 @@ import { loadConfig } from '../../src/config/config.ts';
 import type { RegisterProposalInput } from '../../src/core/proposal/application/register-proposal.ts';
 import { BusinessRuleViolation } from '../../src/core/proposal/domain/errors.ts';
 import { cpfOf } from '../support/cpf.ts';
+import { recognitionInput } from '../support/policy-recognition.ts';
 
 /**
  * The clients of V2 section 9E against the real SQLite driver: the client is
@@ -128,11 +129,12 @@ describe('the client of a policy and the search by client on SQLite (REQ-318, RE
     const bruno = await application.useCases.registerProposal.execute(
       proposal({ proposalNumber: 'PRP-2', client: { name: 'Bruno Lima', cpf: BRUNO } }),
     );
-    const policy = await application.useCases.registerPolicy.execute({
-      proposalId: maria.id,
-      userId: 'operator',
-    });
-    await application.useCases.registerPolicy.execute({ proposalId: bruno.id, userId: 'operator' });
+    const policy = await application.useCases.registerPolicy.execute(
+      recognitionInput(maria.id, 'operator', 'APL-MARIA'),
+    );
+    await application.useCases.registerPolicy.execute(
+      recognitionInput(bruno.id, 'operator', 'APL-BRUNO'),
+    );
 
     // REQ-241, REQ-318: read from the proposal, never stored again.
     expect((await application.useCases.getPolicy.execute(policy.id)).clientId).toBe(maria.clientId);

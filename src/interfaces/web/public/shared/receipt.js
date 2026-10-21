@@ -83,6 +83,12 @@ export function chooseIntermediary(select, id) {
   }
 }
 
+/** Keeps the registered names for `intermediaryName`, for a page with no dropdown. */
+export async function loadIntermediaries() {
+  const references = await api.listReferences('INTERMEDIARY');
+  names = new Map(references.map((reference) => [reference.id, reference.name]));
+}
+
 /**
  * REQ-229: the proposal keeps the intermediary's id; the screen shows its
  * registered name. A proposal registered before the rule may name one the

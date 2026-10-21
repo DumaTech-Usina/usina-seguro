@@ -52,7 +52,12 @@ async function issuedPolicy(overrides: Partial<ProposalRegistration> = {}) {
     notifier: { notify: async () => {} },
     newId: () => `id-${++sequence}`,
     now: () => NOW,
-  }).execute({ proposalId: 'proposal-1', userId: 'carla' });
+  }).execute({
+    proposalId: 'proposal-1',
+    userId: 'carla',
+    policyNumber: 'APL-1',
+    document: { fileName: 'apolice.pdf', content: new Uint8Array([0x25, 0x50, 0x44, 0x46]) },
+  });
 
   return {
     policyId: policy.id,

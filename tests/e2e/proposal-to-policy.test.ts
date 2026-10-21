@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { recognitionBody } from '../support/policy-recognition.ts';
 import { registerBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
 import { type SignedIn, signIn } from './support/sign-in.ts';
@@ -92,9 +93,12 @@ async function registerProposal(
   return ((await response.json()) as { id: string }).id;
 }
 
-/** REQ-209, REQ-242: the recognition carries only the proposal; who identified it is the session (REQ-216). */
-function recognition(proposalId: string): unknown {
-  return { proposalId };
+/**
+ * REQ-209, REQ-247, REQ-248: the recognition carries the proposal, the policy
+ * number and the policy PDF; who identified it is the session (REQ-216).
+ */
+function recognition(proposalId: string, policyNumber = 'APL-TESTE'): Record<string, unknown> {
+  return recognitionBody(proposalId, policyNumber);
 }
 
 interface PolicyBody {
@@ -109,7 +113,7 @@ interface PolicyBody {
 }
 
 describe('FP-01 over HTTP: recognition of issuance, policy, installments', () => {
-  it('creates the policy inheriting every datum of the proposal (REQ-240, REQ-241, CA-205)', async () => {
+  it('creates the policy with the informed number, inheriting every other datum (REQ-240, REQ-241, REQ-248, CA-205)', async () => {
     const proposalId = await registerProposal('bank-slip', 'PRP-1000', {
       installments: [
         { amount: '600.00', dueDate: '2026-10-10' },
@@ -117,12 +121,12 @@ describe('FP-01 over HTTP: recognition of issuance, policy, installments', () =>
       ],
     });
 
-    const response = await post('/policies', recognition(proposalId));
+    const response = await post('/policies', recognition(proposalId, 'APL-1000'));
 
     expect(response.status).toBe(201);
     const body = (await response.json()) as PolicyBody;
     expect(body).toMatchObject({
-      policyNumber: 'PRP-1000',
+      policyNumber: 'APL-1000',
       proposalNumber: 'PRP-1000',
       status: 'ACTIVE',
       premium: '1200.00',
@@ -159,15 +163,17 @@ describe('FP-01 over HTTP: recognition of issuance, policy, installments', () =>
     expect(Date.parse(proposal.issuanceRecognizedAt)).toBeLessThanOrEqual(Date.now());
   });
 
-  it('keeps both numbers consultable, the policy one being the proposal one (REQ-050, REQ-241)', async () => {
+  it('keeps both numbers consultable, and they differ (REQ-050, REQ-241, REQ-248, CA-271)', async () => {
     const proposalId = await registerProposal('bank-slip', 'PRP-2000');
-    const created = (await (await post('/policies', recognition(proposalId))).json()) as PolicyBody;
+    const created = (await (
+      await post('/policies', recognition(proposalId, 'APL-2000'))
+    ).json()) as PolicyBody;
 
     const response = await fetch(`${baseUrl}/policies/${created.id}`);
 
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({
-      policyNumber: 'PRP-2000',
+      policyNumber: 'APL-2000',
       proposalNumber: 'PRP-2000',
       proposalId,
     });
@@ -225,7 +231,7 @@ describe('FP-01 over HTTP: recognition of issuance, policy, installments', () =>
   it('never takes the author of the recognition from the request (REJ-205, REQ-216, CA-416)', async () => {
     const proposalId = await registerProposal('bank-slip', 'PRP-7000');
 
-    const response = await post('/policies', { proposalId, userId: 'carla.dias' });
+    const response = await post('/policies', { ...recognition(proposalId), userId: 'carla.dias' });
 
     expect(response.status).toBe(201);
     const proposal = (await (await fetch(`${baseUrl}/proposals/${proposalId}`)).json()) as {
@@ -234,28 +240,67 @@ describe('FP-01 over HTTP: recognition of issuance, policy, installments', () =>
     expect(proposal.issuanceRecognizedBy).toBe(signedIn.user.id);
   });
 
-  it('never takes policy data typed again: the policy only inherits (REQ-242, REJ-204)', async () => {
+  it('takes the informed policy number and no other datum typed again (REQ-242, REQ-248, REJ-204)', async () => {
     const proposalId = await registerProposal('bank-slip', 'PRP-7100');
 
     const response = await post('/policies', {
-      ...(recognition(proposalId) as Record<string, unknown>),
-      policyNumber: 'APL-OTHER',
+      ...recognition(proposalId, 'APL-7100'),
       premium: '999.00',
     });
 
     expect(response.status).toBe(201);
-    expect(await response.json()).toMatchObject({ policyNumber: 'PRP-7100', premium: '1200.00' });
+    expect(await response.json()).toMatchObject({ policyNumber: 'APL-7100', premium: '1200.00' });
   });
 
-  it('accepts two policies with the same number, as proposal numbers may repeat (DEC-207)', async () => {
+  it('accepts two policies with the same number, not checked for uniqueness (DEC-207, REQ-248)', async () => {
     const first = await registerProposal('bank-slip', 'PRP-8000');
-    const second = await registerProposal('bank-slip', 'PRP-8000');
+    const second = await registerProposal('bank-slip', 'PRP-8001');
 
-    expect((await post('/policies', recognition(first))).status).toBe(201);
-    const response = await post('/policies', recognition(second));
+    expect((await post('/policies', recognition(first, 'APL-8000'))).status).toBe(201);
+    const response = await post('/policies', recognition(second, 'APL-8000'));
 
     expect(response.status).toBe(201);
-    expect(await response.json()).toMatchObject({ policyNumber: 'PRP-8000' });
+    expect(await response.json()).toMatchObject({ policyNumber: 'APL-8000' });
+  });
+
+  it('refuses a recognition without the policy PDF with 422, in Portuguese, and creates nothing (REQ-247, REJ-247)', async () => {
+    const proposalId = await registerProposal('bank-slip', 'PRP-8100');
+
+    const response = await post('/policies', { proposalId, policyNumber: 'APL-8100' });
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      rule: 'REQ-247',
+      message: 'O reconhecimento da emissão exige o PDF da apólice.',
+    });
+    const proposal = (await (await fetch(`${baseUrl}/proposals/${proposalId}`)).json()) as {
+      status: string;
+    };
+    expect(proposal.status).toBe('AWAITING_ISSUANCE');
+  });
+
+  it('refuses a recognition without the policy number with 422, in Portuguese (REQ-248, REJ-248)', async () => {
+    const proposalId = await registerProposal('bank-slip', 'PRP-8200');
+
+    const response = await post('/policies', recognition(proposalId, '  '));
+
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({
+      rule: 'REQ-248',
+      message: 'Informe o número da apólice.',
+    });
+  });
+
+  it('reads the policy number of a PDF without registering anything, and FAILED for bytes that are not one (REQ-248)', async () => {
+    const response = await post('/policies/pdf-reading', {
+      content: Buffer.from('isto não é um pdf').toString('base64'),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      status: 'FAILED',
+      missing: ['policyNumber'],
+    });
   });
 
   it('answers 404 for a proposal that does not exist', async () => {
@@ -296,7 +341,9 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
     const proposalId = await registerProposal('bank-slip', `PRP-${number}`, {
       coverageEnd: renewalDate,
     });
-    const created = (await (await post('/policies', recognition(proposalId))).json()) as PolicyBody;
+    const created = (await (
+      await post('/policies', recognition(proposalId, `APL-${number}`))
+    ).json()) as PolicyBody;
 
     return created.id;
   }
@@ -317,7 +364,7 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
     // REQ-020: coverage, premium and state, with both numbers of REQ-050.
     expect(listing[0]).toMatchObject({
       id: early,
-      policyNumber: 'PRP-LIST-EARLY',
+      policyNumber: 'APL-LIST-EARLY',
       proposalNumber: 'PRP-LIST-EARLY',
       // REQ-318: the name of the client registered with the proposal.
       clientName: 'client-1',
@@ -326,10 +373,10 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
       coverageStart: '2026-10-01',
       renewalDate: '2026-12-31',
     });
-    expect(numbers.indexOf('PRP-LIST-EARLY')).toBeLessThan(numbers.indexOf('PRP-LIST-LATER'));
+    expect(numbers.indexOf('APL-LIST-EARLY')).toBeLessThan(numbers.indexOf('APL-LIST-LATER'));
     expect(listing[1]?.id).toBe(later);
     // The policies the other tests registered are here too: no filter, no cut.
-    expect(numbers).toContain('PRP-1000');
+    expect(numbers).toContain('APL-1000');
   });
 
   it('answers only what renews up to the informed day (CA-032, OUT-04)', async () => {
@@ -339,11 +386,11 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
     const expiring = await listPolicies('?renewalUntil=2027-03-31');
     const numbers = expiring.map((line) => line.policyNumber);
 
-    expect(numbers).toContain('PRP-WINDOW-IN');
+    expect(numbers).toContain('APL-WINDOW-IN');
     // The day informed is inside the window; what renews after it is not.
-    expect(numbers).toContain('PRP-LIST-LATER');
-    expect(numbers).not.toContain('PRP-WINDOW-OUT');
-    expect(numbers).not.toContain('PRP-1000');
+    expect(numbers).toContain('APL-LIST-LATER');
+    expect(numbers).not.toContain('APL-WINDOW-OUT');
+    expect(numbers).not.toContain('APL-1000');
     expect(expiring.every((line) => line.renewalDate <= '2027-03-31')).toBe(true);
   });
 
@@ -423,14 +470,15 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
       clientId: string;
     };
 
-    const policy = await post('/policies', recognition(proposalId));
+    const policy = await post('/policies', recognition(proposalId, 'APL-NOTIFY-1'));
     const { id: policyId } = (await policy.json()) as { id: string };
 
     const [notified] = await listNotifications(`?recipientId=${brokers.notified}`);
     expect(notified).toMatchObject({
       recipientId: brokers.notified,
       policyId,
-      policyNumber: 'PRP-NOTIFY-1',
+      // REQ-248: the number of the policy, not of its proposal.
+      policyNumber: 'APL-NOTIFY-1',
       client: { id: clientId, name: 'Maria Souza' },
       broker: { id: brokers.notified, name: 'Corretora Notificada' },
       product: { id: 'auto', name: 'Automovel' },

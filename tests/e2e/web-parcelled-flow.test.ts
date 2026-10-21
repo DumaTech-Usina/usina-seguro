@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { recognitionBody } from '../support/policy-recognition.ts';
 import { chooseBroker, registerBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
 import { registerIntermediary } from './support/intermediaries.ts';
@@ -249,7 +250,8 @@ async function awaitingProposal(overrides: Record<string, unknown> = {}): Promis
 
 async function parcelledPolicy(proposalNumber: string): Promise<string> {
   const proposalId = await awaitingProposal({ proposalNumber });
-  return (await callApi('POST', '/policies', { proposalId })).id;
+  // These journeys find the policy by the number they gave the business.
+  return (await callApi('POST', '/policies', recognitionBody(proposalId, proposalNumber))).id;
 }
 
 async function openProposal(id: string): Promise<void> {
@@ -411,6 +413,29 @@ describe('a parcelled proposal awaiting issuance (REQ-254, REQ-297, REQ-299)', (
     expect(expected).toContain('R$ 100,00');
     expect(expected).toContain('Parcela 3');
     expect(expected).toContain('R$ 30,00');
+  });
+
+  it('lists it beside an integral proposal, with both CTs and no total (REQ-232, REQ-293, REJ-232)', async () => {
+    await awaitingProposal({ proposalNumber: 'PRP-LIST-PARC' });
+    await awaitingProposal({
+      proposalNumber: 'PRP-LIST-INT',
+      workedCommission: '20',
+      subsequentWorkedCommission: null,
+      workedCommissionMode: 'INTEGRAL',
+    });
+
+    vi.resetModules();
+    openPage('proposals/index.html');
+    await import('/app/proposals/index.js');
+    await vi.waitFor(() => {
+      expect(document.querySelector('#list .skeleton')).toBeNull();
+    });
+
+    const parcelled = rowWith('#list', 'PRP-LIST-PARC');
+    expect(parcelled.textContent).toContain('100% · demais 30%');
+    expect(parcelled.textContent).toContain('Por parcela');
+    // The integral one keeps its single expected value: 300.00 × 20%.
+    expect(rowWith('#list', 'PRP-LIST-INT').textContent).toContain('R$ 60,00');
   });
 
   it('corrects both CTs, signed (REQ-297)', async () => {

@@ -16,6 +16,7 @@ export const POLICY_MESSAGES = {
   NOT_FOUND: 'policy.not_found',
   NOT_FOUND_FOR_PROPOSAL: 'policy.not_found_for_proposal',
   DOCUMENT_NOT_FOUND: 'policy.document_not_found',
+  DOCUMENT_REQUIRED: 'policy.document_required',
   INSTALLMENT_NOT_FOUND: 'policy.installment_not_found',
   ONLY_PENDING_CAN_BE_PAID: 'policy.only_pending_can_be_paid',
   PAYMENT_CONFIRMATION_USER_REQUIRED: 'policy.payment_confirmation_user_required',

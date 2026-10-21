@@ -10,6 +10,7 @@ import { ApiError, api } from '/app/shared/api.js';
 import { brokerName, loadBrokers } from '/app/shared/brokers.js';
 import { clientName, loadClients } from '/app/shared/clients.js';
 import { formatDate, formatMoney, formatPercentage } from '/app/shared/money.js';
+import { intermediaryName, loadIntermediaries } from '/app/shared/receipt.js';
 import { reportError } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
 
@@ -61,27 +62,41 @@ function emptyState(iconName, title, description) {
 
 /* --------------------------------------------------------------- table -- */
 
+/** REQ-291: a parcelled CT is two rates — the first installment's and the others'. */
+function workedCommissionLabel(proposal) {
+  const first = formatPercentage(proposal.workedCommission);
+  return proposal.workedCommissionMode === 'PARCELLED'
+    ? `${first} · demais ${formatPercentage(proposal.subsequentWorkedCommission)}`
+    : first;
+}
+
 function row(proposal) {
   const line = element('tr');
 
-  const number = element('td');
+  const number = element('td', 'proposal-cell');
   number.append(
     element('span', 'proposal-number', proposal.proposalNumber),
-    element(
-      'div',
-      'text-muted',
-      `Cliente ${clientName(proposal.clientId)} · Corretor ${brokerName(proposal.brokerId)}`,
-    ),
+    element('div', 'text-muted', `Cliente ${clientName(proposal.clientId)}`),
+    element('div', 'text-muted', `${proposal.insurerId} · ${proposal.productId}`),
   );
   line.append(number);
 
   line.append(
-    element('td', undefined, proposal.insurerId),
-    element('td', undefined, proposal.productId),
+    element('td', undefined, brokerName(proposal.brokerId)),
+    // REQ-220: no intermediary is a direct receipt.
+    proposal.intermediaryId === null
+      ? element('td', 'text-muted', 'Transação direta')
+      : element('td', undefined, intermediaryName(proposal.intermediaryId)),
+  );
+
+  line.append(
     element('td', 'is-numeric', formatMoney(proposal.netPremium)),
-    element('td', 'is-numeric', formatPercentage(proposal.workedCommission)),
-    // REQ-232: what the Usina expects, as the server calculated it.
-    element('td', 'is-numeric', formatMoney(proposal.expectedReceipt.usina)),
+    element('td', 'is-numeric', workedCommissionLabel(proposal)),
+    // REQ-232: what the Usina expects, as the server calculated it. A parcelled
+    // CT has one value per installment and no total (REQ-293, REJ-232).
+    proposal.expectedReceipt === null
+      ? element('td', 'is-numeric text-muted', 'Por parcela')
+      : element('td', 'is-numeric', formatMoney(proposal.expectedReceipt.usina)),
     element('td', undefined, formatDate(proposal.registeredAt.slice(0, 10))),
   );
 
@@ -109,8 +124,8 @@ function table(proposals) {
 
   for (const [label, className] of [
     ['Proposta', ''],
-    ['Seguradora', ''],
-    ['Produto', ''],
+    ['Corretor', ''],
+    ['Intermediária', ''],
     ['Prêmio líquido', 'is-numeric'],
     ['CT', 'is-numeric'],
     ['Usina espera', 'is-numeric'],
@@ -172,12 +187,14 @@ async function load() {
 
   let proposals;
   try {
-    // REQ-308, REQ-318: the proposal keeps the broker's and the client's ids;
-    // the registries give the names. REQ-319: the server matches the client.
+    // REQ-308, REQ-318, REQ-229: the proposal keeps the broker's, the client's
+    // and the intermediary's ids; the registries give the names. REQ-319: the
+    // server matches the client.
     [proposals] = await Promise.all([
       api.listProposals(current.status, client),
       loadBrokers(),
       loadClients(),
+      loadIntermediaries(),
     ]);
   } catch (error) {
     if (request !== listRequest) {
@@ -218,7 +235,9 @@ async function load() {
     return;
   }
 
-  list.replaceChildren(table(proposals));
+  const scroll = element('div', 'table-scroll');
+  scroll.append(table(proposals));
+  list.replaceChildren(scroll);
 }
 
 clientSearchForm.addEventListener('submit', (event) => {

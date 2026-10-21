@@ -90,8 +90,17 @@ function awaiting(overrides: Partial<ProposalRegistration> = {}): Proposal {
   });
 }
 
+const POLICY_PDF = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+
+/** REQ-247, REQ-248: the recognition carries the policy number and the policy PDF. */
 function input(overrides: Partial<RegisterPolicyInput> = {}): RegisterPolicyInput {
-  return { proposalId: 'proposal-1', userId: 'carla.dias', ...overrides };
+  return {
+    proposalId: 'proposal-1',
+    userId: 'carla.dias',
+    policyNumber: 'APL-5177',
+    document: { fileName: 'apolice.pdf', content: POLICY_PDF },
+    ...overrides,
+  };
 }
 
 async function ruleOf(work: Promise<unknown>): Promise<string> {
@@ -105,15 +114,15 @@ async function ruleOf(work: Promise<unknown>): Promise<string> {
 }
 
 describe('RegisterPolicy — the recognition of issuance (FP-01 steps 8 and 9)', () => {
-  it('creates the policy inheriting every datum of the proposal (REQ-240, REQ-241, CA-205)', async () => {
+  it('creates the policy with the informed number, inheriting every other datum of the proposal (REQ-240, REQ-241, REQ-248, CA-205, CA-271)', async () => {
     const { proposals, useCase } = scenario();
     await proposals.save(awaiting());
 
     const output = await useCase.execute(input());
 
     expect(output).toMatchObject({
-      // REQ-241: the policy number is the proposal number.
-      policyNumber: 'PRP-9001',
+      // REQ-248: the policy number is informed; the proposal's stays consultable.
+      policyNumber: 'APL-5177',
       proposalId: 'proposal-1',
       proposalNumber: 'PRP-9001',
       status: 'ACTIVE',
@@ -123,12 +132,12 @@ describe('RegisterPolicy — the recognition of issuance (FP-01 steps 8 and 9)',
       // REQ-203, CA-206: the renewal is the end of coverage.
       renewalDate: '2027-10-01',
       registeredAt: NOW.toISOString(),
-      // REQ-247: no PDF was sent with the recognition.
-      document: null,
+      // REQ-247: the PDF travels with the recognition, signed by it.
+      document: { fileName: 'apolice.pdf', attachedBy: 'carla.dias' },
     });
     expect(output.installments).toEqual([
       {
-        id: 'id-2',
+        id: 'id-3',
         number: 1,
         amount: '600.00',
         dueDate: '2026-10-10',
@@ -138,7 +147,7 @@ describe('RegisterPolicy — the recognition of issuance (FP-01 steps 8 and 9)',
         confirmedAt: null,
       },
       {
-        id: 'id-3',
+        id: 'id-4',
         number: 2,
         amount: '600.00',
         // REQ-204, CA-208: inherited without a due date, as informed.
@@ -169,7 +178,7 @@ describe('RegisterPolicy — the recognition of issuance (FP-01 steps 8 and 9)',
     expect(issued?.status).toBe('ISSUED');
     expect(issued?.issuanceRecognition?.author).toBe('carla.dias');
     expect(issued?.issuanceRecognition?.at).toEqual(NOW);
-    expect((await policies.findById(output.id))?.policyNumber).toBe('PRP-9001');
+    expect((await policies.findById(output.id))?.policyNumber).toBe('APL-5177');
   });
 
   it('refuses a recognition nobody signed, and changes nothing (REJ-205, REQ-216)', async () => {
@@ -199,7 +208,7 @@ describe('RegisterPolicy — the recognition of issuance (FP-01 steps 8 and 9)',
     expect(await ruleOf(useCase.execute(input()))).toBe('REQ-049');
   });
 
-  it('accepts two policies with the same number, as the proposal numbers may repeat (DEC-207)', async () => {
+  it('accepts two policies with the same number, which is not checked for uniqueness (DEC-207, REQ-248)', async () => {
     const { proposals, policies, useCase } = scenario();
     await proposals.save(awaiting());
     await proposals.save(awaiting({ id: 'proposal-2' }));
@@ -207,7 +216,7 @@ describe('RegisterPolicy — the recognition of issuance (FP-01 steps 8 and 9)',
     await useCase.execute(input());
     const second = await useCase.execute(input({ proposalId: 'proposal-2' }));
 
-    expect(second.policyNumber).toBe('PRP-9001');
+    expect(second.policyNumber).toBe('APL-5177');
     expect(await policies.findByProposalId('proposal-2')).not.toBeNull();
   });
 
@@ -252,7 +261,7 @@ describe('RegisterPolicy — the recognition of issuance (FP-01 steps 8 and 9)',
     expect(notifier.events[0]).toEqual({
       policyId: policy.id,
       proposalId: 'proposal-1',
-      policyNumber: 'PRP-9001',
+      policyNumber: 'APL-5177',
       // REQ-105, REQ-209: the moment the issuance was recognised.
       issuedAt: NOW,
     });
@@ -261,9 +270,9 @@ describe('RegisterPolicy — the recognition of issuance (FP-01 steps 8 and 9)',
   it('keeps the PDF sent with the recognition, signed by who recognised it (REQ-247, CA-243)', async () => {
     const { proposals, policies, documents, useCase } = scenario();
     await proposals.save(awaiting());
-    const content = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    const content = POLICY_PDF;
 
-    const output = await useCase.execute(input({ document: { fileName: 'apolice.pdf', content } }));
+    const output = await useCase.execute(input());
 
     expect(output.document).toEqual({
       fileName: 'apolice.pdf',
@@ -290,5 +299,34 @@ describe('RegisterPolicy — the recognition of issuance (FP-01 steps 8 and 9)',
     ).rejects.toThrow(BusinessRuleViolation);
 
     expect(await documents.findById('id-2')).toBeNull();
+  });
+
+  it('refuses a recognition without the policy PDF, and changes nothing (REQ-247, REJ-247)', async () => {
+    const { proposals, policies, useCase } = scenario();
+    await proposals.save(awaiting());
+
+    expect(await ruleOf(useCase.execute(input({ document: null })))).toBe('REQ-247');
+
+    expect((await proposals.findById('proposal-1'))?.status).toBe('AWAITING_ISSUANCE');
+    expect(await policies.findByProposalId('proposal-1')).toBeNull();
+  });
+
+  it('refuses a recognition without the policy number, and changes nothing (REQ-248, REJ-248)', async () => {
+    const { proposals, policies, useCase } = scenario();
+    await proposals.save(awaiting());
+
+    expect(await ruleOf(useCase.execute(input({ policyNumber: '  ' })))).toBe('REQ-248');
+
+    expect((await proposals.findById('proposal-1'))?.status).toBe('AWAITING_ISSUANCE');
+    expect(await policies.findByProposalId('proposal-1')).toBeNull();
+  });
+
+  it('keeps the number as informed, without the surrounding spaces (REQ-248)', async () => {
+    const { proposals, useCase } = scenario();
+    await proposals.save(awaiting());
+
+    const output = await useCase.execute(input({ policyNumber: ' 5177202641312121285 ' }));
+
+    expect(output.policyNumber).toBe('5177202641312121285');
   });
 });

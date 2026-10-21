@@ -1,5 +1,12 @@
 /* Only what this page adds to the design system. */
 
+/* The page renders its head and cards inside #page: the same spacing as .content__inner. */
+#page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
 .proposal-head {
   display: flex;
   align-items: flex-start;

@@ -8,6 +8,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { createHttpServer } from '../../src/interfaces/http/server.ts';
+import { recognitionBody } from '../support/policy-recognition.ts';
 import { registerBroker } from './support/brokers.ts';
 import { clientNamed } from './support/clients.ts';
 import { type SignedIn, TEST_USER, signIn } from './support/sign-in.ts';
@@ -234,9 +235,11 @@ async function registeredPolicy(numbers: {
     intermediary: null,
   });
 
-  const policy = await callApi('POST', '/policies', {
-    proposalId: proposal.id,
-  });
+  const policy = await callApi(
+    'POST',
+    '/policies',
+    recognitionBody(proposal.id, numbers.policyNumber),
+  );
 
   return policy.id;
 }
@@ -359,20 +362,21 @@ describe('the PDF of the policy (REQ-247)', () => {
     return fetch(`${baseUrl}/policies/${policyId}/document`);
   }
 
-  it('sends the PDF from the policy page, signed, and keeps only the last one (CA-243, CA-244)', async () => {
+  it('sends a new PDF from the policy page, signed, and keeps only the last one (CA-243, CA-244)', async () => {
     const policyId = await registeredPolicy({
       proposalNumber: 'PRP-DOC-1',
-      policyNumber: 'PRP-DOC-1',
+      policyNumber: 'APL-DOC-1',
     });
     await openPolicy(policyId);
-    expect(text('#policy-document')).toContain('Nenhum PDF enviado.');
+    // REQ-247: the PDF sent with the recognition, which is required.
+    expect(text('#policy-document')).toContain('apolice.pdf');
 
     openSending();
-    choosePdf(FIRST, 'apolice.pdf');
+    choosePdf(FIRST, 'apolice-nova.pdf');
     answerDialog('#dialog-policy-document', {});
 
     await vi.waitFor(() => {
-      expect(text('#policy-document')).toContain('apolice.pdf');
+      expect(text('#policy-document')).toContain('apolice-nova.pdf');
     });
     expect(requests).toContain(`POST /policies/${policyId}/document`);
     expect(text('#policy-document')).toContain(`Enviado por ${TEST_USER.name}`);
@@ -391,7 +395,7 @@ describe('the PDF of the policy (REQ-247)', () => {
       expect(text('#policy-document')).toContain('apolice-corrigida.pdf');
     });
     expect(text('#policy-document')).toContain(`Enviado por ${TEST_USER.name}`);
-    expect(text('#policy-document')).not.toContain('apolice.pdf');
+    expect(text('#policy-document')).not.toContain('apolice-nova.pdf');
     expect(new Uint8Array(await (await download(policyId)).arrayBuffer())).toEqual(SECOND);
   });
 

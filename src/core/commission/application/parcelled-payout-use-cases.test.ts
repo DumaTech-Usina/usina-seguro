@@ -83,6 +83,10 @@ function scenario() {
       const policy = await registerPolicy.execute({
         proposalId: options.proposalId,
         userId: 'operator',
+        // REQ-247, REQ-248: the recognition carries the policy number and its PDF.
+        // These journeys search the policy by the number they gave the business.
+        policyNumber: `PRP-${options.proposalId}`,
+        document: { fileName: 'apolice.pdf', content: new Uint8Array([0x25, 0x50, 0x44, 0x46]) },
       });
       return policy.id;
     },

@@ -16,7 +16,14 @@ import { brokerName, loadBrokers } from '/app/shared/brokers.js';
 import { clientLabel, loadClients } from '/app/shared/clients.js';
 import { closeOnBackdropClick } from '/app/shared/dialog.js';
 import { base64Of } from '/app/shared/file.js';
-import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
+import {
+  formatDate,
+  formatInstant,
+  formatMoney,
+  formatPercentage,
+  maskMoney,
+  moneyValue,
+} from '/app/shared/money.js';
 import { viewPdfOnClick } from '/app/shared/pdf-viewer.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
 import { stageStrip, statusChip } from '/app/shared/status.js';
@@ -87,6 +94,7 @@ function button(label, { variant = 'outlined', iconName, onClick }) {
 for (const dialog of document.querySelectorAll('dialog.dialog')) {
   closeOnBackdropClick(dialog);
 }
+maskMoney(document.querySelector('#dialog-override [name="receivable"]'));
 
 /** Opens a dialog and resolves with its fields, or null when dismissed. */
 function ask(id, prepare) {
@@ -500,7 +508,7 @@ async function overrideCommission(policy) {
   await perform(
     () =>
       api.overrideCommission(policy.id, {
-        receivable: answer.receivable,
+        receivable: moneyValue(answer.receivable),
         justification: answer.justification,
       }),
     'Ajuste aplicado.',
