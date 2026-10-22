@@ -1,0 +1,8 @@
+# Only package.json, package-lock.json, tsconfig.json and src/ go into the image.
+# Everything else stays out — above all, secrets and personal data.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!src/
+src/**/*.test.ts

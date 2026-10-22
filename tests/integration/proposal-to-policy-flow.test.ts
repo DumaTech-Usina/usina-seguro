@@ -157,7 +157,9 @@ describe('proposal to policy flow on SQLite', () => {
 
     const policy = await registerPolicy(proposalId);
 
-    const [notified] = await application.useCases.listNotifications.execute({
+    const {
+      items: [notified],
+    } = await application.useCases.listNotifications.execute({
       recipientId: brokers['broker-1'],
     });
     expect(notified).toMatchObject({
@@ -204,15 +206,15 @@ describe('proposal to policy flow on SQLite', () => {
     const mine = await application.useCases.listNotifications.execute({
       recipientId: brokers['broker-1'],
     });
-    expect(mine.map((notification) => notification.policyNumber).sort()).toEqual([
+    expect(mine.items.map((notification) => notification.policyNumber).sort()).toEqual([
       'APL-N-1',
       'APL-N-3',
     ]);
 
     // REQ-105: most recent first, as the contract of the repository promises.
     const every = await application.useCases.listNotifications.execute({});
-    expect(every).toHaveLength(3);
-    const instants = every.map((notification) => Date.parse(notification.occurredAt));
+    expect(every.items).toHaveLength(3);
+    const instants = every.items.map((notification) => Date.parse(notification.occurredAt));
     expect(instants).toEqual([...instants].sort((a, b) => b - a));
   });
 
@@ -226,7 +228,7 @@ describe('proposal to policy flow on SQLite', () => {
     const after = await application.useCases.listNotifications.execute({});
 
     expect(after).toEqual(before);
-    expect(after[0]?.policyId).toBe(policy.id);
+    expect(after.items[0]?.policyId).toBe(policy.id);
   });
 
   it('writes nothing when the recognition is unsigned: the proposal stays open (REJ-205)', async () => {
@@ -240,6 +242,6 @@ describe('proposal to policy flow on SQLite', () => {
 
     // REQ-100 fires on the emission that happened, and only on it.
     const notified = await application.useCases.listNotifications.execute({});
-    expect(notified).toHaveLength(1);
+    expect(notified.items).toHaveLength(1);
   });
 });

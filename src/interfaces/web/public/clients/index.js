@@ -7,10 +7,18 @@
  * for it. There is no removal (REQ-315), so there is no button for it.
  */
 
+import { fromAddress, rememberInAddress } from '/app/shared/address.js';
 import { ApiError, api } from '/app/shared/api.js';
 import { authorName, loadAuthors } from '/app/shared/authors.js';
 import { formatCpf } from '/app/shared/brokers.js';
 import { formatInstant } from '/app/shared/money.js';
+import {
+  firstPage,
+  pageToRetry,
+  pager,
+  pagingFromAddress,
+  rememberPaging,
+} from '/app/shared/pager.js';
 import { reportError, showSnackbar } from '/app/shared/shell.js';
 
 function element(tag, className, text) {
@@ -88,14 +96,20 @@ async function submitting(form, send) {
 const listHost = document.querySelector('#list-clients');
 const searchForm = document.querySelector('#form-client-search');
 const search = searchForm.querySelector('[name="q"]');
+// The search the address asks for.
+search.value = fromAddress('q');
 let listRequest = 0;
+// REQ-330, REQ-332: the page on screen and how many lines it holds.
+let paging = pagingFromAddress();
 
 /** REQ-316: by name or CPF, as the server matches it. Only the latest answer is shown. */
 async function loadList() {
+  rememberPaging(paging);
+  rememberInAddress({ q: search.value });
   const request = ++listRequest;
   let clients;
   try {
-    clients = await api.listClients(search.value);
+    clients = await api.listClients(search.value, paging);
   } catch (error) {
     if (request !== listRequest) {
       return;
@@ -115,7 +129,14 @@ async function loadList() {
     return;
   }
 
-  if (clients.length === 0) {
+  const retry = pageToRetry(clients);
+  if (retry !== null && clients.total > 0) {
+    paging = { ...paging, page: retry };
+    loadList();
+    return;
+  }
+
+  if (clients.total === 0) {
     listHost.replaceChildren(
       heading('Clientes', 0),
       search.value.trim() === ''
@@ -126,10 +147,10 @@ async function loadList() {
   }
 
   listHost.replaceChildren(
-    heading('Clientes', clients.length),
+    heading('Clientes', clients.total),
     table(
       ['Nome', 'CPF', ''],
-      clients.map((client) => {
+      clients.items.map((client) => {
         const row = element('tr');
         row.dataset.clientId = client.id;
         const open = element('button', 'btn btn--text', 'Alterar');
@@ -145,14 +166,30 @@ async function loadList() {
         return row;
       }),
     ),
+    pager(clients, {
+      onPage: (page) => {
+        paging = { ...paging, page };
+        loadList();
+      },
+      onSize: (size) => {
+        paging = firstPage(size);
+        loadList();
+      },
+    }),
   );
+}
+
+/** A new search starts on the first page, with the same size (REQ-333). */
+function searchAgain() {
+  paging = firstPage(paging.size);
+  loadList();
 }
 
 searchForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  loadList();
+  searchAgain();
 });
-search.addEventListener('input', () => loadList());
+search.addEventListener('input', () => searchAgain());
 
 /* ------------------------------------------------------------- create -- */
 

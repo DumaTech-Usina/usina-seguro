@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InMemoryClientRepository } from '../../../infrastructure/persistence/in-memory/in-memory-client-repository.ts';
+import { InMemoryListings } from '../../../infrastructure/persistence/in-memory/in-memory-listings.ts';
+import { InMemoryPayoutCommissionRepository } from '../../../infrastructure/persistence/in-memory/in-memory-payout-commission-repository.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { InMemoryReferenceRepository } from '../../../infrastructure/persistence/in-memory/in-memory-reference-repository.ts';
@@ -116,7 +118,23 @@ async function scenario() {
     premium: '600.00',
   });
 
-  return { ...repositories, useCase: new ListPolicies(repositories) };
+  return { ...repositories, useCase: listPolicies(repositories) };
+}
+
+/** The use case over the in-memory drivers, the listing included (REQ-330). */
+function listPolicies(repositories: {
+  proposals: InMemoryProposalRepository;
+  policies: InMemoryPolicyRepository;
+  references: InMemoryReferenceRepository;
+  clients: InMemoryClientRepository;
+}): ListPolicies {
+  return new ListPolicies({
+    ...repositories,
+    listing: new InMemoryListings({
+      ...repositories,
+      payouts: new InMemoryPayoutCommissionRepository(),
+    }),
+  });
 }
 
 describe('ListPolicies', () => {
@@ -125,11 +143,15 @@ describe('ListPolicies', () => {
 
     const listing = await useCase.execute();
 
-    expect(listing.map((line) => line.policyNumber)).toEqual(['APL-FIRST', 'APL-MID', 'APL-LAST']);
+    expect(listing.items.map((line) => line.policyNumber)).toEqual([
+      'APL-FIRST',
+      'APL-MID',
+      'APL-LAST',
+    ]);
 
     // REQ-020: the coverage period, the premium and the state, which is what
     // OUT-03 asks a control of policies to show.
-    const [first] = listing;
+    const [first] = listing.items;
     expect(first?.coverageStart).toBe('2026-01-15');
     expect(first?.coverageEnd).toBe('2027-01-14');
     expect(first?.renewalDate).toBe('2027-01-14');
@@ -143,7 +165,7 @@ describe('ListPolicies', () => {
     const expiring = await useCase.execute({ renewalUntil: '2027-06-30' });
 
     // The day informed is inside the window, not one day short.
-    expect(expiring.map((line) => line.policyNumber)).toEqual(['APL-FIRST', 'APL-MID']);
+    expect(expiring.items.map((line) => line.policyNumber)).toEqual(['APL-FIRST', 'APL-MID']);
   });
 
   it('leaves out what renews after the informed day', async () => {
@@ -151,13 +173,15 @@ describe('ListPolicies', () => {
 
     const expiring = await useCase.execute({ renewalUntil: '2027-06-29' });
 
-    expect(expiring.map((line) => line.policyNumber)).toEqual(['APL-FIRST']);
+    expect(expiring.items.map((line) => line.policyNumber)).toEqual(['APL-FIRST']);
   });
 
   it('identifies each line by the records that hold a readable reference', async () => {
     const { useCase } = await scenario();
 
-    const [line] = await useCase.execute({ renewalUntil: '2027-01-14' });
+    const {
+      items: [line],
+    } = await useCase.execute({ renewalUntil: '2027-01-14' });
 
     // REQ-050: both numbers; REQ-022: who the business is for. The registries
     // of IN-01 are not modelled, so the references travel as stored.
@@ -174,7 +198,10 @@ describe('ListPolicies', () => {
   it('answers an empty listing rather than failing when nothing renews until then', async () => {
     const { useCase } = await scenario();
 
-    await expect(useCase.execute({ renewalUntil: '2026-12-31' })).resolves.toEqual([]);
+    await expect(useCase.execute({ renewalUntil: '2026-12-31' })).resolves.toMatchObject({
+      items: [],
+      total: 0,
+    });
   });
 
   it('refuses a malformed day instead of reading it as no window at all', async () => {
@@ -193,7 +220,7 @@ describe('ListPolicies', () => {
   it('refuses to answer a policy whose proposal is gone', async () => {
     const { policies } = await scenario();
 
-    const useCase = new ListPolicies({
+    const useCase = listPolicies({
       policies,
       proposals: new InMemoryProposalRepository(),
       references: new InMemoryReferenceRepository(),
@@ -225,7 +252,7 @@ describe('ListPolicies', () => {
     );
 
     const listing = await useCase.execute();
-    const mid = listing.find((line) => line.policyNumber === 'APL-MID');
+    const mid = listing.items.find((line) => line.policyNumber === 'APL-MID');
 
     expect(mid?.clientName).toBe('Ana Lima');
     expect(mid?.insurerName).toBe('Seguradora Norte');
@@ -242,14 +269,14 @@ describe('ListPolicies', () => {
     await clients.save(anaLima());
 
     const listing = await useCase.execute();
-    const last = listing.find((line) => line.policyNumber === 'APL-LAST');
+    const last = listing.items.find((line) => line.policyNumber === 'APL-LAST');
 
     // A proposal registered before the client registry keeps its text, shown
     // as it is; it is never a business to hide or refuse.
     expect(last?.clientName).toBe('client-LAST');
     expect(last?.clientId).toBe('client-LAST');
     expect(last?.insurerName).toBeNull();
-    expect(listing).toHaveLength(3);
+    expect(listing.items).toHaveLength(3);
   });
 });
 
@@ -259,7 +286,7 @@ describe('ListPolicies by client (REQ-319, REQ-320)', () => {
     await clients.save(anaLima());
 
     const numbers = async (client: string) =>
-      (await useCase.execute({ client })).map((line) => line.policyNumber);
+      (await useCase.execute({ client })).items.map((line) => line.policyNumber);
 
     expect(await numbers('lima')).toEqual(['APL-MID']);
     expect(await numbers('529.982.247-25')).toEqual(['APL-MID']);
@@ -270,20 +297,78 @@ describe('ListPolicies by client (REQ-319, REQ-320)', () => {
   it('does not find a policy by the text its proposal held before the registry (REQ-320)', async () => {
     const { useCase } = await scenario();
 
-    expect(await useCase.execute({ client: 'client-LAST' })).toEqual([]);
+    expect((await useCase.execute({ client: 'client-LAST' })).items).toEqual([]);
   });
 
   it('combines with the renewal filter, and a blank term is no filter', async () => {
     const { clients, useCase } = await scenario();
     await clients.save(anaLima());
 
-    expect(await useCase.execute({ client: 'lima', renewalUntil: '2027-01-31' })).toEqual([]);
+    expect((await useCase.execute({ client: 'lima', renewalUntil: '2027-01-31' })).items).toEqual(
+      [],
+    );
     expect(
-      (await useCase.execute({ client: 'lima', renewalUntil: '2027-06-30' })).map(
+      (await useCase.execute({ client: 'lima', renewalUntil: '2027-06-30' })).items.map(
         (line) => line.policyNumber,
       ),
     ).toEqual(['APL-MID']);
-    expect(await useCase.execute({ client: '  ' })).toHaveLength(3);
+    expect((await useCase.execute({ client: '  ' })).total).toBe(3);
+  });
+});
+
+describe('ListPolicies in pages (REQ-330 to REQ-333)', () => {
+  async function many(count: number) {
+    const repositories = {
+      proposals: new InMemoryProposalRepository(),
+      policies: new InMemoryPolicyRepository(),
+      references: new InMemoryReferenceRepository(),
+      clients: new InMemoryClientRepository(),
+    };
+    for (let day = 1; day <= count; day++) {
+      const renewal = new Date(Date.UTC(2027, 0, day)).toISOString().slice(0, 10);
+      await business(repositories, {
+        suffix: String(day).padStart(3, '0'),
+        coverageStart: '2026-01-01',
+        coverageEnd: renewal,
+        renewalDate: renewal,
+        premium: '100.00',
+      });
+    }
+    return { ...repositories, useCase: listPolicies(repositories) };
+  }
+
+  it('cuts the nearest renewals first, and the next page goes on from there (CA-330)', async () => {
+    const { useCase } = await many(30);
+
+    const first = await useCase.execute({ size: 25 });
+    const second = await useCase.execute({ page: 2, size: 25 });
+
+    expect(first).toMatchObject({ total: 30, number: 1, size: 25 });
+    expect(first.items[0]?.policyNumber).toBe('APL-001');
+    expect(second.items.map((line) => line.policyNumber)).toEqual([
+      'APL-026',
+      'APL-027',
+      'APL-028',
+      'APL-029',
+      'APL-030',
+    ]);
+  });
+
+  it('finds by client a policy of the last page, with the total of the matches (CA-332)', async () => {
+    const { clients, useCase } = await many(30);
+    await clients.save(
+      Client.register({
+        id: 'client-030',
+        name: 'Ana Lima',
+        cpf: '52998224725',
+        signed: Authorship.of('operator', new Date('2026-09-20T12:00:00.000Z')),
+      }),
+    );
+
+    const found = await useCase.execute({ client: 'lima', size: 25 });
+
+    expect(found.total).toBe(1);
+    expect(found.items.map((line) => line.policyNumber)).toEqual(['APL-030']);
   });
 });
 

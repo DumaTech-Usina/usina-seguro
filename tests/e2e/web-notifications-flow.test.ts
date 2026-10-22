@@ -245,7 +245,7 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
   it('shows what the backend recorded, not a reading of the registry today', async () => {
     // REQ-105: the record says what was notified. Correcting the client's
     // name afterwards (REQ-313) must not rewrite what the broker was told.
-    const [client] = await callApi('GET', '/clients?q=Maria%20Souza');
+    const [client] = (await callApi('GET', '/clients?q=Maria%20Souza')).items;
     await callApi('POST', `/clients/${client.id}/revision`, {
       name: 'Maria Souza Lima',
       cpf: client.cpf,
@@ -280,18 +280,30 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
     expect(rowOf('PRP-WEB-N3').textContent).toContain('Corretora Beta');
   });
 
-  it('offers only the brokers that were notified, and keeps the full list', async () => {
-    await openNotifications();
-    await filterByRecipient('Corretora Beta');
+  it('offers the registered brokers, one with no notification included, and keeps the full list (REQ-334, CA-333)', async () => {
+    // A broker of the registry nobody was notified about yet.
+    const gama = await registerBroker(baseUrl, 'Corretora Gama', 3);
 
-    // The options come from the complete reading, so narrowing does not
-    // shrink the filter itself: the operator can always go back.
+    await openNotifications();
     const labels = [...document.querySelector('#recipient').options].map(
       (option: Untyped) => option.textContent,
     );
-    // Ordered by the label a human reads, not by the identifier.
-    expect(labels).toEqual(['Todos os corretores', 'Corretora Alfa', 'Corretora Beta']);
+    // The recipient is always a broker (REQ-100): the options are the registry's, by name.
+    expect(labels).toEqual([
+      'Todos os corretores',
+      'Corretora Alfa',
+      'Corretora Beta',
+      'Corretora Gama',
+    ]);
 
+    await filterByRecipient('Corretora Gama');
+    expect(requests).toContain(`GET /notifications?recipientId=${gama}`);
+    expect(rows()).toHaveLength(0);
+    expect(document.querySelector('#list').textContent).toContain(
+      'Nenhuma notificação para este corretor',
+    );
+
+    // Narrowing does not shrink the filter itself: the operator can always go back.
     await filterByRecipient('Todos os corretores');
     expect(requests).toContain('GET /notifications');
     expect(rows()).toHaveLength(3);
@@ -301,9 +313,9 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
     await openNotifications();
 
     const link = rowOf('PRP-WEB-N1').querySelector('a.btn');
-    const [notified] = (await callApi('GET', `/notifications?recipientId=${brokers.alfa}`)).filter(
-      (notification: Untyped) => notification.policyNumber === 'PRP-WEB-N1',
-    );
+    const [notified] = (
+      await callApi('GET', `/notifications?recipientId=${brokers.alfa}`)
+    ).items.filter((notification: Untyped) => notification.policyNumber === 'PRP-WEB-N1');
 
     expect(link.getAttribute('href')).toBe(`/app/policies/detail.html?id=${notified.policyId}`);
 
@@ -321,7 +333,9 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
     // page could create, edit or dismiss one, the record would stop being
     // evidence of what happened.
     expect(requests.every((request) => request.startsWith('GET '))).toBe(true);
-    expect(document.querySelector('#list button')).toBeNull();
+    // The only buttons are the page navigation of REQ-331, which reads.
+    const buttons = [...document.querySelectorAll('#list button')];
+    expect(buttons.filter((button) => button.closest('.pager') === null)).toEqual([]);
   });
 });
 

@@ -9,14 +9,23 @@
  * A página lê e filtra; não decide nada e não escreve nada. Os cinco campos de
  * REQ-100 vêm como foram notificados — o backend guardou o nome que o cadastro
  * de IN-01 tinha naquele momento, e não o que ele tem hoje —, e trocar de
- * corretor é uma nova leitura, não uma fatia local.
+ * corretor é uma nova leitura, não uma fatia local. A lista vem em páginas
+ * (REQ-330), e o filtro oferece os corretores cadastrados (REQ-334).
  *
  * Não há "marcar como lida" nem exclusão: nenhum requisito define essas
  * operações, e REQ-105 pede um registro do que foi notificado.
  */
 
+import { fromAddress, rememberInAddress } from '/app/shared/address.js';
 import { ApiError, api } from '/app/shared/api.js';
 import { formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
+import {
+  firstPage,
+  pageToRetry,
+  pager,
+  pagingFromAddress,
+  rememberPaging,
+} from '/app/shared/pager.js';
 import { referenceLabel } from '/app/shared/reference.js';
 import { reportError } from '/app/shared/shell.js';
 
@@ -159,13 +168,38 @@ function loading() {
   list.replaceChildren(skeletons);
 }
 
+/** The recipient of the reading on screen: the select may not offer it before the brokers load. */
+let shownRecipient = EVERY_RECIPIENT;
+
+// REQ-330, REQ-332: the page on screen and how many lines it holds.
+let paging = pagingFromAddress();
+
+/**
+ * REQ-334: the filter offers the registered brokers — the recipient is always
+ * a broker (REQ-100) — including the ones with no notification yet.
+ */
+async function loadRecipients() {
+  try {
+    recipients = (await api.listBrokers()).map(({ id, name }) => ({ id, name }));
+  } catch (error) {
+    if (error instanceof ApiError) {
+      reportError(error);
+    }
+  }
+  renderRecipients(shownRecipient);
+}
+
 async function load(recipientId) {
+  rememberPaging(paging);
+  shownRecipient = recipientId;
+  rememberInAddress({ recipientId });
   loading();
 
   let notifications;
   try {
     notifications = await api.listNotifications(
       recipientId === EVERY_RECIPIENT ? undefined : recipientId,
+      paging,
     );
   } catch (error) {
     if (error instanceof ApiError) {
@@ -181,39 +215,53 @@ async function load(recipientId) {
     return;
   }
 
-  // A lista de corretores é a da leitura completa: um filtro não a encolhe.
-  if (recipientId === EVERY_RECIPIENT) {
-    recipients = [
-      ...new Map(
-        notifications.map((notification) => [notification.recipientId, notification.broker]),
-      ).values(),
-    ].sort((a, b) =>
-      referenceLabel(a.name, a.id).localeCompare(referenceLabel(b.name, b.id), 'pt-BR'),
-    );
+  const retry = pageToRetry(notifications);
+  if (retry !== null && notifications.total > 0) {
+    paging = { ...paging, page: retry };
+    load(recipientId);
+    return;
   }
-  renderRecipients(recipientId);
 
-  if (notifications.length === 0) {
-    // Uma só mensagem porque só há um caso: a lista de corretores é a da
-    // leitura completa, então um corretor que aparece no filtro tem ao menos
-    // uma notificação. Um estado "nada para este corretor" seria texto que
-    // ninguém consegue alcançar.
+  if (notifications.total === 0) {
     list.replaceChildren(
-      emptyState(
-        'notifications_off',
-        'Nenhuma emissão notificada ainda',
-        'A notificação é produzida quando a apólice é registrada a partir da proposta emitida.',
-      ),
+      recipientId === EVERY_RECIPIENT
+        ? emptyState(
+            'notifications_off',
+            'Nenhuma emissão notificada ainda',
+            'A notificação é produzida quando a apólice é registrada a partir da proposta emitida.',
+          )
+        : emptyState(
+            'notifications_off',
+            'Nenhuma notificação para este corretor',
+            'Escolha outro corretor ou volte a todos.',
+          ),
     );
     return;
   }
 
-  list.replaceChildren(table(notifications));
+  list.replaceChildren(
+    table(notifications.items),
+    pager(notifications, {
+      onPage: (page) => {
+        paging = { ...paging, page };
+        load(recipientId);
+      },
+      onSize: (size) => {
+        paging = firstPage(size);
+        load(recipientId);
+      },
+    }),
+  );
 }
 
 recipient.addEventListener('change', () => {
+  paging = firstPage(paging.size);
   load(recipient.value);
 });
 
-renderRecipients(EVERY_RECIPIENT);
-load(EVERY_RECIPIENT);
+// The recipient the address asks for, kept while the registry of brokers loads.
+const asked = fromAddress('recipientId');
+renderRecipients(asked);
+recipient.value = asked;
+loadRecipients();
+load(asked);

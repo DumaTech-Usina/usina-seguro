@@ -17,6 +17,9 @@ export interface ProposalClients {
    * missing name or an invalid CPF.
    */
   resolve(client: ProposalClientInput, author: string): Promise<string>;
-  /** REQ-319: the ids of the registered clients whose name or CPF matches the term. */
-  matching(query: string): Promise<ReadonlySet<string>>;
+  /**
+   * REQ-318: the current name of the client, or — for a proposal registered
+   * before the registry, which holds a typed text — that text (REQ-320).
+   */
+  nameOf(clientId: string): Promise<string>;
 }

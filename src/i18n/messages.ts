@@ -158,6 +158,19 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'identity.reset_email_subject': 'Redefinição de senha — Usina do Seguro',
     'identity.reset_email_body':
       'Recebemos um pedido para redefinir a sua senha no sistema da Usina do Seguro.\n\nPara definir uma nova senha, abra o link abaixo. Ele vale uma única vez, até {expiresAt}.\n\n{link}\n\nSe você não fez este pedido, ignore este e-mail: a sua senha continua a mesma.',
+    'identity.invitation_email_heading': 'Convite para criar sua senha',
+    'identity.invitation_email_intro':
+      'Você foi convidado para o sistema da Usina do Seguro. Para concluir o cadastro e definir a sua senha, use o botão abaixo. O link vale uma única vez, até {expiresAt}.',
+    'identity.invitation_email_button': 'Criar minha senha',
+    'identity.invitation_email_ignore': 'Se você não esperava este convite, ignore este e-mail.',
+    'identity.reset_email_heading': 'Recuperação de senha',
+    'identity.reset_email_intro':
+      'Recebemos um pedido para redefinir a sua senha no sistema da Usina do Seguro. Para definir uma nova senha, use o botão abaixo. O link vale uma única vez, até {expiresAt}.',
+    'identity.reset_email_button': 'Definir nova senha',
+    'identity.reset_email_ignore':
+      'Se você não fez este pedido, ignore este e-mail: a sua senha continua a mesma.',
+    'identity.email_link_fallback':
+      'Se o botão não funcionar, copie e cole este endereço no navegador:',
   },
 };
 

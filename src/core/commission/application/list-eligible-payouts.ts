@@ -1,9 +1,15 @@
 import type { PolicyRepository } from '../../policy/application/policy-repository.ts';
 import { POLICY_MESSAGES } from '../../policy/domain/errors.ts';
+import {
+  type Page,
+  type PageSize,
+  mapPage,
+  pageRequestOf,
+} from '../../proposal/application/page.ts';
 import { RecordNotFound } from '../../proposal/domain/errors.ts';
-import type { EligibilityStatement } from '../domain/payout-commission.ts';
 import type { PayoutCommissionRepository } from './payout-commission-repository.ts';
 import { type EligiblePayoutView, toStatementView } from './payout-commission-view.ts';
+import type { EligiblePayoutFilter, PayoutListing } from './payout-listing.ts';
 
 /**
  * REQ-284: the filters of the eligible commissions. Absent means "any".
@@ -22,45 +28,31 @@ export interface ListEligiblePayoutsInput {
   readonly eligibleBefore?: string;
   readonly renewalFrom?: string;
   readonly renewalUntil?: string;
+  /** REQ-330 to REQ-332: the page, from 1, and its size; the first of 50 when absent. */
+  readonly page?: number;
+  readonly size?: PageSize;
 }
 
 export interface ListEligiblePayoutsDependencies {
+  readonly listing: PayoutListing;
   readonly policies: PolicyRepository;
   readonly payouts: PayoutCommissionRepository;
 }
 
-function containsIgnoringCase(value: string, part: string | undefined): boolean {
+/**
+ * REQ-284: a value matches a filter by part, ignoring case; a blank filter
+ * matches everything. Exported so a driver that filters in its own query
+ * answers exactly the same.
+ */
+export function containsIgnoringCase(value: string, part: string | undefined): boolean {
   const wanted = part?.trim().toLowerCase() ?? '';
   return wanted === '' || value.toLowerCase().includes(wanted);
 }
 
-function withinInstants(at: Date, from?: string, before?: string): boolean {
-  return (
-    (from === undefined || at.getTime() >= new Date(from).getTime()) &&
-    (before === undefined || at.getTime() < new Date(before).getTime())
-  );
-}
-
-function withinMonths(date: string, from?: string, until?: string): boolean {
-  const month = date.slice(0, 7);
-  return (from === undefined || month >= from) && (until === undefined || month <= until);
-}
-
-function matchesStatement(
-  statement: EligibilityStatement,
-  input: ListEligiblePayoutsInput,
-): boolean {
-  return (
-    containsIgnoringCase(statement.policyNumber, input.policyNumber) &&
-    containsIgnoringCase(statement.broker, input.broker) &&
-    containsIgnoringCase(statement.client, input.client) &&
-    withinInstants(statement.eligibleAt, input.eligibleFrom, input.eligibleBefore)
-  );
-}
-
 /**
  * REQ-284, CA-234, CA-235: the eligible commissions, read-only, most recent
- * eligibility first, each one leading to its policy.
+ * eligibility first, each one leading to its policy. One page at a time
+ * (REQ-330); the filters apply to all of them (REQ-333).
  */
 export class ListEligiblePayouts {
   private readonly deps: ListEligiblePayoutsDependencies;
@@ -69,30 +61,47 @@ export class ListEligiblePayouts {
     this.deps = deps;
   }
 
-  async execute(input: ListEligiblePayoutsInput): Promise<readonly EligiblePayoutView[]> {
-    const eligible = (await this.deps.payouts.list())
-      .flatMap((payout) =>
-        payout.statement === null ? [] : [{ payout, statement: payout.statement }],
-      )
-      .filter(({ statement }) => matchesStatement(statement, input))
-      .sort((a, b) => b.statement.eligibleAt.getTime() - a.statement.eligibleAt.getTime());
+  async execute(input: ListEligiblePayoutsInput): Promise<Page<EligiblePayoutView>> {
+    const ids = await this.deps.listing.eligiblePayouts(filterOf(input), pageRequestOf(input));
 
-    const lines: EligiblePayoutView[] = [];
+    const lines = await Promise.all(
+      ids.items.map(async (policyId): Promise<EligiblePayoutView> => {
+        const policy = await this.deps.policies.findById(policyId);
+        if (policy === null) {
+          throw new RecordNotFound(POLICY_MESSAGES.NOT_FOUND, { id: policyId });
+        }
 
-    for (const { payout, statement } of eligible) {
-      const policy = await this.deps.policies.findById(payout.policyId);
+        const statement = (await this.deps.payouts.findByPolicyId(policyId))?.statement ?? null;
+        if (statement === null) {
+          throw new RecordNotFound(POLICY_MESSAGES.NOT_FOUND, { id: policyId });
+        }
 
-      if (policy === null) {
-        throw new RecordNotFound(POLICY_MESSAGES.NOT_FOUND, { id: payout.policyId });
-      }
+        return {
+          ...toStatementView(statement),
+          policyId: policy.id,
+          renewalDate: policy.renewalDate.toString(),
+        };
+      }),
+    );
 
-      const renewalDate = policy.renewalDate.toString();
-
-      if (withinMonths(renewalDate, input.renewalFrom, input.renewalUntil)) {
-        lines.push({ ...toStatementView(statement), policyId: policy.id, renewalDate });
-      }
-    }
-
-    return lines;
+    return mapPage(ids, lines);
   }
+}
+
+function filterOf(input: ListEligiblePayoutsInput): EligiblePayoutFilter {
+  const text = (value: string | undefined) => (value?.trim() ? value : undefined);
+  const instant = (value: string | undefined) =>
+    value === undefined ? undefined : new Date(value);
+  const entries = {
+    policyNumber: text(input.policyNumber),
+    broker: text(input.broker),
+    client: text(input.client),
+    eligibleFrom: instant(input.eligibleFrom),
+    eligibleBefore: instant(input.eligibleBefore),
+    renewalFrom: input.renewalFrom,
+    renewalUntil: input.renewalUntil,
+  };
+  return Object.fromEntries(
+    Object.entries(entries).filter(([, value]) => value !== undefined),
+  ) as EligiblePayoutFilter;
 }

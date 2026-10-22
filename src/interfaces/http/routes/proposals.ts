@@ -7,6 +7,7 @@ import type {
 } from '../../../core/proposal/application/register-proposal.ts';
 import type { WorkedCommissionMode } from '../../../core/proposal/domain/worked-commission.ts';
 import { authorOf } from '../author.ts';
+import { PAGE_QUERY, filtersOf, pageOf, paged } from '../page-query.ts';
 
 /**
  * Request shape validation (Fastify JSON Schema).
@@ -171,6 +172,7 @@ const listProposalsSchema: FastifySchema = {
       status: { type: 'string', enum: ['AWAITING_ISSUANCE', 'ISSUED', 'REJECTED'] },
       // REQ-319: part of the client's name or of its CPF.
       client: { type: 'string' },
+      ...PAGE_QUERY,
     },
   },
 };
@@ -239,7 +241,13 @@ export function registerProposalRoutes(app: FastifyInstance, useCases: UseCases)
   // clients a term matches (REQ-319).
   app.get('/proposals', { schema: listProposalsSchema }, async (request) => {
     // The schema already restricted the query to a known state or nothing.
-    return useCases.listProposals.execute(request.query as ListProposalsInput);
+    const query = request.query as Record<string, string>;
+    return paged(
+      await useCases.listProposals.execute({
+        ...(filtersOf(query) as ListProposalsInput),
+        ...pageOf(query),
+      }),
+    );
   });
 
   // REQ-232: the proposal with what the Usina expects; a refused one stays

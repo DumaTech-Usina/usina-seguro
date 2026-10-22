@@ -123,8 +123,16 @@ describe('ListCommissions', () => {
     const panel = await useCase.execute();
 
     // Newest calculation first, so the last business worked on leads.
-    expect(panel.map((line) => line.policyNumber)).toEqual(['APL-DIV', 'APL-CONC', 'APL-FORE']);
-    expect(panel.map((line) => line.effectiveReceivable)).toEqual(['40.00', '40.00', '40.00']);
+    expect(panel.items.map((line) => line.policyNumber)).toEqual([
+      'APL-DIV',
+      'APL-CONC',
+      'APL-FORE',
+    ]);
+    expect(panel.items.map((line) => line.effectiveReceivable)).toEqual([
+      '40.00',
+      '40.00',
+      '40.00',
+    ]);
   });
 
   it('lists the commissions of the state asked for', async () => {
@@ -132,14 +140,16 @@ describe('ListCommissions', () => {
 
     const forecast = await useCase.execute({ status: 'FORECAST' });
 
-    expect(forecast).toHaveLength(3);
-    expect(forecast.every((line) => line.status === 'FORECAST')).toBe(true);
+    expect(forecast.items).toHaveLength(3);
+    expect(forecast.items.every((line) => line.status === 'FORECAST')).toBe(true);
   });
 
   it('identifies each line by the records that hold a readable reference', async () => {
     const { useCase } = await scenario();
 
-    const [line] = await useCase.execute();
+    const {
+      items: [line],
+    } = await useCase.execute();
 
     // REQ-050: both numbers; REQ-022: who the business is for. The registries
     // of IN-01 are not modelled, so the references travel as stored.
@@ -197,7 +207,9 @@ describe('ListCommissions', () => {
       Reference.register({ kind: 'PRODUCT', id: 'auto', name: 'Automovel', registeredAt: at }),
     );
 
-    const [line] = await useCase.execute();
+    const {
+      items: [line],
+    } = await useCase.execute();
 
     expect(line?.clientName).toBe('Ana Lima');
     expect(line?.insurerName).toBe('Seguradora Norte');
@@ -213,9 +225,9 @@ describe('ListCommissions', () => {
     const panel = await useCase.execute();
 
     // REQ-002: an empty registry costs the panel its names, never a line.
-    expect(panel).toHaveLength(3);
-    expect(panel.every((line) => line.insurerName === null)).toBe(true);
+    expect(panel.items).toHaveLength(3);
+    expect(panel.items.every((line) => line.insurerName === null)).toBe(true);
     // REQ-320: a client that is no registered client is the text, as it is.
-    expect(panel.every((line) => line.clientName === line.clientId)).toBe(true);
+    expect(panel.items.every((line) => line.clientName === line.clientId)).toBe(true);
   });
 });

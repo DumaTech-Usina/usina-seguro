@@ -1,3 +1,4 @@
+import type { Page, PageRequest } from '../../proposal/application/page.ts';
 import type { Notification } from '../domain/notification.ts';
 
 /** What narrows a listing. Absent means every notification. */
@@ -21,4 +22,6 @@ export interface NotificationRepository {
    * reader came for. Both implementations are tested against it.
    */
   list(filter: NotificationListFilter): Promise<readonly Notification[]>;
+  /** REQ-330, REQ-333: one page of `list`, in the same order, with the total. */
+  page(filter: NotificationListFilter, page: PageRequest): Promise<Page<Notification>>;
 }

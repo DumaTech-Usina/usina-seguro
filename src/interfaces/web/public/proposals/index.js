@@ -6,10 +6,17 @@
  * proposals stay reachable because REQ-253 keeps them on the record.
  */
 
+import { fromAddress, rememberInAddress } from '/app/shared/address.js';
 import { ApiError, api } from '/app/shared/api.js';
 import { brokerName, loadBrokers } from '/app/shared/brokers.js';
-import { clientName, loadClients } from '/app/shared/clients.js';
 import { formatDate, formatMoney, formatPercentage } from '/app/shared/money.js';
+import {
+  firstPage,
+  pageToRetry,
+  pager,
+  pagingFromAddress,
+  rememberPaging,
+} from '/app/shared/pager.js';
 import { intermediaryName, loadIntermediaries } from '/app/shared/receipt.js';
 import { reportError } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
@@ -76,7 +83,8 @@ function row(proposal) {
   const number = element('td', 'proposal-cell');
   number.append(
     element('span', 'proposal-number', proposal.proposalNumber),
-    element('div', 'text-muted', `Cliente ${clientName(proposal.clientId)}`),
+    // REQ-318, REQ-320: the server names the client on each line.
+    element('div', 'text-muted', `Cliente ${proposal.clientName}`),
     element('div', 'text-muted', `${proposal.insurerId} · ${proposal.productId}`),
   );
   line.append(number);
@@ -148,7 +156,9 @@ function table(proposals) {
 
 /* ---------------------------------------------------------------- page -- */
 
-let current = TABS[0];
+// The tab and the client search the address asks for; the first tab goes unsaid.
+let current = TABS.find((tab) => tab.id === fromAddress('tab')) ?? TABS[0];
+clientSearch.value = fromAddress('client');
 
 function renderFilters() {
   filters.replaceChildren(
@@ -161,7 +171,7 @@ function renderFilters() {
       option.addEventListener('click', () => {
         current = tab;
         renderFilters();
-        load();
+        reload();
       });
       return option;
     }),
@@ -179,21 +189,33 @@ function loading() {
 }
 
 let listRequest = 0;
+// REQ-330, REQ-332: the page on screen and how many lines it holds.
+let paging = pagingFromAddress();
+
+/** A new filter starts on the first page, with the same size (REQ-333). */
+function reload() {
+  paging = firstPage(paging.size);
+  load();
+}
 
 async function load() {
+  rememberPaging(paging);
+  rememberInAddress({
+    tab: current === TABS[0] ? undefined : current.id,
+    client: clientSearch.value,
+  });
   const request = ++listRequest;
   const client = clientSearch.value.trim();
   loading();
 
   let proposals;
   try {
-    // REQ-308, REQ-318, REQ-229: the proposal keeps the broker's, the client's
-    // and the intermediary's ids; the registries give the names. REQ-319: the
-    // server matches the client.
+    // REQ-308, REQ-229: the proposal keeps the broker's and the
+    // intermediary's ids; those registries are small and give the names.
+    // REQ-318, REQ-319: the server names the client and matches it.
     [proposals] = await Promise.all([
-      api.listProposals(current.status, client),
+      api.listProposals(current.status, client, paging),
       loadBrokers(),
-      loadClients(),
       loadIntermediaries(),
     ]);
   } catch (error) {
@@ -218,7 +240,14 @@ async function load() {
     return;
   }
 
-  if (proposals.length === 0) {
+  const retry = pageToRetry(proposals);
+  if (retry !== null && proposals.total > 0) {
+    paging = { ...paging, page: retry };
+    load();
+    return;
+  }
+
+  if (proposals.total === 0) {
     list.replaceChildren(
       client !== ''
         ? emptyState(
@@ -236,15 +265,27 @@ async function load() {
   }
 
   const scroll = element('div', 'table-scroll');
-  scroll.append(table(proposals));
-  list.replaceChildren(scroll);
+  scroll.append(table(proposals.items));
+  list.replaceChildren(
+    scroll,
+    pager(proposals, {
+      onPage: (page) => {
+        paging = { ...paging, page };
+        load();
+      },
+      onSize: (size) => {
+        paging = firstPage(size);
+        load();
+      },
+    }),
+  );
 }
 
 clientSearchForm.addEventListener('submit', (event) => {
   event.preventDefault();
-  load();
+  reload();
 });
-clientSearch.addEventListener('input', () => load());
+clientSearch.addEventListener('input', () => reload());
 
 renderFilters();
 load();

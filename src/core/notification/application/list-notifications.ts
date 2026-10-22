@@ -1,9 +1,18 @@
+import {
+  type Page,
+  type PageSize,
+  mapPage,
+  pageRequestOf,
+} from '../../proposal/application/page.ts';
 import type { NotificationRepository } from './notification-repository.ts';
 import { type NotificationView, toNotificationView } from './notification-view.ts';
 
 export interface ListNotificationsInput {
   /** OUT-10: one recipient at a time, or every one of them when absent. */
   readonly recipientId?: string;
+  /** REQ-330 to REQ-332: the page, from 1, and its size; the first of 50 when absent. */
+  readonly page?: number;
+  readonly size?: PageSize;
 }
 
 export interface ListNotificationsDependencies {
@@ -29,12 +38,13 @@ export class ListNotifications {
     this.deps = deps;
   }
 
-  async execute(input: ListNotificationsInput = {}): Promise<readonly NotificationView[]> {
+  async execute(input: ListNotificationsInput = {}): Promise<Page<NotificationView>> {
     const recipientId = input.recipientId?.trim();
-    const notifications = await this.deps.notifications.list(
+    const notifications = await this.deps.notifications.page(
       recipientId === undefined || recipientId === '' ? {} : { recipientId },
+      pageRequestOf(input),
     );
 
-    return notifications.map(toNotificationView);
+    return mapPage(notifications, notifications.items.map(toNotificationView));
   }
 }

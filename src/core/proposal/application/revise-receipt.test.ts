@@ -39,7 +39,7 @@ async function scenario(receivedThrough: string | null = null) {
     intermediaries: { isRegistered: async () => true },
     clients: {
       resolve: async () => 'client-1',
-      matching: async () => new Set<string>(),
+      nameOf: async (id: string) => id,
     },
     transaction: new ImmediateTransaction(),
     newId: () => 'proposal-1',

@@ -1,3 +1,4 @@
+import type { Page, PageRequest } from '../../proposal/application/page.ts';
 import type { Client } from '../domain/client.ts';
 
 export interface ClientRepository {
@@ -8,4 +9,9 @@ export interface ClientRepository {
   findByCpf(digits: string): Promise<Client | null>;
   /** Every client, by current name and then by id. */
   list(): Promise<readonly Client[]>;
+  /**
+   * REQ-316, REQ-330, REQ-333: one page of the clients that match the term by
+   * `matchesClientQuery` (all of them when absent), in the order of `list`.
+   */
+  page(filter: { readonly query?: string }, page: PageRequest): Promise<Page<Client>>;
 }

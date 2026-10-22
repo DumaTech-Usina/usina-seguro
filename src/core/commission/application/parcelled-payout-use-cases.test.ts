@@ -3,7 +3,9 @@ import { ImmediateTransaction } from '../../../infrastructure/persistence/in-mem
 import { InMemoryBrokerRepository } from '../../../infrastructure/persistence/in-memory/in-memory-broker-repository.ts';
 import { InMemoryClientRepository } from '../../../infrastructure/persistence/in-memory/in-memory-client-repository.ts';
 import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
+import { InMemoryListings } from '../../../infrastructure/persistence/in-memory/in-memory-listings.ts';
 import { InMemoryParcelledPayoutRepository } from '../../../infrastructure/persistence/in-memory/in-memory-parcelled-payout-repository.ts';
+import { InMemoryPayoutCommissionRepository } from '../../../infrastructure/persistence/in-memory/in-memory-payout-commission-repository.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
 import { RegisterPolicy } from '../../policy/application/register-policy.ts';
@@ -46,7 +48,13 @@ function scenario() {
 
   const brokers = new InMemoryBrokerRepository();
   const clients = new InMemoryClientRepository();
-  const deps = { proposals, policies, parcelledPayouts, brokers, clients, newId, now };
+  const listing = new InMemoryListings({
+    proposals,
+    policies,
+    clients,
+    payouts: new InMemoryPayoutCommissionRepository(),
+  });
+  const deps = { proposals, policies, parcelledPayouts, brokers, clients, listing, newId, now };
 
   return {
     setClock: (iso: string) => {
@@ -392,7 +400,7 @@ describe('ListParcelledPolicies (REQ-268)', () => {
       userId: 'ana',
     });
 
-    const lines = await s.list.execute();
+    const lines = (await s.list.execute()).items;
 
     expect(lines).toEqual([
       {

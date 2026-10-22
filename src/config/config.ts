@@ -41,9 +41,31 @@ export interface Config {
         readonly port: number;
         /** Implicit TLS (usually 465); `false` means STARTTLS when offered (587). */
         readonly secure: boolean;
+        /**
+         * Without implicit TLS, refuse to go on when the server does not offer
+         * STARTTLS, so the password is never sent in clear.
+         */
+        readonly requireTls: boolean;
         readonly user: string | null;
         readonly password: string | null;
         readonly from: string;
+      };
+  /**
+   * Where the bytes of the PDFs go (REQ-219, REQ-247). `database`: a BLOB in
+   * the SQLite file. `r2`: an object in a Cloudflare R2 bucket (S3 API), with
+   * the name and the type still in SQLite. Downloads always go through the
+   * server: the bucket is never public.
+   */
+  readonly documents:
+    | { readonly driver: 'database' }
+    | {
+        readonly driver: 'r2';
+        /** `https://<account id>.r2.cloudflarestorage.com`, without the bucket. */
+        readonly endpoint: string;
+        readonly bucket: string;
+        readonly region: string;
+        readonly accessKeyId: string;
+        readonly secretAccessKey: string;
       };
 }
 
@@ -57,18 +79,21 @@ export class InvalidConfiguration extends Error {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
+  const environment = readEnvironment(env.NODE_ENV);
   const port = readPort(env.PORT);
   const host = env.HOST?.trim() || '127.0.0.1';
+  const persistence = readPersistence(env);
 
   return {
-    env: readEnvironment(env.NODE_ENV),
+    env: environment,
     http: {
       port,
       host,
-      publicUrl: readPublicUrl(env.APP_BASE_URL, host, port),
+      publicUrl: readPublicUrl(env.APP_BASE_URL, host, port, environment),
     },
-    persistence: readPersistence(env),
+    persistence,
     email: readEmail(env),
+    documents: readDocuments(env, persistence),
   };
 }
 
@@ -93,7 +118,20 @@ function readPort(value: string | undefined): number {
   return port;
 }
 
-function readPublicUrl(value: string | undefined, host: string, port: number): string {
+function readPublicUrl(
+  value: string | undefined,
+  host: string,
+  port: number,
+  environment: Config['env'],
+): string {
+  // In production the default would put `http://0.0.0.0:3000` in every
+  // e-mail link, and the session cookie only travels over https (REQ-412).
+  if (environment === 'production' && !value?.trim().startsWith('https://')) {
+    throw new InvalidConfiguration(
+      'NODE_ENV=production requires APP_BASE_URL with the https address people use, ' +
+        "e.g. 'https://usina.example'.",
+    );
+  }
   const url = value?.trim() || `http://${host}:${port}`;
 
   let parsed: URL;
@@ -140,10 +178,63 @@ function readEmail(env: NodeJS.ProcessEnv): Config['email'] {
     driver: 'smtp',
     host,
     port,
-    secure: env.SMTP_SECURE?.trim() === 'true',
+    secure: readFlag(env, 'SMTP_SECURE', false),
+    requireTls: readFlag(env, 'SMTP_REQUIRE_TLS', true),
     user,
     password,
     from,
+  };
+}
+
+function readFlag(env: NodeJS.ProcessEnv, name: string, fallback: boolean): boolean {
+  const value = env[name]?.trim() || '';
+  if (value === '') {
+    return fallback;
+  }
+  if (value !== 'true' && value !== 'false') {
+    throw new InvalidConfiguration(`Invalid ${name}: '${env[name]}'. Use true or false.`);
+  }
+  return value === 'true';
+}
+
+const R2_VARIABLES = ['R2_ENDPOINT', 'R2_BUCKET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY'];
+
+function readDocuments(
+  env: NodeJS.ProcessEnv,
+  persistence: Config['persistence'],
+): Config['documents'] {
+  const driver = env.DOCUMENT_STORAGE?.trim() || 'database';
+  if (driver === 'database') {
+    return { driver };
+  }
+  if (driver !== 'r2') {
+    throw new InvalidConfiguration(
+      `Invalid DOCUMENT_STORAGE: '${env.DOCUMENT_STORAGE}'. Use database or r2.`,
+    );
+  }
+  // The name and the type of each document stay in the SQLite file.
+  if (persistence.driver !== 'sqlite') {
+    throw new InvalidConfiguration('DOCUMENT_STORAGE=r2 requires PERSISTENCE_DRIVER=sqlite.');
+  }
+  const missing = R2_VARIABLES.filter((name) => !env[name]?.trim());
+  if (missing.length > 0) {
+    // Names only: a value, even a partial one, never goes into the message.
+    throw new InvalidConfiguration(`DOCUMENT_STORAGE=r2 requires ${missing.join(', ')}.`);
+  }
+  const endpoint = (env.R2_ENDPOINT as string).trim().replace(/\/+$/, '');
+  if (!/^https?:\/\/[^/]+$/.test(endpoint)) {
+    throw new InvalidConfiguration(
+      "Invalid R2_ENDPOINT: use the account's S3 endpoint without the bucket, " +
+        "e.g. 'https://<account id>.r2.cloudflarestorage.com'.",
+    );
+  }
+  return {
+    driver,
+    endpoint,
+    bucket: (env.R2_BUCKET as string).trim(),
+    region: env.R2_REGION?.trim() || 'auto',
+    accessKeyId: (env.R2_ACCESS_KEY_ID as string).trim(),
+    secretAccessKey: (env.R2_SECRET_ACCESS_KEY as string).trim(),
   };
 }
 

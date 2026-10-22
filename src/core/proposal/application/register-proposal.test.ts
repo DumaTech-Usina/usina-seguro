@@ -5,6 +5,7 @@ import { InMemoryProposalRepository } from '../../../infrastructure/persistence/
 import { BusinessRuleViolation, PROPOSAL_MESSAGES } from '../domain/errors.ts';
 import type { ProposalClientInput } from './proposal-clients.ts';
 import { RegisterProposal, type RegisterProposalInput } from './register-proposal.ts';
+import type { Transaction } from './transaction.ts';
 
 const NOW = new Date('2026-09-22T12:00:00.000Z');
 
@@ -52,12 +53,44 @@ function clientRegistry() {
         }
         return ids.get(digits) as string;
       },
-      matching: async () => new Set<string>(),
+      nameOf: async (id: string) => id,
     },
   };
 }
 
-function scenario() {
+/**
+ * A unit of work that says whether it is open, so a test can see what was
+ * written inside it.
+ */
+function trackedTransaction() {
+  const state = { open: false };
+  return {
+    state,
+    transaction: {
+      run: async <T>(work: () => Promise<T>): Promise<T> => {
+        state.open = true;
+        try {
+          return await work();
+        } finally {
+          state.open = false;
+        }
+      },
+    },
+  };
+}
+
+/** Records, for each document stored, whether a unit of work was open. */
+function recordSavesInside(documents: InMemoryDocumentStorage, state: { open: boolean }) {
+  const inside: boolean[] = [];
+  const save = documents.save.bind(documents);
+  documents.save = async (document) => {
+    inside.push(state.open);
+    return save(document);
+  };
+  return inside;
+}
+
+function scenario(transaction: Transaction = new ImmediateTransaction()) {
   const proposals = new InMemoryProposalRepository();
   const documents = new InMemoryDocumentStorage();
   const clients = clientRegistry();
@@ -69,7 +102,7 @@ function scenario() {
     brokers: registeredBrokers('broker-1'),
     intermediaries: intermediaries.port,
     clients: clients.port,
-    transaction: new ImmediateTransaction(),
+    transaction,
     newId: () => (sequence++ === 0 ? 'fixed-id' : `id-${sequence}`),
     now: () => NOW,
   });
@@ -376,6 +409,20 @@ describe('RegisterProposal', () => {
       contentType: 'application/pdf',
       content: PDF_BYTES,
     });
+  });
+
+  it('stores the document outside the unit of work: its storage may wait on the network', async () => {
+    const tracked = trackedTransaction();
+    const { documents, useCase } = scenario(tracked.transaction);
+    const inside = recordSavesInside(documents, tracked.state);
+
+    await useCase.execute(
+      input({
+        sourceDocument: { fileName: 'p.pdf', contentType: 'application/pdf', content: PDF_BYTES },
+      }),
+    );
+
+    expect(inside).toEqual([false]);
   });
 
   it('stores no document for a proposal the domain refuses', async () => {

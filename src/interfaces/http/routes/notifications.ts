@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
 import type { ListNotificationsInput } from '../../../core/notification/application/list-notifications.ts';
+import { PAGE_QUERY, filtersOf, pageOf, paged } from '../page-query.ts';
 
 /**
  * Shape only: which recipient to read, or none for every one of them. What a
@@ -10,7 +11,7 @@ const listNotificationsSchema: FastifySchema = {
   querystring: {
     type: 'object',
     additionalProperties: false,
-    properties: { recipientId: { type: 'string' } },
+    properties: { recipientId: { type: 'string' }, ...PAGE_QUERY },
   },
 };
 
@@ -24,6 +25,12 @@ export function registerNotificationRoutes(app: FastifyInstance, useCases: UseCa
    * the flow owns.
    */
   app.get('/notifications', { schema: listNotificationsSchema }, async (request) => {
-    return useCases.listNotifications.execute(request.query as ListNotificationsInput);
+    const query = request.query as Record<string, string>;
+    return paged(
+      await useCases.listNotifications.execute({
+        ...(filtersOf(query) as ListNotificationsInput),
+        ...pageOf(query),
+      }),
+    );
   });
 }

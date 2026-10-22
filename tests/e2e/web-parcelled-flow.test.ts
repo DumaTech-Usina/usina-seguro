@@ -348,7 +348,7 @@ describe('registering a parcelled proposal (REQ-290 to REQ-296)', () => {
     // REJ-232: no total.
     expect(done).not.toContain('R$ 160,00');
 
-    const listed = await callApi('GET', '/proposals');
+    const listed = (await callApi('GET', '/proposals')).items;
     const stored = listed.find((proposal: Untyped) => proposal.proposalNumber === 'PRP-WEB-PARC');
     expect(stored).toMatchObject({
       workedCommissionMode: 'PARCELLED',

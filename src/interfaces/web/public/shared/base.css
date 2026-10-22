@@ -1046,3 +1046,60 @@ select.field__input {
 .stage-strip__aside {
   font-size: 11px;
 }
+
+/* --------------------------------------------------------------- pager -- */
+
+/* REQ-330 to REQ-332: total, page numbers and page size under a listing. */
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-6);
+  border-top: 1px solid var(--outline-variant);
+  color: var(--on-surface-variant);
+  font-size: 13px;
+}
+
+.pager__pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.pager__page,
+.pager__step {
+  min-width: 32px;
+  padding: 0 var(--space-2);
+}
+
+.pager__page--current {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.pager__page--current:hover {
+  background: var(--primary-hover);
+}
+
+.pager__gap {
+  padding: 0 var(--space-1);
+}
+
+.pager__size {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pager__select {
+  min-height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--outline);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--surface);
+  color: var(--on-surface);
+  font: inherit;
+}

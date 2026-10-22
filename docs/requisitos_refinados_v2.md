@@ -1315,6 +1315,33 @@ proposta (`REQ-317`).
 
 ---
 
+## 9F. Listagens em páginas
+
+> Definido em **2026-10-21**. Esta seção **não muda** nenhum filtro, nenhuma ordem e nenhuma
+> regra das listagens: muda **quantas linhas** cada consulta traz de uma vez.
+
+`REQ-330` **Listagens paginadas.** São exibidas **em páginas** as listagens de **propostas**,
+**apólices**, **comissões acordadas**, **comissões elegíveis** (`REQ-284`), **apólices sem CR**
+(`REQ-286`), **apólices com CT parcelada** (`REQ-268`), **clientes** (`REQ-316`) e
+**notificações**. Os cadastros de corretores, de referências e de usuários continuam listados
+inteiros.
+
+`REQ-331` **Navegação.** A listagem mostra o **total de registros** e a navegação por **números
+de página**, com **anterior** e **próxima**.
+
+`REQ-332` **Tamanho da página.** O usuário escolhe **25, 50 ou 100** registros por página; sem
+escolha, **50**.
+
+`REQ-333` **Filtros e ordem sobre o todo.** Os filtros e a ordem de cada listagem valem para
+**todos os registros**, não só para a página exibida: a página é um trecho do resultado
+filtrado e ordenado, e o total é o desse resultado.
+
+`REQ-334` **Destinatário das notificações.** O filtro por destinatário da listagem de
+notificações oferece os **corretores cadastrados** (`REQ-300`), inclusive os que ainda não têm
+notificação.
+
+---
+
 ## 10. Fluxo principal
 
 > Os dois fluxos abaixo são os da **CT integral**, **validados**. O fluxo da **CT parcelada**
@@ -1589,6 +1616,11 @@ proposta (`REQ-317`).
 | `CA-315` | A apólice criada da proposta exibe o nome atual do mesmo cliente; renomear o cliente depois da elegibilidade não muda o nome no extrato | `REQ-318` |
 | `CA-316` | A busca por `silva` ou por `529.982` acha as propostas e as apólices daquele cliente, e não as de uma proposta antiga cujo texto é "Silva" | `REQ-319`, `REQ-320` |
 | `CA-317` | Pelas telas: registrar uma proposta com nome e CPF do cliente; buscar e alterar o cliente; buscar propostas e apólices pelo cliente | `REQ-311`–`REQ-321` |
+| `CA-330` | Com mais registros que uma página, a listagem mostra a primeira página, o total de registros e os números das páginas; a página seguinte traz os registros seguintes, na mesma ordem | `REQ-330`, `REQ-331`, `REQ-333` |
+| `CA-331` | Escolher 25, 50 ou 100 muda quantos registros a página traz; sem escolha, são 50 | `REQ-332` |
+| `CA-332` | Um filtro que casa com um registro da última página o encontra, e o total é o dos registros que casam | `REQ-333` |
+| `CA-333` | O filtro por destinatário das notificações oferece um corretor cadastrado que ainda não tem notificação | `REQ-334` |
+| `CA-334` | Pelas telas: percorrer as páginas e mudar o tamanho da página em cada listagem de `REQ-330` | `REQ-330`–`REQ-334` |
 
 ### 11.4 Casos que devem ser rejeitados
 

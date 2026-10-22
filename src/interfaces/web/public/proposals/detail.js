@@ -15,7 +15,7 @@
 import { ApiError, api } from '/app/shared/api.js';
 import { authorName, loadAuthors } from '/app/shared/authors.js';
 import { brokerName, loadBrokers } from '/app/shared/brokers.js';
-import { clientLabel, loadClients } from '/app/shared/clients.js';
+import { clientLabel, loadClient } from '/app/shared/clients.js';
 import { base64Of } from '/app/shared/file.js';
 import { addInstallmentRow, scheduleOf } from '/app/shared/installments.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
@@ -638,13 +638,15 @@ async function render() {
       api.getProposal(proposalId),
       loadAuthors(),
       loadBrokers(),
-      loadClients(),
       offerRegisteredIntermediaries(document.querySelector('#intermediary-options')),
     ]);
   } catch (error) {
     notFound(error instanceof ApiError ? error.message : 'Falha ao consultar a proposta.');
     return;
   }
+
+  // REQ-318: only the client of this proposal, never the whole registry (REQ-330).
+  await loadClient(proposal.clientId);
 
   const sections = [header(), summaryCard(proposal), expectedCard(proposal), historyCard(proposal)];
 

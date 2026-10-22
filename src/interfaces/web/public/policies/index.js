@@ -16,8 +16,18 @@
  * repasse são operados.
  */
 
+import { fromAddress, rememberInAddress } from '/app/shared/address.js';
 import { ApiError, api } from '/app/shared/api.js';
 import { formatDate, formatMoney } from '/app/shared/money.js';
+import {
+  firstPage,
+  pageToRetry,
+  pager,
+  pagingFromAddress,
+  rememberPaging,
+} from '/app/shared/pager.js';
+
+const COUNT = new Intl.NumberFormat('pt-BR');
 import { referenceLabel } from '/app/shared/reference.js';
 import { reportError } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
@@ -27,6 +37,10 @@ const summary = document.querySelector('#summary');
 const renewalUntil = document.querySelector('#renewal-until');
 const clientSearch = document.querySelector('#client-search');
 const clear = document.querySelector('#clear');
+
+// The cut the address asks for: what the operator was looking at before leaving.
+renewalUntil.value = fromAddress('renewalUntil');
+clientSearch.value = fromAddress('client');
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -150,9 +164,9 @@ function loading() {
   list.replaceChildren(skeletons);
 }
 
-/** Quantas apólices estão em tela, e sob qual corte de renovação. */
-function renderSummary(policies, until, client) {
-  const chips = [element('span', 'chip', `${policies.length} apólices`)];
+/** Quantas apólices o corte encontrou (REQ-331), e qual é o corte. */
+function renderSummary(answer, until, client) {
+  const chips = [element('span', 'chip', `${COUNT.format(answer.total)} apólices`)];
 
   if (until !== undefined) {
     chips.push(element('span', 'chip chip--warning', `Renovam até ${formatDate(until)}`));
@@ -166,8 +180,18 @@ function renderSummary(policies, until, client) {
 }
 
 let listRequest = 0;
+// REQ-330, REQ-332: a página em tela e quantas linhas ela tem.
+let paging = pagingFromAddress();
+
+/** Um novo corte começa na primeira página, com o mesmo tamanho (REQ-333). */
+function reload() {
+  paging = firstPage(paging.size);
+  load();
+}
 
 async function load() {
+  rememberPaging(paging);
+  rememberInAddress({ renewalUntil: renewalUntil.value, client: clientSearch.value });
   const request = ++listRequest;
   const until = renewalUntil.value === '' ? undefined : renewalUntil.value;
   const client = clientSearch.value.trim() === '' ? undefined : clientSearch.value.trim();
@@ -177,7 +201,7 @@ async function load() {
   let policies;
   try {
     // REQ-319: the client is matched by the server, through the client registry.
-    policies = await api.listPolicies(until, client);
+    policies = await api.listPolicies(until, client, paging);
   } catch (error) {
     if (request !== listRequest) {
       return;
@@ -201,9 +225,16 @@ async function load() {
     return;
   }
 
+  const retry = pageToRetry(policies);
+  if (retry !== null && policies.total > 0) {
+    paging = { ...paging, page: retry };
+    load();
+    return;
+  }
+
   renderSummary(policies, until, client);
 
-  if (policies.length === 0) {
+  if (policies.total === 0) {
     list.replaceChildren(
       client !== undefined
         ? emptyState('search_off', 'Nenhuma apólice desse cliente', 'Busque por outro nome ou CPF.')
@@ -222,15 +253,27 @@ async function load() {
     return;
   }
 
-  list.replaceChildren(table(policies));
+  list.replaceChildren(
+    table(policies.items),
+    pager(policies, {
+      onPage: (page) => {
+        paging = { ...paging, page };
+        load();
+      },
+      onSize: (size) => {
+        paging = firstPage(size);
+        load();
+      },
+    }),
+  );
 }
 
-renewalUntil.addEventListener('change', load);
-clientSearch.addEventListener('input', load);
+renewalUntil.addEventListener('change', reload);
+clientSearch.addEventListener('input', reload);
 clear.addEventListener('click', () => {
   renewalUntil.value = '';
   clientSearch.value = '';
-  load();
+  reload();
 });
 
 load();

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { type Application, composeApplication } from '../../src/composition-root.ts';
 import { loadConfig } from '../../src/config/config.ts';
 import { User } from '../../src/core/identity/domain/user.ts';
+import { BusinessRuleViolation } from '../../src/core/proposal/domain/errors.ts';
 import { openSqliteConnection } from '../../src/infrastructure/persistence/sqlite/sqlite-connection.ts';
 import { SqliteUserRepository } from '../../src/infrastructure/persistence/sqlite/sqlite-user-repository.ts';
 
@@ -96,6 +97,101 @@ describe('the access foundation on SQLite (V2 section 9C)', () => {
     await expect(
       useCases.logIn.execute({ email: 'ana@usina.com.br', password: PASSWORD }),
     ).rejects.toThrow();
+  });
+
+  /**
+   * The hash is the one step of a login that leaves the event loop, so other
+   * requests run while it is computed. What the login writes afterwards must
+   * not be based on what it read before.
+   */
+  it('counts every failure of attempts made at the same time (REQ-414)', async () => {
+    const { useCases } = application;
+    await useCases.createUser.execute({
+      email: 'ana@usina.com.br',
+      password: PASSWORD,
+      role: 'USER',
+      name: null,
+    });
+
+    const attempts = Array.from({ length: 10 }, () =>
+      useCases.logIn.execute({ email: 'ana@usina.com.br', password: 'wrong password!' }),
+    );
+    await Promise.allSettled(attempts);
+
+    await expect(
+      useCases.logIn.execute({ email: 'ana@usina.com.br', password: PASSWORD }),
+    ).rejects.toThrow(BusinessRuleViolation);
+  });
+
+  it('does not undo a deactivation made while a login is in progress (REQ-403)', async () => {
+    const { useCases } = application;
+    const admin = await useCases.createUser.execute({
+      email: 'ana@usina.com.br',
+      password: PASSWORD,
+      role: 'ADMINISTRATOR',
+      name: null,
+    });
+    const user = await useCases.createUser.execute({
+      email: 'bia@usina.com.br',
+      password: PASSWORD,
+      role: 'USER',
+      name: null,
+    });
+
+    const login = useCases.logIn.execute({ email: 'bia@usina.com.br', password: PASSWORD });
+    await useCases.deactivateUser.execute({
+      actor: { id: admin.id, role: 'ADMINISTRATOR' },
+      userId: user.id,
+    });
+
+    await expect(login).rejects.toThrow(BusinessRuleViolation);
+    const directory = await useCases.listUsers.execute({
+      actor: { id: admin.id, role: 'ADMINISTRATOR' },
+    });
+    expect(directory.users.find((entry) => entry.id === user.id)).toMatchObject({
+      status: 'DEACTIVATED',
+    });
+  });
+
+  it('does not reactivate a user deactivated while a password reset is in progress (REQ-403, REQ-426)', async () => {
+    await application.shutdown();
+    application = composeApplication(
+      loadConfig({
+        NODE_ENV: 'test',
+        PERSISTENCE_DRIVER: 'sqlite',
+        SQLITE_FILE: file,
+        EMAIL_DRIVER: 'memory',
+      }),
+    );
+    const { useCases, outbox } = application;
+    const admin = await useCases.createUser.execute({
+      email: 'ana@usina.com.br',
+      password: PASSWORD,
+      role: 'ADMINISTRATOR',
+      name: null,
+    });
+    const user = await useCases.createUser.execute({
+      email: 'bia@usina.com.br',
+      password: PASSWORD,
+      role: 'USER',
+      name: null,
+    });
+    await useCases.requestPasswordReset.execute({ email: 'bia@usina.com.br' });
+    const token = outbox?.find((mail) => mail.kind === 'PASSWORD_RESET')?.token ?? '';
+
+    const reset = useCases.resetPassword.execute({ token, password: 'another long password' });
+    await useCases.deactivateUser.execute({
+      actor: { id: admin.id, role: 'ADMINISTRATOR' },
+      userId: user.id,
+    });
+
+    await expect(reset).rejects.toThrow(BusinessRuleViolation);
+    const directory = await useCases.listUsers.execute({
+      actor: { id: admin.id, role: 'ADMINISTRATOR' },
+    });
+    expect(directory.users.find((entry) => entry.id === user.id)).toMatchObject({
+      status: 'DEACTIVATED',
+    });
   });
 
   it('allows one active user per e-mail, and a deactivated one does not block it (REQ-421)', async () => {

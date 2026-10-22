@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
 import { authorOf } from '../author.ts';
+import { PAGE_QUERY, filtersOf, pageOf, paged } from '../page-query.ts';
 
 /**
  * The clients (V2 section 9E). Shape only: what a name or a CPF must be, and
@@ -27,7 +28,7 @@ const listClientsSchema: FastifySchema = {
   querystring: {
     type: 'object',
     additionalProperties: false,
-    properties: { q: { type: 'string' } },
+    properties: { q: { type: 'string' }, ...PAGE_QUERY },
   },
 };
 
@@ -54,8 +55,8 @@ export function registerClientRoutes(app: FastifyInstance, useCases: UseCases): 
 
   // REQ-316: every client, or those whose name or CPF matches `q`.
   app.get('/clients', { schema: listClientsSchema }, async (request) => {
-    const { q } = request.query as { q?: string };
-    return useCases.listClients.execute({ query: q });
+    const query = request.query as { q?: string; page?: string; size?: string };
+    return paged(await useCases.listClients.execute({ query: query.q, ...pageOf(query) }));
   });
 
   // REQ-314: a client with its signed history.

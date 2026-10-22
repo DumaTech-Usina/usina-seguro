@@ -1,8 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
+import type { Page, PageRequest } from '../../../core/proposal/application/page.ts';
 import { Authorship } from '../../../core/proposal/domain/authorship.ts';
 import type { ClientRepository } from '../../../core/registry/application/client-repository.ts';
 import { Client } from '../../../core/registry/domain/client.ts';
 import { Cpf } from '../../../core/registry/domain/cpf.ts';
+import { readPage } from './sqlite-page.ts';
 import { withSavepoint } from './sqlite-transaction.ts';
 
 interface ClientRow {
@@ -76,6 +78,22 @@ export class SqliteClientRepository implements ClientRepository {
       .all() as unknown as ClientRow[];
 
     return rows.map((row) => this.restore(row));
+  }
+
+  /** REQ-316, REQ-330: the order of `list`, the match of `matchesClientQuery`. */
+  async page(filter: { readonly query?: string }, page: PageRequest): Promise<Page<Client>> {
+    const query = filter.query?.trim() ?? '';
+    const rows = readPage<ClientRow>(
+      this.db,
+      {
+        columns: 'id',
+        from: query === '' ? 'client' : 'client WHERE usina_client_matches(name, cpf, ?)',
+        orderBy: 'name, id',
+      },
+      query === '' ? [] : [query],
+      page,
+    );
+    return { ...rows, items: rows.items.map((row) => this.restore(row)) };
   }
 
   private restore(row: ClientRow): Client {

@@ -348,10 +348,11 @@ describe('the policy listing (OUT-03, OUT-04)', () => {
     return created.id;
   }
 
+  /** The first page of 100 (REQ-330): every policy these journeys register fits in it. */
   async function listPolicies(query = ''): Promise<PolicyLine[]> {
-    const response = await fetch(`${baseUrl}/policies${query}`);
+    const response = await fetch(`${baseUrl}/policies${query}${query === '' ? '?' : '&'}size=100`);
     expect(response.status).toBe(200);
-    return (await response.json()) as PolicyLine[];
+    return ((await response.json()) as { items: PolicyLine[] }).items;
   }
 
   it('lists the policies sold, nearest renewal first (REQ-055)', async () => {
@@ -441,9 +442,12 @@ describe('the notification of an effectuated emission (OUT-10)', () => {
       occurredAt: string;
     }>
   > {
-    const response = await fetch(`${baseUrl}/notifications${query}`);
+    // The first page of 100 (REQ-330): every notification these journeys produce fits in it.
+    const response = await fetch(
+      `${baseUrl}/notifications${query}${query === '' ? '?' : '&'}size=100`,
+    );
     expect(response.status).toBe(200);
-    return response.json() as never;
+    return ((await response.json()) as { items: never }).items;
   }
 
   it('notifies the broker with the five fields when the issuance is recognised (CA-029)', async () => {

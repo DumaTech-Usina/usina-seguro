@@ -1,5 +1,11 @@
 import type { PolicyRepository } from '../../policy/application/policy-repository.ts';
 import { POLICY_MESSAGES } from '../../policy/domain/errors.ts';
+import {
+  type Page,
+  type PageSize,
+  mapPage,
+  pageRequestOf,
+} from '../../proposal/application/page.ts';
 import type { ProposalRepository } from '../../proposal/application/proposal-repository.ts';
 import { PROPOSAL_MESSAGES, RecordNotFound } from '../../proposal/domain/errors.ts';
 import { clientNameOf } from '../../registry/application/client-name.ts';
@@ -15,6 +21,9 @@ export interface ListCommissionsInput {
    * When present, only commissions in that state are listed.
    */
   readonly status?: CommissionStatus;
+  /** REQ-330 to REQ-332: the page, from 1, and its size; the first of 50 when absent. */
+  readonly page?: number;
+  readonly size?: PageSize;
 }
 
 export interface ListCommissionsDependencies {
@@ -28,7 +37,8 @@ export interface ListCommissionsDependencies {
 }
 
 /**
- * OUT-05: the agreed commission of every policy (REQ-236).
+ * OUT-05: the agreed commission of every policy (REQ-236), one page at a time
+ * (REQ-330).
  *
  * `GetCommission` answers it for one policy; this is the same reading as a
  * list.
@@ -47,12 +57,15 @@ export class ListCommissions {
     this.deps = deps;
   }
 
-  async execute(input: ListCommissionsInput = {}): Promise<readonly CommissionListItemView[]> {
-    const commissions = await this.deps.commissions.list(input);
+  async execute(input: ListCommissionsInput = {}): Promise<Page<CommissionListItemView>> {
+    const commissions = await this.deps.commissions.page(
+      input.status === undefined ? {} : { status: input.status },
+      pageRequestOf(input),
+    );
     const names = await ReferenceNames.load(this.deps.references);
 
-    return Promise.all(
-      commissions.map(async (commission) => {
+    const lines = await Promise.all(
+      commissions.items.map(async (commission) => {
         const policy = await this.deps.policies.findById(commission.policyId);
 
         // REQ-245: a commission without its policy is not a line to
@@ -76,5 +89,7 @@ export class ListCommissions {
         );
       }),
     );
+
+    return mapPage(commissions, lines);
   }
 }

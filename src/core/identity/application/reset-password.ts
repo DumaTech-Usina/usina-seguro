@@ -46,9 +46,16 @@ export class ResetPassword {
     if (user === null || user.status !== 'ACTIVE') {
       throw invalidLink();
     }
-    const changed = user.changePassword(await this.deps.hasher.hash(input.password));
+    const passwordHash = await this.deps.hasher.hash(input.password);
 
     await this.deps.transaction.run(async () => {
+      // Other requests ran while the hash was computed: the password goes on
+      // the user as it is now, so a deactivation made meanwhile stays (REQ-403).
+      const current = await this.deps.users.findById(user.id);
+      if (current === null || current.status !== 'ACTIVE') {
+        throw invalidLink();
+      }
+      const changed = current.changePassword(passwordHash);
       await this.deps.users.save(changed);
       await this.deps.resets.save(used);
       for (const other of await this.deps.resets.listPendingByUser(user.id)) {

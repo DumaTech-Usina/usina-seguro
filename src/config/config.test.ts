@@ -67,6 +67,7 @@ describe('loadConfig — e-mail (REQ-435, REQ-436)', () => {
       host: 'smtp.usina.example',
       port: 587,
       secure: false,
+      requireTls: true,
       user: 'naoresponda',
       password: 'segredo',
       from: 'Usina do Seguro <naoresponda@usina.example>',
@@ -94,8 +95,74 @@ describe('loadConfig — e-mail (REQ-435, REQ-436)', () => {
     ).toThrow(InvalidConfiguration);
   });
 
+  it('lets STARTTLS be optional only when asked, and refuses a flag that is not true or false', () => {
+    const smtp = { SMTP_HOST: 'h', SMTP_FROM: 'f@u.example' };
+    expect(loadConfig({ ...smtp, SMTP_REQUIRE_TLS: 'false' }).email).toMatchObject({
+      requireTls: false,
+    });
+    expect(() => loadConfig({ ...smtp, SMTP_SECURE: 'yes' })).toThrow(InvalidConfiguration);
+    expect(() => loadConfig({ ...smtp, SMTP_REQUIRE_TLS: '1' })).toThrow(InvalidConfiguration);
+  });
+
   it('keeps e-mails in memory when the tests ask for it', () => {
     expect(loadConfig({ EMAIL_DRIVER: 'memory' }).email).toEqual({ driver: 'memory' });
     expect(() => loadConfig({ EMAIL_DRIVER: 'pigeon' })).toThrow(InvalidConfiguration);
+  });
+});
+
+describe('loadConfig — production', () => {
+  it('requires the https address the links of e-mails point to', () => {
+    expect(() => loadConfig({ NODE_ENV: 'production' })).toThrow(/APP_BASE_URL/);
+    expect(() =>
+      loadConfig({ NODE_ENV: 'production', APP_BASE_URL: 'http://usina.example' }),
+    ).toThrow(InvalidConfiguration);
+    expect(
+      loadConfig({ NODE_ENV: 'production', APP_BASE_URL: 'https://usina.example/' }).http.publicUrl,
+    ).toBe('https://usina.example');
+  });
+});
+
+describe('loadConfig — documents (REQ-219, REQ-247)', () => {
+  const R2 = {
+    DOCUMENT_STORAGE: 'r2',
+    R2_ENDPOINT: 'https://0123abcd.r2.cloudflarestorage.com/',
+    R2_BUCKET: 'usina-documentos',
+    R2_ACCESS_KEY_ID: 'exemplo-id',
+    R2_SECRET_ACCESS_KEY: 'exemplo-segredo',
+  };
+
+  it('keeps the PDFs in the database unless told otherwise', () => {
+    expect(loadConfig({}).documents).toEqual({ driver: 'database' });
+  });
+
+  it('reads the R2 bucket, with the region R2 expects by default', () => {
+    expect(loadConfig(R2).documents).toEqual({
+      driver: 'r2',
+      endpoint: 'https://0123abcd.r2.cloudflarestorage.com',
+      bucket: 'usina-documentos',
+      region: 'auto',
+      accessKeyId: 'exemplo-id',
+      secretAccessKey: 'exemplo-segredo',
+    });
+  });
+
+  it('names what is missing, and never a value', () => {
+    const { R2_SECRET_ACCESS_KEY: _, ...withoutSecret } = R2;
+    expect(() => loadConfig(withoutSecret)).toThrow('requires R2_SECRET_ACCESS_KEY.');
+    try {
+      loadConfig({ ...R2, R2_ENDPOINT: '' });
+    } catch (error) {
+      expect(String(error)).not.toContain('exemplo-segredo');
+    }
+  });
+
+  it('refuses an endpoint with the bucket in it, an unknown storage, or R2 without SQLite', () => {
+    expect(() =>
+      loadConfig({ ...R2, R2_ENDPOINT: 'https://0123abcd.r2.cloudflarestorage.com/bucket' }),
+    ).toThrow(InvalidConfiguration);
+    expect(() => loadConfig({ DOCUMENT_STORAGE: 's3' })).toThrow(InvalidConfiguration);
+    expect(() => loadConfig({ ...R2, PERSISTENCE_DRIVER: 'memory' })).toThrow(
+      'DOCUMENT_STORAGE=r2 requires PERSISTENCE_DRIVER=sqlite.',
+    );
   });
 });

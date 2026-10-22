@@ -89,7 +89,7 @@ describe('the client of a proposal on SQLite (REQ-317)', () => {
     );
 
     expect(second.clientId).toBe(first.clientId);
-    const clients = await application.useCases.listClients.execute();
+    const clients = (await application.useCases.listClients.execute()).items;
     expect(clients).toHaveLength(1);
     expect(clients[0]).toMatchObject({ name: 'Maria Souza', history: [{ signedBy: 'operator' }] });
   });
@@ -103,8 +103,8 @@ describe('the client of a proposal on SQLite (REQ-317)', () => {
 
     expect(refused).toBeInstanceOf(BusinessRuleViolation);
     expect((refused as BusinessRuleViolation).rule).toBe('REQ-307');
-    expect(await application.useCases.listClients.execute()).toEqual([]);
-    expect(await application.useCases.listProposals.execute()).toEqual([]);
+    expect((await application.useCases.listClients.execute()).items).toEqual([]);
+    expect((await application.useCases.listProposals.execute()).items).toEqual([]);
   });
 
   it('refuses a proposal without the client name or with an invalid CPF, and keeps nothing (REJ-310, REJ-311)', async () => {
@@ -118,8 +118,8 @@ describe('the client of a proposal on SQLite (REQ-317)', () => {
       ).rejects.toBeInstanceOf(BusinessRuleViolation);
     }
 
-    expect(await application.useCases.listClients.execute()).toEqual([]);
-    expect(await application.useCases.listProposals.execute()).toEqual([]);
+    expect((await application.useCases.listClients.execute()).items).toEqual([]);
+    expect((await application.useCases.listProposals.execute()).items).toEqual([]);
   });
 });
 
@@ -140,9 +140,11 @@ describe('the client of a policy and the search by client on SQLite (REQ-318, RE
     expect((await application.useCases.getPolicy.execute(policy.id)).clientId).toBe(maria.clientId);
 
     const proposals = async (client: string) =>
-      (await application.useCases.listProposals.execute({ client })).map((p) => p.proposalNumber);
+      (await application.useCases.listProposals.execute({ client })).items.map(
+        (p) => p.proposalNumber,
+      );
     const policies = async (client: string) =>
-      (await application.useCases.listPolicies.execute({ client })).map((p) => p.clientName);
+      (await application.useCases.listPolicies.execute({ client })).items.map((p) => p.clientName);
 
     expect(await proposals('souza')).toEqual(['PRP-1']);
     expect(await proposals(punctuated(BRUNO).slice(-6))).toEqual(['PRP-2']);

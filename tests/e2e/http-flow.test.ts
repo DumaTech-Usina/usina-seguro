@@ -436,9 +436,11 @@ describe('reading the PDF of a proposal (REQ-218)', () => {
       });
 
       // Reading is an aid to filling the form: no proposal came out of it.
-      const listed = (await (await fetch(`${baseUrl}/proposals`)).json()) as {
-        proposalNumber: string;
-      }[];
+      const listed = (
+        (await (await fetch(`${baseUrl}/proposals?size=100`)).json()) as {
+          items: { proposalNumber: string }[];
+        }
+      ).items;
       expect(listed.some((proposal) => proposal.proposalNumber === '140839725')).toBe(false);
     },
   );
@@ -550,10 +552,11 @@ describe('parcelled payout API (V2 section 9B)', () => {
       ],
     });
 
-    const lines = (await (await get('/payouts/parcelled-policies')).json()) as {
-      policyId: string;
-      situation: string;
-    }[];
+    const lines = (
+      (await (await get('/payouts/parcelled-policies')).json()) as {
+        items: { policyId: string; situation: string }[];
+      }
+    ).items;
     expect(lines.find((line) => line.policyId === policyId)?.situation).toBe('PARTIALLY_ELIGIBLE');
   });
 

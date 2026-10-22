@@ -132,7 +132,7 @@ describe('ListClients (REQ-316)', () => {
     await register.execute({ name: 'Ana Silva', cpf: '52998224725', userId: 'user-1' });
 
     const names = async (query?: string) =>
-      (await list.execute({ query })).map((client) => client.name);
+      (await list.execute({ query })).items.map((client) => client.name);
 
     expect(await names()).toEqual(['Ana Silva', 'Bruno Lima']);
     expect(await names('  ')).toEqual(['Ana Silva', 'Bruno Lima']);
@@ -169,7 +169,7 @@ describe('ResolveClient (REQ-317)', () => {
 
     expect(id).toBe(existing.id);
     expect(await get.execute({ clientId: id })).toEqual(existing);
-    expect(await list.execute()).toHaveLength(1);
+    expect((await list.execute()).items).toHaveLength(1);
   });
 
   it('refuses a missing name even when the CPF is known (REJ-310)', async () => {
@@ -193,7 +193,7 @@ describe('ResolveClient (REQ-317)', () => {
     expect(
       (await refusal(resolve.execute({ name: 'Maria', cpf: '', userId: 'u' }))).messageKey,
     ).toBe(REGISTRY_MESSAGES.CLIENT_CPF_REQUIRED);
-    expect(await list.execute()).toEqual([]);
+    expect((await list.execute()).items).toEqual([]);
   });
 });
 
@@ -217,6 +217,7 @@ describe('ResolveClient racing another registration (REQ-317, CA-314)', () => {
       findById: (id) => clients.findById(id),
       findByCpf: async (digits) => (lookups++ === 0 ? null : clients.findByCpf(digits)),
       list: () => clients.list(),
+      page: (filter, request) => clients.page(filter, request),
     };
     const resolve = new ResolveClient({
       clients: racing,
@@ -239,6 +240,7 @@ describe('ResolveClient racing another registration (REQ-317, CA-314)', () => {
       findById: (id) => clients.findById(id),
       findByCpf: (digits) => clients.findByCpf(digits),
       list: () => clients.list(),
+      page: (filter, request) => clients.page(filter, request),
     };
     const resolve = new ResolveClient({
       clients: failing,

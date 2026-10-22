@@ -264,7 +264,7 @@ describe('FP-01 through the web interface', () => {
     expect(text('#done-body')).toContain('R$ 10,00');
 
     // What the screen says happened, the backend has to agree with.
-    const [stored] = await callApi('GET', '/proposals?status=AWAITING_ISSUANCE');
+    const [stored] = (await callApi('GET', '/proposals?status=AWAITING_ISSUANCE')).items;
     expect(stored).toMatchObject({
       proposalNumber: 'PRP-WEB-1',
       coverageEnd: '2027-10-01',
@@ -308,7 +308,7 @@ describe('FP-01 through the web interface', () => {
     await vi.waitFor(() => {
       expect(text('#done-body')).toContain('PRP-WEB-BRL');
     });
-    const stored = (await callApi('GET', '/proposals?status=AWAITING_ISSUANCE')).find(
+    const stored = (await callApi('GET', '/proposals?status=AWAITING_ISSUANCE')).items.find(
       (proposal: Untyped) => proposal.proposalNumber === 'PRP-WEB-BRL',
     );
     expect(stored.netPremium).toBe('1234.50');
@@ -812,7 +812,7 @@ describe('keeping the imported PDF with the proposal (REQ-219)', () => {
     await vi.waitFor(() => {
       expect(text('#done-body')).toContain('PRP-SRC-WEB');
     });
-    const listed = await callApi('GET', '/proposals');
+    const listed = (await callApi('GET', '/proposals')).items;
     const stored = listed.find((proposal: Untyped) => proposal.proposalNumber === 'PRP-SRC-WEB');
     expect(stored.sourceDocument).toEqual({ fileName: 'proposta.pdf' });
     const download = await fetch(`${baseUrl}/proposals/${stored.id}/source-document`);
@@ -878,7 +878,7 @@ describe('keeping the imported PDF with the proposal (REQ-219)', () => {
     await vi.waitFor(() => {
       expect(text('#done-body')).toContain('PRP-SRC-FAILED');
     });
-    const listed = await callApi('GET', '/proposals');
+    const listed = (await callApi('GET', '/proposals')).items;
     const stored = listed.find((proposal: Untyped) => proposal.proposalNumber === 'PRP-SRC-FAILED');
     expect(stored.sourceDocument).toEqual({ fileName: 'proposta.pdf' });
     const download = await fetch(`${baseUrl}/proposals/${stored.id}/source-document`);
@@ -914,7 +914,7 @@ describe('keeping the imported PDF with the proposal (REQ-219)', () => {
     await vi.waitFor(() => {
       expect(text('#done-body')).toContain('PRP-SRC-LAST');
     });
-    const listed = await callApi('GET', '/proposals');
+    const listed = (await callApi('GET', '/proposals')).items;
     const stored = listed.find((proposal: Untyped) => proposal.proposalNumber === 'PRP-SRC-LAST');
     const download = await fetch(`${baseUrl}/proposals/${stored.id}/source-document`);
     expect(new Uint8Array(await download.arrayBuffer())).toEqual(LAST);
@@ -973,7 +973,7 @@ describe('filling the proposal from its PDF (REQ-218)', () => {
       await vi.waitFor(() => {
         expect(text('#done-body')).toContain('140839725');
       });
-      const [stored] = await callApi('GET', '/proposals?status=AWAITING_ISSUANCE');
+      const [stored] = (await callApi('GET', '/proposals?status=AWAITING_ISSUANCE')).items;
       expect(stored).toMatchObject({
         proposalNumber: '140839725',
         netPremium: '643.85',

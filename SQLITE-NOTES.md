@@ -47,6 +47,90 @@ restringe.
 ## `node:sqlite`
 
 O driver é o módulo nativo do Node (>= 22.6), não uma dependência compilada. A API é
-marcada como experimental e emite `ExperimentalWarning`. Aceitável porque SQLite não
-roda em produção. Se a API quebrar em um upgrade de Node, o impacto fica contido em
+marcada como experimental e emite `ExperimentalWarning` (a imagem Docker o silencia com
+`--disable-warning=ExperimentalWarning`). O primeiro deploy roda SQLite em produção, numa
+única instância (ver README, "Produção"). Se a API quebrar em um upgrade de Node, o impacto fica contido em
 `src/infrastructure/persistence/sqlite/`.
+
+## Concorrência: o driver síncrono serializa, PostgreSQL não
+
+Com `node:sqlite` toda leitura e escrita é síncrona, numa única conexão. Entre dois
+`await` de repositório nenhuma outra requisição roda; só um passo realmente assíncrono
+(o `scrypt` do login, da redefinição e do aceite de convite) abre essa janela.
+`LogIn` e `ResetPassword` relêem o usuário depois do hash, para que uma falha contada,
+uma suspensão (`REQ-414`) ou uma desativação (`REQ-403`) feitas nesse meio-tempo não
+sejam sobrescritas — testado em `tests/integration/identity-flow.test.ts`.
+
+Isso **só é atômico porque o driver é síncrono**. Com um driver assíncrono de
+PostgreSQL, ler e gravar em seguida deixa de ser atômico, e a conexão única com
+`SAVEPOINT` numerados de `SqliteTransaction` não serve: requisições concorrentes
+entrariam no savepoint umas das outras. O adapter de PostgreSQL precisa de uma conexão
+por unidade de trabalho e de `SELECT ... FOR UPDATE` (ou `UPDATE` condicional) onde
+hoje se relê.
+
+## Nada de rede dentro de uma `Transaction`
+
+Pela mesma razão: uma `Transaction` é um `SAVEPOINT` aberto na conexão compartilhada. Se
+o trabalho dentro dela esperar a rede, outras requisições rodam nesse meio-tempo e as
+gravações delas entram no savepoint — um `ROLLBACK` depois as desfaz, embora elas já
+tenham respondido sucesso. Por isso o PDF (que com `DOCUMENT_STORAGE=r2` vai para um
+bucket) é gravado **antes** da transação em `RegisterProposal` e `RegisterPolicy`
+(testado nos dois). `SqliteObjectDocumentStorage` envia o objeto e só então grava as duas
+linhas, de forma síncrona. Um PDF enviado de uma operação que falha depois fica sem
+referência: nada aponta para ele e nada o serve.
+
+## Modo WAL e backup
+
+`openSqliteConnection` liga `journal_mode = WAL` (fica gravado no arquivo) e
+`busy_timeout = 5000`. Em WAL um leitor — `npm run backup`, que usa `VACUUM INTO` — não
+bloqueia as gravações do servidor. Os arquivos `-wal` e `-shm` fazem parte do banco: o
+volume precisa ser disco local (não NFS/SMB), e copiar só o `.sqlite` com o processo no
+ar não é backup. PostgreSQL não tem nada disso: backup é `pg_dump`.
+
+## Listagens em páginas (REQ-330 a REQ-333)
+
+Cada listagem paginada lê **uma página e o total** em consultas que filtram, ordenam e
+contam no banco (`readPage`, em `sqlite-page.ts`). As de uma tabela só são um `page()` do
+repositório (comissões acordadas, clientes, notificações). As que cruzam tabelas — o
+cliente de uma proposta, a CT da proposta de uma apólice, o repasse de uma apólice — são
+`JOIN`s em `SqliteListings`, que implementa as portas `ProposalListing`, `PolicyListing`
+e `PayoutListing` declaradas pelos módulos; o driver em memória responde o mesmo lendo
+tudo e cortando (`InMemoryListings`). Os use cases leem cada linha da página pelos
+repositórios, como antes.
+
+A busca de texto usa as **regras do core** como funções SQL (`usina_client_matches`,
+`usina_contains`, registradas em `openSqliteConnection`): o `LIKE` do SQLite só ignora
+maiúsculas em letras ASCII ("JOSÉ" ≠ "josé"), e o core compara com `toLowerCase`. Em
+PostgreSQL isso vira `lower()`/`ILIKE` com a collation certa, ou uma coluna normalizada —
+a divergência é de semântica, não só de sintaxe.
+
+A ordem de cada listagem termina numa chave única (`id`), senão uma linha poderia aparecer
+em duas páginas. Paginação por `OFFSET`: com os índices, a página mais funda de 100 mil
+apólices leva ~24 ms. Uma apólice registrada entre duas leituras pode deslocar uma linha
+entre páginas — é o custo conhecido do `OFFSET`; cursor ficou de fora por não ser pedido.
+
+## Índices das listagens
+
+Cada índice de `schema.sql` serve o `ORDER BY` e o filtro de uma consulta de listagem, mais
+`proposal(client_id)` (busca de propostas e apólices pelo cliente) e
+`proposal_worked_commission(proposal_id, sequence, mode)` (o modo da CT nas listas de
+repasse, lido só do índice).
+
+Medido em cópias sintéticas, use case inteiro (página de 50, linhas montadas):
+
+| Listagem | 10 mil apólices | 100 mil apólices | Antes da paginação, 100 mil |
+|---|---|---|---|
+| Apólices, 1ª página / última | 3 / 15 ms | 5 / 24 ms | 12,7 s (todas) |
+| Propostas, 1ª página / última | 3 / 10 ms | 12 / 27 ms | — |
+| Apólices ou propostas por cliente | 18–21 ms | 87–94 ms | 11,3 s |
+| Sem CR / parceladas | 10 / 10 ms | 133 / 40 ms | — |
+| Clientes (busca) | 8 ms | 84 ms | 1,0 s |
+| Comissões, notificações | 3 / 0,2 ms | 5 / 1 ms | — |
+
+Carga HTTP (gerador e servidor na mesma máquina, 30 s, uma rodada, mistura com 40% de
+listagens e 10% de escrita): **300 usuários com ~10 s entre ações** — 10 mil apólices:
+p95 15 ms, p99 22 ms; 100 mil: p95 249 ms, p99 382 ms; nenhum erro. Teto sem pausa:
+~366 req/s com 10 mil, ~60 req/s com 100 mil. Com 100 mil, o que limita é a contagem das
+apólices sem CR e a busca por cliente (a regra do core chamada por linha); os próximos
+passos, se o volume chegar lá, são guardar o modo da CT na apólice e uma coluna de busca
+normalizada no cliente.

@@ -14,6 +14,7 @@ import type {
 } from './agreed-commission-calculator.ts';
 import type { PolicyIssuedEvent, PolicyIssuedNotifier } from './policy-issued-notifier.ts';
 import { RegisterPolicy, type RegisterPolicyInput } from './register-policy.ts';
+import type { Transaction } from './transaction.ts';
 
 const NOW = new Date('2026-09-20T10:00:00.000Z');
 
@@ -43,7 +44,39 @@ class RecordingNotifier implements PolicyIssuedNotifier {
   }
 }
 
-function scenario() {
+/**
+ * A unit of work that says whether it is open, so a test can see what was
+ * written inside it.
+ */
+function trackedTransaction() {
+  const state = { open: false };
+  return {
+    state,
+    transaction: {
+      run: async <T>(work: () => Promise<T>): Promise<T> => {
+        state.open = true;
+        try {
+          return await work();
+        } finally {
+          state.open = false;
+        }
+      },
+    },
+  };
+}
+
+/** Records, for each document stored, whether a unit of work was open. */
+function recordSavesInside(documents: InMemoryDocumentStorage, state: { open: boolean }) {
+  const inside: boolean[] = [];
+  const save = documents.save.bind(documents);
+  documents.save = async (document) => {
+    inside.push(state.open);
+    return save(document);
+  };
+  return inside;
+}
+
+function scenario(transaction: Transaction = new ImmediateTransaction()) {
   const proposals = new InMemoryProposalRepository();
   const policies = new InMemoryPolicyRepository();
   const documents = new InMemoryDocumentStorage();
@@ -55,7 +88,7 @@ function scenario() {
     proposals,
     policies,
     documents,
-    transaction: new ImmediateTransaction(),
+    transaction,
     agreedCommission,
     notifier,
     newId: () => `id-${++sequence}`,
@@ -287,6 +320,17 @@ describe('RegisterPolicy — the recognition of issuance (FP-01 steps 8 and 9)',
       contentType: 'application/pdf',
       content,
     });
+  });
+
+  it('stores the PDF outside the unit of work: its storage may wait on the network', async () => {
+    const tracked = trackedTransaction();
+    const { proposals, documents, useCase } = scenario(tracked.transaction);
+    await proposals.save(awaiting());
+    const inside = recordSavesInside(documents, tracked.state);
+
+    await useCase.execute(input());
+
+    expect(inside).toEqual([false]);
   });
 
   it('keeps no PDF when the recognition is refused (REQ-247, REQ-216)', async () => {

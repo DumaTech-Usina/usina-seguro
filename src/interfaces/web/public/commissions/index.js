@@ -6,8 +6,18 @@
  * the override of REQ-066 is recorded.
  */
 
+import { fromAddress, rememberInAddress } from '/app/shared/address.js';
 import { ApiError, api } from '/app/shared/api.js';
 import { formatMoney } from '/app/shared/money.js';
+import {
+  firstPage,
+  pageToRetry,
+  pager,
+  pagingFromAddress,
+  rememberPaging,
+} from '/app/shared/pager.js';
+
+const COUNT = new Intl.NumberFormat('pt-BR');
 import { referenceLabel } from '/app/shared/reference.js';
 import { reportError } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
@@ -127,7 +137,8 @@ function table(commissions) {
 
 /* ---------------------------------------------------------------- page -- */
 
-let current = TABS[0];
+// The tab the address asks for; the first goes unsaid.
+let current = TABS.find((tab) => tab.id === fromAddress('tab')) ?? TABS[0];
 
 function renderFilters() {
   filters.replaceChildren(
@@ -139,6 +150,7 @@ function renderFilters() {
       option.dataset.tab = tab.id;
       option.addEventListener('click', () => {
         current = tab;
+        paging = firstPage(paging.size);
         renderFilters();
         load();
       });
@@ -158,17 +170,22 @@ function loading() {
   list.replaceChildren(skeletons);
 }
 
-/** How many lines are on screen. */
+/** How many commissions the filter found (REQ-331). */
 function renderSummary(commissions) {
-  summary.replaceChildren(element('span', 'chip', `${commissions.length} apólices`));
+  summary.replaceChildren(element('span', 'chip', `${COUNT.format(commissions.total)} apólices`));
 }
 
+// REQ-330, REQ-332: the page on screen and how many lines it holds.
+let paging = pagingFromAddress();
+
 async function load() {
+  rememberPaging(paging);
+  rememberInAddress({ tab: current === TABS[0] ? undefined : current.id });
   loading();
 
   let commissions;
   try {
-    commissions = await api.listCommissions(current.status);
+    commissions = await api.listCommissions(current.status, paging);
   } catch (error) {
     if (error instanceof ApiError) {
       reportError(error);
@@ -183,9 +200,16 @@ async function load() {
     return;
   }
 
+  const retry = pageToRetry(commissions);
+  if (retry !== null && commissions.total > 0) {
+    paging = { ...paging, page: retry };
+    load();
+    return;
+  }
+
   renderSummary(commissions);
 
-  if (commissions.length === 0) {
+  if (commissions.total === 0) {
     list.replaceChildren(
       emptyState(
         'inbox',
@@ -196,7 +220,19 @@ async function load() {
     return;
   }
 
-  list.replaceChildren(table(commissions));
+  list.replaceChildren(
+    table(commissions.items),
+    pager(commissions, {
+      onPage: (page) => {
+        paging = { ...paging, page };
+        load();
+      },
+      onSize: (size) => {
+        paging = firstPage(size);
+        load();
+      },
+    }),
+  );
 }
 
 renderFilters();

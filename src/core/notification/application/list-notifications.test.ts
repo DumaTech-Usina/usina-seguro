@@ -38,7 +38,7 @@ describe('ListNotifications', () => {
 
     const listed = await useCase.execute();
 
-    expect(listed.map((notification) => notification.id)).toEqual(['3', '2', '1']);
+    expect(listed.items.map((notification) => notification.id)).toEqual(['3', '2', '1']);
   });
 
   it('narrows to one recipient (OUT-10)', async () => {
@@ -46,25 +46,30 @@ describe('ListNotifications', () => {
 
     const listed = await useCase.execute({ recipientId: 'broker-1' });
 
-    expect(listed.map((notification) => notification.id)).toEqual(['3', '1']);
+    expect(listed.items.map((notification) => notification.id)).toEqual(['3', '1']);
   });
 
   it('reads a blank recipient as no filter, not as a recipient named ""', async () => {
     const { useCase } = await scenario();
 
-    expect(await useCase.execute({ recipientId: '  ' })).toHaveLength(3);
+    expect((await useCase.execute({ recipientId: '  ' })).total).toBe(3);
   });
 
   it('answers an empty list for a recipient with nothing (REQ-002)', async () => {
     const { useCase } = await scenario();
 
-    expect(await useCase.execute({ recipientId: 'broker-9' })).toEqual([]);
+    expect(await useCase.execute({ recipientId: 'broker-9' })).toMatchObject({
+      items: [],
+      total: 0,
+    });
   });
 
   it('carries the five fields of REQ-100 as decimal text (REQ-120, REQ-121)', async () => {
     const { useCase } = await scenario();
 
-    const [first] = await useCase.execute({ recipientId: 'broker-1' });
+    const {
+      items: [first],
+    } = await useCase.execute({ recipientId: 'broker-1' });
 
     expect(first).toMatchObject({
       event: 'POLICY_ISSUED',

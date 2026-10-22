@@ -42,10 +42,23 @@ function sendToLogin() {
 
 /** `?a=1&b=2` from the filters that have a value; blank ones are left out. */
 function query(filters) {
-  const present = Object.entries(filters).filter(
-    ([, value]) => value !== undefined && value.trim() !== '',
-  );
+  const present = Object.entries(filters)
+    .filter(([, value]) => value !== undefined && String(value).trim() !== '')
+    .map(([name, value]) => [name, String(value)]);
   return present.length === 0 ? '' : `?${new URLSearchParams(present).toString()}`;
+}
+
+/**
+ * REQ-330 to REQ-332: every listing in pages answers
+ * `{ items, total, page, size }`; `{ page, size }` asks for one. The first
+ * page of 50 is what the server answers when nothing is asked, so it goes
+ * unsaid and the address stays the listing's own.
+ */
+function paging({ page, size } = {}) {
+  return {
+    page: page === undefined || page === 1 ? undefined : page,
+    size: size === undefined || size === 50 ? undefined : size,
+  };
 }
 
 async function request(path, { method = 'GET', body } = {}) {
@@ -147,7 +160,8 @@ export const api = {
   // The proposals being followed. `status` is the state of REQ-250 to filter
   // by, or nothing for all of them; `client` is part of the client's name or
   // CPF (REQ-319), or nothing.
-  listProposals: (status, client) => request(`/proposals${query({ status, client })}`),
+  listProposals: (status, client, page) =>
+    request(`/proposals${query({ status, client, ...paging(page) })}`),
   getProposal: (id) => request(`/proposals/${encodeURIComponent(id)}`),
   /** The policy this proposal originated, at most one (REQ-049, REQ-050). */
   getPolicyByProposal: (id) => request(`/proposals/${encodeURIComponent(id)}/policy`),
@@ -183,7 +197,8 @@ export const api = {
    * The day is informed by the operator: no requirement says how near
    * "proxima" is, so nothing here picks a window.
    */
-  listPolicies: (renewalUntil, client) => request(`/policies${query({ renewalUntil, client })}`),
+  listPolicies: (renewalUntil, client, page) =>
+    request(`/policies${query({ renewalUntil, client, ...paging(page) })}`),
   /** IN-13: who confirms is the session user (REQ-216); the act carries no data. */
   payInstallment: (policyId, number) =>
     request(`/policies/${encodeURIComponent(policyId)}/installments/${number}/payment`, {
@@ -193,10 +208,7 @@ export const api = {
   // REQ-236: the agreed commission of a policy.
   getCommission: (policyId) => request(`/policies/${encodeURIComponent(policyId)}/commission`),
   /** OUT-05: the agreed commission of every policy, optionally by state. */
-  listCommissions: (status) =>
-    request(
-      status === undefined ? '/commissions' : `/commissions?status=${encodeURIComponent(status)}`,
-    ),
+  listCommissions: (status, page) => request(`/commissions${query({ status, ...paging(page) })}`),
   overrideCommission: (policyId, input) =>
     request(`/policies/${encodeURIComponent(policyId)}/commission/override`, {
       method: 'POST',
@@ -225,12 +237,11 @@ export const api = {
    * `policyNumber`, `broker`, `client`, `eligibleFrom`/`eligibleBefore`
    * (instants) and `renewalFrom`/`renewalUntil` (YYYY-MM).
    */
-  listEligiblePayouts: (filters = {}) => {
-    const query = new URLSearchParams(filters).toString();
-    return request(query === '' ? '/payouts/eligible' : `/payouts/eligible?${query}`);
-  },
+  listEligiblePayouts: (filters, page) =>
+    request(`/payouts/eligible${query({ ...(filters ?? {}), ...paging(page) })}`),
   /** REQ-286: the policies that still need a CR. */
-  listPoliciesWithoutPayoutRate: () => request('/payouts/policies-without-rate'),
+  listPoliciesWithoutPayoutRate: (page) =>
+    request(`/payouts/policies-without-rate${query(paging(page))}`),
 
   // V2 section 9B — the payout of a policy with parcelled CT: two CRs and the
   // eligibility of each installment. Every act is signed by the session user
@@ -256,7 +267,7 @@ export const api = {
       method: 'POST',
     }),
   /** REQ-268: every policy with parcelled CT, with its situation. */
-  listParcelledPolicies: () => request('/payouts/parcelled-policies'),
+  listParcelledPolicies: (page) => request(`/payouts/parcelled-policies${query(paging(page))}`),
 
   /**
    * OUT-10, REQ-102, REQ-105: the notifications of effectuated emission —
@@ -266,12 +277,8 @@ export const api = {
    * so there is nothing to post here. `recipientId` narrows it to one broker,
    * or nothing for every one of them.
    */
-  listNotifications: (recipientId) =>
-    request(
-      recipientId === undefined
-        ? '/notifications'
-        : `/notifications?recipientId=${encodeURIComponent(recipientId)}`,
-    ),
+  listNotifications: (recipientId, page) =>
+    request(`/notifications${query({ recipientId, ...paging(page) })}`),
 
   /**
    * V2 section 9D: the brokers. Registering and changing are signed by the
@@ -298,12 +305,8 @@ export const api = {
   changeClient: (id, input) =>
     request(`/clients/${encodeURIComponent(id)}/revision`, { method: 'POST', body: input }),
   getClient: (id) => request(`/clients/${encodeURIComponent(id)}`),
-  listClients: (query) =>
-    request(
-      query === undefined || query.trim() === ''
-        ? '/clients'
-        : `/clients?q=${encodeURIComponent(query.trim())}`,
-    ),
+  listClients: (search, page) =>
+    request(`/clients${query({ q: search?.trim(), ...paging(page) })}`),
 
   /**
    * IN-01: the reference records — client, insurer, intermediary and product

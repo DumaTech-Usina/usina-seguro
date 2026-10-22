@@ -1,0 +1,36 @@
+# One instance of the application, with its database on a named volume.
+#
+#   cp .env.example .env      # fill in the production values
+#   docker compose up -d --build
+#
+# The application reads its configuration from .env (env_file). The two values
+# that describe the container itself are fixed below and win over .env: the
+# process listens on every interface *inside* the container, and the database
+# is on the volume. What reaches the outside is decided by `ports`: only
+# BIND_ADDRESS:PORT on the server, which nginx proxies to.
+#
+# A single instance on purpose: SQLite is one file, written by one process
+# (SQLITE-NOTES.md). Do not scale this service.
+services:
+  app:
+    build: .
+    image: usina-seguro:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      HOST: 0.0.0.0
+      PERSISTENCE_DRIVER: sqlite
+      SQLITE_FILE: /data/usina.sqlite
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
+    volumes:
+      - usina-data:/data
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  usina-data:

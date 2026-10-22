@@ -57,12 +57,22 @@ export class LogIn {
       throw refused();
     }
 
-    if (!(await this.deps.hasher.verify(input.password, user.passwordHash))) {
-      await this.deps.users.save(user.recordFailedLogin(now));
+    const verified = await this.deps.hasher.verify(input.password, user.passwordHash);
+
+    // Other requests ran while the hash was computed: what is written comes
+    // from the user as it is now, so a failure counted, a suspension or a
+    // deactivation made meanwhile is never overwritten (REQ-403, REQ-414).
+    const current = await this.deps.users.findById(user.id);
+    if (current === null || current.status !== 'ACTIVE' || current.isLoginSuspendedAt(now)) {
       throw refused();
     }
 
-    const loggedIn = user.recordSuccessfulLogin();
+    if (!verified) {
+      await this.deps.users.save(current.recordFailedLogin(now));
+      throw refused();
+    }
+
+    const loggedIn = current.recordSuccessfulLogin();
     const token = this.deps.secrets.generate();
     const session = Session.start({
       id: this.deps.newId(),

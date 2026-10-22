@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
 import type { ListEligiblePayoutsInput } from '../../../core/commission/application/list-eligible-payouts.ts';
 import { authorOf } from '../author.ts';
+import { PAGE_QUERY, filtersOf, pageOf, paged } from '../page-query.ts';
 
 /**
  * FP-02 (V2 section 9A). Shape only: the range and precision of the CR, the
@@ -99,8 +100,14 @@ const listEligibleSchema: FastifySchema = {
       eligibleBefore: INSTANT,
       renewalFrom: MONTH,
       renewalUntil: MONTH,
+      ...PAGE_QUERY,
     },
   },
+};
+
+/** REQ-330: the listings with no filter of their own still take the page. */
+const pageOnlySchema: FastifySchema = {
+  querystring: { type: 'object', additionalProperties: false, properties: { ...PAGE_QUERY } },
 };
 
 interface PolicyIdParams {
@@ -146,17 +153,29 @@ export function registerPayoutRoutes(app: FastifyInstance, useCases: UseCases): 
 
   // REQ-284: the eligible commissions, read-only, with their filters.
   app.get('/payouts/eligible', { schema: listEligibleSchema }, async (request) => {
-    return useCases.listEligiblePayouts.execute(request.query as ListEligiblePayoutsInput);
+    const query = request.query as Record<string, string>;
+    return paged(
+      await useCases.listEligiblePayouts.execute({
+        ...(filtersOf(query) as ListEligiblePayoutsInput),
+        ...pageOf(query),
+      }),
+    );
   });
 
   // REQ-286: the policies that still need a CR.
-  app.get('/payouts/policies-without-rate', async () => {
-    return useCases.listPoliciesWithoutPayoutRate.execute();
+  app.get('/payouts/policies-without-rate', { schema: pageOnlySchema }, async (request) => {
+    return paged(
+      await useCases.listPoliciesWithoutPayoutRate.execute(
+        pageOf(request.query as Record<string, string>),
+      ),
+    );
   });
 
   // REQ-268: every policy with parcelled CT, with its situation.
-  app.get('/payouts/parcelled-policies', async () => {
-    return useCases.listParcelledPolicies.execute();
+  app.get('/payouts/parcelled-policies', { schema: pageOnlySchema }, async (request) => {
+    return paged(
+      await useCases.listParcelledPolicies.execute(pageOf(request.query as Record<string, string>)),
+    );
   });
 
   // V2 section 9B: the payout of a policy with parcelled CT, per installment.

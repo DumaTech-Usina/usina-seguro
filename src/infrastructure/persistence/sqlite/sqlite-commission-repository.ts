@@ -4,8 +4,10 @@ import type {
   CommissionRepository,
 } from '../../../core/commission/application/commission-repository.ts';
 import { Commission, type CommissionStatus } from '../../../core/commission/domain/commission.ts';
+import type { Page, PageRequest } from '../../../core/proposal/application/page.ts';
 import { Money } from '../../../core/proposal/domain/money.ts';
 import { Percentage } from '../../../core/proposal/domain/percentage.ts';
+import { readPage } from './sqlite-page.ts';
 
 interface CommissionRow {
   id: string;
@@ -92,6 +94,21 @@ export class SqliteCommissionRepository implements CommissionRepository {
           .all(filter.status)) as unknown as CommissionRow[];
 
     return rows.map(toCommission);
+  }
+
+  /** REQ-330: one page of `list`, in the same order. */
+  async page(filter: CommissionListFilter, page: PageRequest): Promise<Page<Commission>> {
+    const rows = readPage<CommissionRow>(
+      this.db,
+      {
+        columns: '*',
+        from: filter.status === undefined ? 'commission' : 'commission WHERE status = ?',
+        orderBy: 'calculated_at DESC, id DESC',
+      },
+      filter.status === undefined ? [] : [filter.status],
+      page,
+    );
+    return { ...rows, items: rows.items.map(toCommission) };
   }
 }
 

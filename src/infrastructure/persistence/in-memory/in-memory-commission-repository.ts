@@ -3,6 +3,7 @@ import type {
   CommissionRepository,
 } from '../../../core/commission/application/commission-repository.ts';
 import type { Commission } from '../../../core/commission/domain/commission.ts';
+import { type Page, type PageRequest, pageOf } from '../../../core/proposal/application/page.ts';
 
 /**
  * `CommissionRepository` implementation for unit tests and fast execution.
@@ -30,5 +31,9 @@ export class InMemoryCommissionRepository implements CommissionRepository {
         const byDate = b.calculatedAt.getTime() - a.calculatedAt.getTime();
         return byDate === 0 ? b.id.localeCompare(a.id) : byDate;
       });
+  }
+
+  async page(filter: CommissionListFilter, page: PageRequest): Promise<Page<Commission>> {
+    return pageOf(await this.list(filter), page);
   }
 }

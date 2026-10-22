@@ -229,14 +229,14 @@ describe('the agreed commission panel (OUT-05)', () => {
     await openPanel();
 
     const link = rowOf('PRP-PANEL-A').querySelector('a.btn');
-    const lines = await callApi('GET', '/commissions');
+    const lines = (await callApi('GET', '/commissions')).items;
     const line = lines.find((item: Untyped) => item.policyNumber === 'PRP-PANEL-A');
 
     expect(link.getAttribute('href')).toBe(`/app/policies/detail.html?id=${line.policyId}`);
   });
 
   it('shows the adjusted value beside the calculated one (REQ-066, REQ-124)', async () => {
-    const [forecast] = await callApi('GET', '/commissions?status=FORECAST');
+    const [forecast] = (await callApi('GET', '/commissions?status=FORECAST')).items;
 
     await callApi('POST', `/policies/${forecast.policyId}/commission/override`, {
       receivable: '45.00',

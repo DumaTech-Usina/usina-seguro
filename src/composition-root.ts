@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
-import nodemailer from 'nodemailer';
 import type { Config } from './config/config.ts';
 import { CalculateAgreedCommission } from './core/commission/application/calculate-agreed-commission.ts';
 import type { CommissionRepository } from './core/commission/application/commission-repository.ts';
@@ -20,6 +19,7 @@ import { ListPoliciesWithoutPayoutRate } from './core/commission/application/lis
 import { OverrideCommission } from './core/commission/application/override-commission.ts';
 import type { ParcelledPayoutRepository } from './core/commission/application/parcelled-payout-repository.ts';
 import type { PayoutCommissionRepository } from './core/commission/application/payout-commission-repository.ts';
+import type { PayoutListing } from './core/commission/application/payout-listing.ts';
 import { ReviseParcelledPayoutRates } from './core/commission/application/revise-parcelled-payout-rates.ts';
 import { RevisePayoutRate } from './core/commission/application/revise-payout-rate.ts';
 import { AcceptInvitation } from './core/identity/application/accept-invitation.ts';
@@ -52,12 +52,14 @@ import { GetPolicyDocument } from './core/policy/application/get-policy-document
 import { GetPolicy } from './core/policy/application/get-policy.ts';
 import { ListPolicies } from './core/policy/application/list-policies.ts';
 import { PayInstallment } from './core/policy/application/pay-installment.ts';
+import type { PolicyListing } from './core/policy/application/policy-listing.ts';
 import type { PolicyRepository } from './core/policy/application/policy-repository.ts';
 import { RegisterPolicy } from './core/policy/application/register-policy.ts';
 import type { Transaction } from './core/policy/application/transaction.ts';
 import { GetProposalSourceDocument } from './core/proposal/application/get-proposal-source-document.ts';
 import { GetProposal } from './core/proposal/application/get-proposal.ts';
 import { ListProposals } from './core/proposal/application/list-proposals.ts';
+import type { ProposalListing } from './core/proposal/application/proposal-listing.ts';
 import type { ProposalRepository } from './core/proposal/application/proposal-repository.ts';
 import { RegisterProposal } from './core/proposal/application/register-proposal.ts';
 import { RejectProposal } from './core/proposal/application/reject-proposal.ts';
@@ -68,11 +70,12 @@ import type { SourceDocumentStorage } from './core/proposal/application/source-d
 import type { BrokerRepository } from './core/registry/application/broker-repository.ts';
 import { ChangeBroker } from './core/registry/application/change-broker.ts';
 import { ChangeClient } from './core/registry/application/change-client.ts';
+import { clientNameOf } from './core/registry/application/client-name.ts';
 import type { ClientRepository } from './core/registry/application/client-repository.ts';
 import { GetBroker } from './core/registry/application/get-broker.ts';
 import { GetClient } from './core/registry/application/get-client.ts';
 import { ListBrokers } from './core/registry/application/list-brokers.ts';
-import { ListClients, searchClients } from './core/registry/application/list-clients.ts';
+import { ListClients } from './core/registry/application/list-clients.ts';
 import { ListReferences } from './core/registry/application/list-references.ts';
 import type { ReferenceRepository } from './core/registry/application/reference-repository.ts';
 import { RegisterBroker } from './core/registry/application/register-broker.ts';
@@ -84,7 +87,10 @@ import {
   type SentAccessMail,
 } from './infrastructure/email/in-memory-access-mailer.ts';
 import { LogAccessMailer } from './infrastructure/email/log-access-mailer.ts';
-import { SmtpAccessMailer } from './infrastructure/email/smtp-access-mailer.ts';
+import {
+  SmtpAccessMailer,
+  createSmtpTransport,
+} from './infrastructure/email/smtp-access-mailer.ts';
 import { PolicyPdfReader } from './infrastructure/pdf/policy-pdf-reader.ts';
 import { ProposalPdfReader, identifyByText } from './infrastructure/pdf/proposal-pdf-reader.ts';
 import { ImmediateTransaction } from './infrastructure/persistence/in-memory/immediate-transaction.ts';
@@ -93,6 +99,7 @@ import { InMemoryClientRepository } from './infrastructure/persistence/in-memory
 import { InMemoryCommissionRepository } from './infrastructure/persistence/in-memory/in-memory-commission-repository.ts';
 import { InMemoryDocumentStorage } from './infrastructure/persistence/in-memory/in-memory-document-storage.ts';
 import { InMemoryInvitationRepository } from './infrastructure/persistence/in-memory/in-memory-invitation-repository.ts';
+import { InMemoryListings } from './infrastructure/persistence/in-memory/in-memory-listings.ts';
 import { InMemoryNotificationRepository } from './infrastructure/persistence/in-memory/in-memory-notification-repository.ts';
 import { InMemoryParcelledPayoutRepository } from './infrastructure/persistence/in-memory/in-memory-parcelled-payout-repository.ts';
 import { InMemoryPasswordResetRepository } from './infrastructure/persistence/in-memory/in-memory-password-reset-repository.ts';
@@ -109,7 +116,9 @@ import { SqliteCommissionRepository } from './infrastructure/persistence/sqlite/
 import { openSqliteConnection } from './infrastructure/persistence/sqlite/sqlite-connection.ts';
 import { SqliteDocumentStorage } from './infrastructure/persistence/sqlite/sqlite-document-storage.ts';
 import { SqliteInvitationRepository } from './infrastructure/persistence/sqlite/sqlite-invitation-repository.ts';
+import { SqliteListings } from './infrastructure/persistence/sqlite/sqlite-listings.ts';
 import { SqliteNotificationRepository } from './infrastructure/persistence/sqlite/sqlite-notification-repository.ts';
+import { SqliteObjectDocumentStorage } from './infrastructure/persistence/sqlite/sqlite-object-document-storage.ts';
 import { SqliteParcelledPayoutRepository } from './infrastructure/persistence/sqlite/sqlite-parcelled-payout-repository.ts';
 import { SqlitePasswordResetRepository } from './infrastructure/persistence/sqlite/sqlite-password-reset-repository.ts';
 import { SqlitePayoutCommissionRepository } from './infrastructure/persistence/sqlite/sqlite-payout-commission-repository.ts';
@@ -122,6 +131,7 @@ import { SqliteTransaction } from './infrastructure/persistence/sqlite/sqlite-tr
 import { SqliteUserRepository } from './infrastructure/persistence/sqlite/sqlite-user-repository.ts';
 import { RandomSecretGenerator } from './infrastructure/security/random-secret-generator.ts';
 import { ScryptPasswordHasher } from './infrastructure/security/scrypt-password-hasher.ts';
+import { R2ObjectStore } from './infrastructure/storage/r2-object-store.ts';
 
 /**
  * Use cases exposed to the interface layer.
@@ -241,6 +251,7 @@ export function composeApplication(config: Config): Application {
     sessions,
     roleChanges,
     resets,
+    listings,
     transaction,
     shutdown,
   } = composePersistence(config);
@@ -300,8 +311,7 @@ export function composeApplication(config: Config): Application {
   const proposalClients = {
     resolve: (client: { name: string; cpf: string }, author: string) =>
       resolveClient.execute({ name: client.name, cpf: client.cpf, userId: author }),
-    matching: async (query: string) =>
-      new Set((await searchClients(clients, query)).map((client) => client.id)),
+    nameOf: (clientId: string) => clientNameOf(clients, clientId),
   };
 
   return {
@@ -330,7 +340,7 @@ export function composeApplication(config: Config): Application {
       readProposalPdf: new ProposalPdfReader({ identify: identifyByText }),
       getProposal: new GetProposal({ proposals }),
       getProposalSourceDocument: new GetProposalSourceDocument({ proposals, documents }),
-      listProposals: new ListProposals({ proposals, clients: proposalClients }),
+      listProposals: new ListProposals({ proposals, listing: listings, clients: proposalClients }),
       readPolicyPdf: new PolicyPdfReader(),
       registerPolicy: new RegisterPolicy({
         proposals,
@@ -352,7 +362,13 @@ export function composeApplication(config: Config): Application {
         now,
       }),
       getPolicyDocument: new GetPolicyDocument({ policies, documents }),
-      listPolicies: new ListPolicies({ policies, proposals, references, clients }),
+      listPolicies: new ListPolicies({
+        policies,
+        listing: listings,
+        proposals,
+        references,
+        clients,
+      }),
       payInstallment: new PayInstallment({ proposals, policies, now }),
       getCommission: new GetCommission({ commissions }),
       listCommissions: new ListCommissions({
@@ -375,11 +391,11 @@ export function composeApplication(config: Config): Application {
         newId,
         now,
       }),
-      listEligiblePayouts: new ListEligiblePayouts({ policies, payouts }),
+      listEligiblePayouts: new ListEligiblePayouts({ listing: listings, policies, payouts }),
       listPoliciesWithoutPayoutRate: new ListPoliciesWithoutPayoutRate({
+        listing: listings,
         policies,
         proposals,
-        payouts,
         clients,
       }),
       // V2 section 9B: the payout of a policy with parcelled CT.
@@ -408,6 +424,7 @@ export function composeApplication(config: Config): Application {
         now,
       }),
       listParcelledPolicies: new ListParcelledPolicies({
+        listing: listings,
         policies,
         proposals,
         parcelledPayouts,
@@ -494,22 +511,28 @@ interface Persistence {
   readonly sessions: SessionRepository;
   readonly roleChanges: RoleChangeRepository;
   readonly resets: PasswordResetRepository;
+  /** REQ-330, REQ-333: the listings whose filter crosses tables, one page at a time. */
+  readonly listings: ProposalListing & PolicyListing & PayoutListing;
   readonly transaction: Transaction;
   readonly shutdown: () => Promise<void>;
 }
 
 function composePersistence(config: Config): Persistence {
   switch (config.persistence.driver) {
-    case 'memory':
+    case 'memory': {
+      const proposals = new InMemoryProposalRepository();
+      const policies = new InMemoryPolicyRepository();
+      const clients = new InMemoryClientRepository();
+      const payouts = new InMemoryPayoutCommissionRepository();
       return {
-        proposals: new InMemoryProposalRepository(),
-        policies: new InMemoryPolicyRepository(),
+        proposals,
+        policies,
         commissions: new InMemoryCommissionRepository(),
-        payouts: new InMemoryPayoutCommissionRepository(),
+        payouts,
         parcelledPayouts: new InMemoryParcelledPayoutRepository(),
         references: new InMemoryReferenceRepository(),
         brokers: new InMemoryBrokerRepository(),
-        clients: new InMemoryClientRepository(),
+        clients,
         documents: new InMemoryDocumentStorage(),
         notifications: new InMemoryNotificationRepository(),
         users: new InMemoryUserRepository(),
@@ -517,9 +540,11 @@ function composePersistence(config: Config): Persistence {
         sessions: new InMemorySessionRepository(),
         roleChanges: new InMemoryRoleChangeRepository(),
         resets: new InMemoryPasswordResetRepository(),
+        listings: new InMemoryListings({ proposals, policies, clients, payouts }),
         transaction: new ImmediateTransaction(),
         shutdown: async () => {},
       };
+    }
 
     case 'sqlite': {
       const db = openSqlite(config.persistence.file);
@@ -532,13 +557,17 @@ function composePersistence(config: Config): Persistence {
         references: new SqliteReferenceRepository(db),
         brokers: new SqliteBrokerRepository(db),
         clients: new SqliteClientRepository(db),
-        documents: new SqliteDocumentStorage(db),
+        documents:
+          config.documents.driver === 'r2'
+            ? new SqliteObjectDocumentStorage(db, new R2ObjectStore(config.documents))
+            : new SqliteDocumentStorage(db),
         notifications: new SqliteNotificationRepository(db),
         users: new SqliteUserRepository(db),
         invitations: new SqliteInvitationRepository(db),
         sessions: new SqliteSessionRepository(db),
         roleChanges: new SqliteRoleChangeRepository(db),
         resets: new SqlitePasswordResetRepository(db),
+        listings: new SqliteListings(db),
         transaction: new SqliteTransaction(db),
         shutdown: async () => db.close(),
       };
@@ -570,17 +599,7 @@ function composeMailer(config: Config): {
   switch (email.driver) {
     case 'smtp':
       return {
-        mailer: new SmtpAccessMailer(
-          nodemailer.createTransport({
-            host: email.host,
-            port: email.port,
-            secure: email.secure,
-            ...(email.user === null
-              ? {}
-              : { auth: { user: email.user, pass: email.password ?? '' } }),
-          }),
-          { from: email.from, publicUrl },
-        ),
+        mailer: new SmtpAccessMailer(createSmtpTransport(email), { from: email.from, publicUrl }),
         outbox: null,
       };
     case 'memory': {

@@ -129,13 +129,18 @@ export class RegisterPolicy {
     // A channel of REQ-103 does not run in here: REQ-104 has the contract
     // admit asynchronous delivery precisely so an outbound adapter hands the
     // payload to a queue and returns.
+    //
+    // The PDF is stored before the unit of work, not inside it: its storage
+    // may be a network call (an object storage bucket), and a unit of work left
+    // open across that wait would take in other requests' writes. If the unit
+    // of work then fails, the PDF stays unreferenced; nothing serves it.
+    await this.deps.documents.save({
+      id: documentId,
+      fileName: source.fileName,
+      contentType: POLICY_DOCUMENT_CONTENT_TYPE,
+      content: source.content,
+    });
     await this.deps.transaction.run(async () => {
-      await this.deps.documents.save({
-        id: documentId,
-        fileName: source.fileName,
-        contentType: POLICY_DOCUMENT_CONTENT_TYPE,
-        content: source.content,
-      });
       await this.deps.policies.save(policy);
       await this.deps.proposals.save(issued);
       await this.deps.agreedCommission.calculateFor({

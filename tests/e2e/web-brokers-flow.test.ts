@@ -282,7 +282,7 @@ describe('the broker of a proposal and of its policy (REQ-307, REQ-308)', () => 
     await vi.waitFor(() => {
       expect(snackbars()).toContain('brokerId');
     });
-    expect(await callApi('GET', '/proposals')).toEqual([]);
+    expect((await callApi('GET', '/proposals')).items).toEqual([]);
   });
 
   it('registers the proposal with the broker chosen by CPF, and shows its name (CA-304)', async () => {
@@ -297,7 +297,7 @@ describe('the broker of a proposal and of its policy (REQ-307, REQ-308)', () => 
     });
 
     const [ana] = await callApi('GET', '/brokers?q=ana');
-    const [proposal] = await callApi('GET', '/proposals');
+    const [proposal] = (await callApi('GET', '/proposals')).items;
     expect(proposal.brokerId).toBe(ana.id);
 
     // The proposal page shows the broker's name, not the id.
@@ -311,7 +311,7 @@ describe('the broker of a proposal and of its policy (REQ-307, REQ-308)', () => 
   });
 
   it('shows on the policy the current name of the broker of its proposal (REQ-308, CA-304)', async () => {
-    const [proposal] = await callApi('GET', '/proposals');
+    const [proposal] = (await callApi('GET', '/proposals')).items;
     const policy = await callApi('POST', '/policies', recognitionBody(proposal.id, 'APL-TESTE'));
     expect(policy.brokerId).toBe(proposal.brokerId);
 

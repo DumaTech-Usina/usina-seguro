@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
 import type { ListPoliciesInput } from '../../../core/policy/application/list-policies.ts';
 import { authorOf } from '../author.ts';
+import { PAGE_QUERY, filtersOf, pageOf, paged } from '../page-query.ts';
 import { PDF_BODY_LIMIT, contentDisposition } from './proposals.ts';
 
 /**
@@ -94,6 +95,7 @@ const listPoliciesSchema: FastifySchema = {
       renewalUntil: { type: 'string' },
       // REQ-319: part of the client's name or of its CPF.
       client: { type: 'string' },
+      ...PAGE_QUERY,
     },
   },
 };
@@ -183,7 +185,13 @@ export function registerPolicyRoutes(app: FastifyInstance, useCases: UseCases): 
   // date. With `renewalUntil` it is the a-vencer listing of OUT-04 (REQ-055,
   // CA-032); the window is informed, because no requirement fixes one.
   app.get('/policies', { schema: listPoliciesSchema }, async (request) => {
-    return useCases.listPolicies.execute(request.query as ListPoliciesInput);
+    const query = request.query as Record<string, string>;
+    return paged(
+      await useCases.listPolicies.execute({
+        ...(filtersOf(query) as ListPoliciesInput),
+        ...pageOf(query),
+      }),
+    );
   });
 
   // CA-008: both numbers and the schedule stay consultable.

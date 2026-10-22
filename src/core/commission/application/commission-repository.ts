@@ -1,3 +1,4 @@
+import type { Page, PageRequest } from '../../proposal/application/page.ts';
 import type { Commission, CommissionStatus } from '../domain/commission.ts';
 
 /**
@@ -25,4 +26,6 @@ export interface CommissionRepository {
    * implementations are tested against it.
    */
   list(filter: CommissionListFilter): Promise<readonly Commission[]>;
+  /** REQ-330, REQ-333: one page of `list`, in the same order, with the total. */
+  page(filter: CommissionListFilter, page: PageRequest): Promise<Page<Commission>>;
 }

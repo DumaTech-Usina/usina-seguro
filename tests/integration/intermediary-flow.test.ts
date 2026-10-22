@@ -88,8 +88,8 @@ describe('the registered intermediary on SQLite (REQ-229)', () => {
 
     expect(refused).toBeInstanceOf(BusinessRuleViolation);
     expect((refused as BusinessRuleViolation).rule).toBe('REQ-229');
-    expect(await application.useCases.listProposals.execute()).toEqual([]);
-    expect(await application.useCases.listClients.execute()).toEqual([]);
+    expect((await application.useCases.listProposals.execute()).items).toEqual([]);
+    expect((await application.useCases.listClients.execute()).items).toEqual([]);
   });
 
   it('does not take an intermediary of another kind of reference (REQ-229)', async () => {

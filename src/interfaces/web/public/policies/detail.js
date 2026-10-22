@@ -13,7 +13,7 @@
 import { ApiError, api } from '/app/shared/api.js';
 import { authorName, loadAuthors } from '/app/shared/authors.js';
 import { brokerName, loadBrokers } from '/app/shared/brokers.js';
-import { clientLabel, loadClients } from '/app/shared/clients.js';
+import { clientLabel, loadClient } from '/app/shared/clients.js';
 import { closeOnBackdropClick } from '/app/shared/dialog.js';
 import { base64Of } from '/app/shared/file.js';
 import {
@@ -923,16 +923,14 @@ async function render() {
   try {
     // REQ-216: the signatures keep ids; the directory gives the names to show.
     // REQ-308: likewise the broker of its proposal and its name.
-    [policy] = await Promise.all([
-      api.getPolicy(policyId),
-      loadAuthors(),
-      loadBrokers(),
-      loadClients(),
-    ]);
+    [policy] = await Promise.all([api.getPolicy(policyId), loadAuthors(), loadBrokers()]);
   } catch (error) {
     notFound(error instanceof ApiError ? error.message : 'Falha ao consultar a apólice.');
     return;
   }
+
+  // REQ-318: only the client of this policy, never the whole registry (REQ-330).
+  await loadClient(policy.clientId);
 
   const [commission, payout] = await Promise.all([
     optional(() => api.getCommission(policyId)),

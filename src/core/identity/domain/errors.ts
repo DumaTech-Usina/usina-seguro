@@ -29,6 +29,16 @@ export const IDENTITY_MESSAGES = {
   INVITATION_EMAIL_BODY: 'identity.invitation_email_body',
   RESET_EMAIL_SUBJECT: 'identity.reset_email_subject',
   RESET_EMAIL_BODY: 'identity.reset_email_body',
+  /** The HTML version of the same e-mails: a heading, a button, the link written out. */
+  INVITATION_EMAIL_HEADING: 'identity.invitation_email_heading',
+  INVITATION_EMAIL_INTRO: 'identity.invitation_email_intro',
+  INVITATION_EMAIL_BUTTON: 'identity.invitation_email_button',
+  INVITATION_EMAIL_IGNORE: 'identity.invitation_email_ignore',
+  RESET_EMAIL_HEADING: 'identity.reset_email_heading',
+  RESET_EMAIL_INTRO: 'identity.reset_email_intro',
+  RESET_EMAIL_BUTTON: 'identity.reset_email_button',
+  RESET_EMAIL_IGNORE: 'identity.reset_email_ignore',
+  EMAIL_LINK_FALLBACK: 'identity.email_link_fallback',
 } as const;
 
 export type IdentityMessageKey = (typeof IDENTITY_MESSAGES)[keyof typeof IDENTITY_MESSAGES];

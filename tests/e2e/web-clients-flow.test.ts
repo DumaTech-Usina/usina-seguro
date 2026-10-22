@@ -204,7 +204,7 @@ describe('the clients page (V2 section 9E)', () => {
     expect(snackbars()).toContain('Cliente Ana Silva cadastrado.');
     expect(rowContaining('#list-clients', 'Ana Silva').textContent).toContain('529.982.247-25');
 
-    const [stored] = await callApi('GET', '/clients');
+    const [stored] = (await callApi('GET', '/clients')).items;
     expect(stored.cpf).toBe('52998224725');
     expect(stored.history).toHaveLength(1);
   });
@@ -225,7 +225,7 @@ describe('the clients page (V2 section 9E)', () => {
     });
     expect(snackbars()).toContain('REQ-312');
 
-    expect(await callApi('GET', '/clients')).toHaveLength(1);
+    expect((await callApi('GET', '/clients')).items).toHaveLength(1);
     expect(field('#form-client', 'name').value).toBe('Outra Pessoa');
   });
 
@@ -321,7 +321,7 @@ describe('the client of a new proposal (REQ-317)', () => {
       expect(text('#done-body')).toContain(proposalNumber);
     });
 
-    const all = await callApi('GET', '/proposals');
+    const all = (await callApi('GET', '/proposals')).items;
     return all.find((proposal: Untyped) => proposal.proposalNumber === proposalNumber);
   }
 
@@ -331,7 +331,7 @@ describe('the client of a new proposal (REQ-317)', () => {
       cpf: '52998224725',
     });
 
-    const [ana] = await callApi('GET', '/clients?q=52998224725');
+    const [ana] = (await callApi('GET', '/clients?q=52998224725')).items;
     expect(proposal.clientId).toBe(ana.id);
     expect(ana.name).toBe('Ana Silva');
     expect(ana.history).toHaveLength(1);
@@ -374,7 +374,7 @@ describe('the client of a new proposal (REQ-317)', () => {
       expect(snackbars()).toContain('brokerId');
     });
 
-    expect(await callApi('GET', `/clients?q=${cpfOf(78)}`)).toEqual([]);
+    expect((await callApi('GET', `/clients?q=${cpfOf(78)}`)).items).toEqual([]);
   });
 
   it('refuses a client without name or with an invalid CPF, in Portuguese (REJ-310, REJ-311)', async () => {
@@ -401,7 +401,7 @@ describe('the client of a new proposal (REQ-317)', () => {
 
     expect(first.clientId).toBeDefined();
     expect(second.clientId).toBe(first.clientId);
-    expect(await callApi('GET', `/clients?q=${cpfOf(79)}`)).toHaveLength(1);
+    expect((await callApi('GET', `/clients?q=${cpfOf(79)}`)).items).toHaveLength(1);
   });
 });
 
@@ -437,12 +437,12 @@ describe('proposals and policies by client (REQ-318, REQ-319)', () => {
   });
 
   it('gives the policy its proposal’s client and finds it on the policies page (CA-315, CA-316)', async () => {
-    const [proposal] = (await callApi('GET', '/proposals')).filter(
+    const [proposal] = (await callApi('GET', '/proposals')).items.filter(
       (candidate: Untyped) => candidate.proposalNumber === 'PRP-CLI-1',
     );
     const policy = await callApi('POST', '/policies', recognitionBody(proposal.id, 'APL-TESTE'));
     expect(policy.clientId).toBe(proposal.clientId);
-    const other = (await callApi('GET', '/proposals')).find(
+    const other = (await callApi('GET', '/proposals')).items.find(
       (candidate: Untyped) => candidate.proposalNumber === 'PRP-CLI-2',
     );
     await callApi('POST', '/policies', recognitionBody(other.id, 'APL-TESTE'));

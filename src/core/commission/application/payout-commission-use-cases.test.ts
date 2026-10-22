@@ -3,6 +3,7 @@ import { ImmediateTransaction } from '../../../infrastructure/persistence/in-mem
 import { InMemoryBrokerRepository } from '../../../infrastructure/persistence/in-memory/in-memory-broker-repository.ts';
 import { InMemoryClientRepository } from '../../../infrastructure/persistence/in-memory/in-memory-client-repository.ts';
 import { InMemoryDocumentStorage } from '../../../infrastructure/persistence/in-memory/in-memory-document-storage.ts';
+import { InMemoryListings } from '../../../infrastructure/persistence/in-memory/in-memory-listings.ts';
 import { InMemoryPayoutCommissionRepository } from '../../../infrastructure/persistence/in-memory/in-memory-payout-commission-repository.ts';
 import { InMemoryPolicyRepository } from '../../../infrastructure/persistence/in-memory/in-memory-policy-repository.ts';
 import { InMemoryProposalRepository } from '../../../infrastructure/persistence/in-memory/in-memory-proposal-repository.ts';
@@ -59,7 +60,8 @@ function scenario() {
 
   const brokers = new InMemoryBrokerRepository();
   const clients = new InMemoryClientRepository();
-  const deps = { proposals, policies, payouts, brokers, clients, newId, now };
+  const listing = new InMemoryListings({ proposals, policies, clients, payouts });
+  const deps = { proposals, policies, payouts, brokers, clients, listing, newId, now };
 
   return {
     brokers,
@@ -332,9 +334,9 @@ describe('DeclarePayoutEligibility (REQ-281 to REQ-283)', () => {
     );
 
     expect((await s.get.execute(policyId)).commission?.statement?.broker).toBe('Corretora Gama');
-    expect((await s.listEligible.execute({ broker: 'gama' })).map((line) => line.broker)).toEqual([
-      'Corretora Gama',
-    ]);
+    expect(
+      (await s.listEligible.execute({ broker: 'gama' })).items.map((line) => line.broker),
+    ).toEqual(['Corretora Gama']);
   });
 
   it('keeps the name the registered client has at eligibility, not a later one (REQ-318, CA-315)', async () => {
@@ -349,7 +351,9 @@ describe('DeclarePayoutEligibility (REQ-281 to REQ-283)', () => {
     const policyId = await s.policy({ proposalId: 'p1', clientId: 'client-7' });
 
     // Before the eligibility, the list without CR shows the current name.
-    expect((await s.listWithoutRate.execute()).map((line) => line.client)).toEqual(['Maria Souza']);
+    expect((await s.listWithoutRate.execute()).items.map((line) => line.client)).toEqual([
+      'Maria Souza',
+    ]);
 
     await s.inform.execute({ policyId, rate: '60', userId: 'ana' });
     await s.declareEligible.execute({ policyId, userId: 'carla' });
@@ -362,10 +366,10 @@ describe('DeclarePayoutEligibility (REQ-281 to REQ-283)', () => {
     );
 
     expect((await s.get.execute(policyId)).commission?.statement?.client).toBe('Maria Souza');
-    expect((await s.listEligible.execute({ client: 'souza' })).map((line) => line.client)).toEqual([
-      'Maria Souza',
-    ]);
-    expect(await s.listEligible.execute({ client: 'lima' })).toEqual([]);
+    expect(
+      (await s.listEligible.execute({ client: 'souza' })).items.map((line) => line.client),
+    ).toEqual(['Maria Souza']);
+    expect((await s.listEligible.execute({ client: 'lima' })).items).toEqual([]);
   });
 
   it('signs the eligibility and generates the statement, nothing typed (CA-232, CA-233, CA-237)', async () => {
@@ -454,14 +458,14 @@ describe('ListPoliciesWithoutPayoutRate (REQ-286)', () => {
     const first = await s.policy({ proposalId: 'p1', proposalNumber: 'PRP-1' });
     await s.policy({ proposalId: 'p2', proposalNumber: 'PRP-2' });
 
-    expect((await s.listWithoutRate.execute()).map((line) => line.policyNumber)).toEqual([
+    expect((await s.listWithoutRate.execute()).items.map((line) => line.policyNumber)).toEqual([
       'PRP-1',
       'PRP-2',
     ]);
 
     await s.inform.execute({ policyId: first, rate: '60', userId: 'ana' });
 
-    const lines = await s.listWithoutRate.execute();
+    const lines = (await s.listWithoutRate.execute()).items;
     expect(lines.map((line) => line.policyNumber)).toEqual(['PRP-2']);
     expect(lines[0]).toMatchObject({
       client: 'Ana Lima',
@@ -475,7 +479,7 @@ describe('ListPoliciesWithoutPayoutRate (REQ-286)', () => {
     const s = scenario();
     await s.policy({ proposalId: 'p1', proposalNumber: 'PRP-PARC', mode: 'PARCELLED' });
 
-    expect(await s.listWithoutRate.execute()).toEqual([]);
+    expect((await s.listWithoutRate.execute()).items).toEqual([]);
   });
 });
 
@@ -531,8 +535,8 @@ describe('ListEligiblePayouts (REQ-284)', () => {
     return { s, a, b, c };
   }
 
-  const numbers = (lines: readonly { policyNumber: string }[]) =>
-    lines.map((line) => line.policyNumber);
+  const numbers = (page: { items: readonly { policyNumber: string }[] }) =>
+    page.items.map((line) => line.policyNumber);
 
   it('lists only eligible commissions, most recent eligibility first', async () => {
     const { s } = await eligibles();
@@ -543,7 +547,7 @@ describe('ListEligiblePayouts (REQ-284)', () => {
   it('links each line to its policy (REQ-284, CA-235)', async () => {
     const { s, a } = await eligibles();
 
-    const line = (await s.listEligible.execute({ policyNumber: 'APL-100' }))[0];
+    const line = (await s.listEligible.execute({ policyNumber: 'APL-100' })).items[0];
 
     expect(line?.policyId).toBe(a);
     expect(line?.payout).toBe('180.00');

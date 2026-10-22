@@ -7,8 +7,10 @@ import {
   Notification,
   type NotificationEvent,
 } from '../../../core/notification/domain/notification.ts';
+import type { Page, PageRequest } from '../../../core/proposal/application/page.ts';
 import { Money } from '../../../core/proposal/domain/money.ts';
 import { Percentage } from '../../../core/proposal/domain/percentage.ts';
+import { readPage } from './sqlite-page.ts';
 
 interface NotificationRow {
   id: string;
@@ -75,14 +77,30 @@ export class SqliteNotificationRepository implements NotificationRepository {
    */
   async list(filter: NotificationListFilter): Promise<readonly Notification[]> {
     const rows = (filter.recipientId === undefined
-      ? this.db.prepare('SELECT * FROM notification ORDER BY occurred_at DESC, id').all()
+      ? this.db.prepare('SELECT * FROM notification ORDER BY occurred_at DESC, id DESC').all()
       : this.db
           .prepare(
-            'SELECT * FROM notification WHERE recipient_id = ? ORDER BY occurred_at DESC, id',
+            'SELECT * FROM notification WHERE recipient_id = ? ORDER BY occurred_at DESC, id DESC',
           )
           .all(filter.recipientId)) as unknown as NotificationRow[];
 
     return rows.map(restore);
+  }
+
+  /** REQ-330: one page of `list`, in the same order. */
+  async page(filter: NotificationListFilter, page: PageRequest): Promise<Page<Notification>> {
+    const rows = readPage<NotificationRow>(
+      this.db,
+      {
+        columns: '*',
+        from:
+          filter.recipientId === undefined ? 'notification' : 'notification WHERE recipient_id = ?',
+        orderBy: 'occurred_at DESC, id DESC',
+      },
+      filter.recipientId === undefined ? [] : [filter.recipientId],
+      page,
+    );
+    return { ...rows, items: rows.items.map(restore) };
   }
 }
 

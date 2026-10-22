@@ -163,8 +163,9 @@ describe('payout commission on SQLite (FP-02)', () => {
     await application.shutdown();
     application = open();
 
-    const eligible = await application.useCases.listEligiblePayouts.execute({ broker: 'alfa' });
-    const without = await application.useCases.listPoliciesWithoutPayoutRate.execute();
+    const eligible = (await application.useCases.listEligiblePayouts.execute({ broker: 'alfa' }))
+      .items;
+    const without = (await application.useCases.listPoliciesWithoutPayoutRate.execute()).items;
 
     expect(eligible.map((line) => line.policyNumber)).toEqual(['PRP-3']);
     expect(without.map((line) => line.policyNumber)).toEqual(['PRP-4']);
@@ -239,7 +240,7 @@ describe('parcelled payout on SQLite (V2 section 9B)', () => {
     await application.shutdown();
     application = open();
 
-    expect(await application.useCases.listParcelledPolicies.execute()).toEqual([
+    expect((await application.useCases.listParcelledPolicies.execute()).items).toEqual([
       expect.objectContaining({ policyId: parcelled.id, situation: 'WITHOUT_CR' }),
     ]);
   });

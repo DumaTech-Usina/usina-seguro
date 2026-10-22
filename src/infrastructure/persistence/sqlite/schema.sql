@@ -345,6 +345,17 @@ CREATE TABLE IF NOT EXISTS document (
   content       BLOB NOT NULL
 );
 
+-- DOCUMENT_STORAGE=r2: the bytes of a document live in an object storage
+-- bucket under `object_key`, and its `document` row keeps the name and the
+-- type with an empty `content`. A document without a row here has its bytes in
+-- `content` -- every document stored before R2 was configured stays readable
+-- where it is, nothing is moved. A new table, not a new column, so an existing
+-- file gains it too (no migration framework).
+CREATE TABLE IF NOT EXISTS document_object (
+  document_id  TEXT NOT NULL PRIMARY KEY REFERENCES document (id),
+  object_key   TEXT NOT NULL UNIQUE
+);
+
 -- Notification of an effectuated emission (REQ-100, REQ-105, OUT-10). It is
 -- both the record REQ-105 asks for -- what was notified, to whom and when --
 -- and the in-app notification of REQ-102, which is what the screen reads.
@@ -455,3 +466,35 @@ CREATE TABLE IF NOT EXISTS password_reset (
   used_at       TEXT,
   CHECK ((status = 'USED') = (used_at IS NOT NULL))
 );
+
+-- Indexes of the listings. Each one serves the ORDER BY -- and the filter,
+-- when there is one -- of one query of a repository's `list`, so the rows come
+-- out of the index already in order instead of being sorted in a temporary
+-- B-tree. They do not make a listing that loads every row cheap: see
+-- SQLITE-NOTES.md. `IF NOT EXISTS` applies them to an existing file too.
+--
+-- Proposals, most recent first: `ORDER BY registered_at DESC, id DESC`,
+-- optionally `WHERE status = ?` (the ones awaiting issuance).
+CREATE INDEX IF NOT EXISTS proposal_registered ON proposal (registered_at, id);
+CREATE INDEX IF NOT EXISTS proposal_status_registered ON proposal (status, registered_at, id);
+-- Policies by renewal, the nearest first, and the "renews until" filter:
+-- `[WHERE renewal_date <= ?] ORDER BY renewal_date, id`.
+CREATE INDEX IF NOT EXISTS policy_renewal ON policy (renewal_date, id);
+-- Agreed commissions, most recent first, optionally by status.
+CREATE INDEX IF NOT EXISTS commission_calculated ON commission (calculated_at, id);
+CREATE INDEX IF NOT EXISTS commission_status_calculated
+  ON commission (status, calculated_at, id);
+-- Notifications, most recent first, optionally of one recipient.
+CREATE INDEX IF NOT EXISTS notification_occurred ON notification (occurred_at, id);
+CREATE INDEX IF NOT EXISTS notification_recipient_occurred
+  ON notification (recipient_id, occurred_at, id);
+-- REQ-319: the proposals of the clients a term matches -- few clients of
+-- many proposals -- reached by client, not by reading every proposal.
+CREATE INDEX IF NOT EXISTS proposal_client ON proposal (client_id);
+-- REQ-268, REQ-286: the CT mode of a policy's proposal, the last one
+-- informed, answered from the index alone.
+CREATE INDEX IF NOT EXISTS proposal_worked_commission_mode
+  ON proposal_worked_commission (proposal_id, sequence, mode);
+-- The open sessions of a user, ended by a logout, a deactivation or a
+-- password reset (REQ-403, REQ-426): the table only grows.
+CREATE INDEX IF NOT EXISTS user_session_user ON user_session (user_id);

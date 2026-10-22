@@ -3,6 +3,7 @@ import type {
   NotificationRepository,
 } from '../../../core/notification/application/notification-repository.ts';
 import type { Notification } from '../../../core/notification/domain/notification.ts';
+import { type Page, type PageRequest, pageOf } from '../../../core/proposal/application/page.ts';
 
 export class InMemoryNotificationRepository implements NotificationRepository {
   private readonly records = new Map<string, Notification>();
@@ -24,7 +25,11 @@ export class InMemoryNotificationRepository implements NotificationRepository {
         (notification) =>
           filter.recipientId === undefined || notification.recipientId === filter.recipientId,
       )
-      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || compare(a.id, b.id));
+      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime() || compare(b.id, a.id));
+  }
+
+  async page(filter: NotificationListFilter, page: PageRequest): Promise<Page<Notification>> {
+    return pageOf(await this.list(filter), page);
   }
 }
 

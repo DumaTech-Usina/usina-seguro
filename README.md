@@ -73,24 +73,82 @@ npm start          # sobe o serviço
 npm run dev        # mesmo, com reload em alteração de arquivo
 ```
 
-Configuração por ambiente (ver [`.env.example`](./.env.example)); todos têm default:
+Configuração por ambiente: a lista completa, comentada, está em
+[`.env.example`](./.env.example). Em desenvolvimento todas têm default; em `production`
+a aplicação recusa iniciar sem `APP_BASE_URL` https.
 
 | Variável | Default | Descrição |
 |----------|---------|-----------|
-| `PORT` | `3000` | Porta HTTP |
-| `HOST` | `127.0.0.1` | Interface de escuta |
+| `PORT` | `3000` | Porta HTTP (no Docker, também a porta publicada) |
+| `HOST` | `127.0.0.1` | Interface de escuta (no Docker, `0.0.0.0` dentro do container) |
 | `NODE_ENV` | `development` | `development` \| `test` \| `production` |
-| `PERSISTENCE_DRIVER` | `sqlite` | `memory` \| `sqlite` \| `postgres` |
+| `APP_BASE_URL` | `http://HOST:PORT` | Endereço público: base dos links de convite e de redefinição. **Obrigatório e https em `production`** |
+| `PERSISTENCE_DRIVER` | `sqlite` | `memory` \| `sqlite` \| `postgres` (não implementado) |
 | `SQLITE_FILE` | `./data/usina.sqlite` | Só para o driver `sqlite` |
-| `DATABASE_URL` | — | Obrigatório para `postgres` |
-| `APP_BASE_URL` | `http://HOST:PORT` | Endereço público do sistema: base dos links de convite e de redefinição de senha |
+| `DOCUMENT_STORAGE` | `database` | `database` (PDFs no SQLite) \| `r2` (bytes num bucket R2) |
+| `R2_ENDPOINT` / `R2_BUCKET` | — | Obrigatórios com `r2`; endpoint sem o bucket |
+| `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | — | Obrigatórios com `r2` |
+| `R2_REGION` | `auto` | Região da assinatura S3 |
 | `EMAIL_DRIVER` | `smtp` com `SMTP_HOST`, senão `log` | `smtp` \| `log` (escreve o e-mail na saída do servidor) \| `memory` (testes) |
 | `SMTP_HOST` / `SMTP_PORT` | — / `587` | Servidor SMTP da Usina |
 | `SMTP_SECURE` | `false` | `true` para TLS implícito (porta 465); `false` usa STARTTLS |
+| `SMTP_REQUIRE_TLS` | `true` | Com `SMTP_SECURE=false`, recusa enviar sem STARTTLS |
 | `SMTP_USER` / `SMTP_PASSWORD` | — | Juntos ou nenhum |
 | `SMTP_FROM` | — | Remetente; obrigatório com SMTP |
 
 Em `production` o cookie de sessão sai com `Secure`: o serviço precisa estar atrás de HTTPS.
+
+Verificações que não alteram dados de negócio:
+
+```bash
+npm run smtp-check                    # conecta e autentica no SMTP, não envia nada
+npm run smtp-check -- --to=<e-mail>   # envia os dois modelos (convite e redefinição) para teste
+npm run storage-check                 # o bucket R2 responde a estas credenciais
+npm run storage-check -- --write      # grava e lê storage-check/<momento>.txt no bucket
+npm run backup                        # cópia verificada do SQLite, com o servidor no ar
+```
+
+## Produção (Docker)
+
+Uma instância, atrás do nginx, com o banco num volume. Arquivos: [`Dockerfile`](./Dockerfile),
+[`compose.yaml`](./compose.yaml), [`deploy/nginx.conf.example`](./deploy/nginx.conf.example).
+
+```bash
+cp .env.example .env        # preencher: NODE_ENV=production, APP_BASE_URL, SMTP_*, R2_*
+chmod 600 .env
+docker compose up -d --build
+docker compose ps           # STATUS deve chegar a "healthy" (GET /health)
+docker compose logs -f app  # JSON; a linha de início diz banco, documentos e e-mail em uso
+docker compose exec app npm run smtp-check
+docker compose exec app npm run storage-check -- --write
+docker compose exec app npm run first-admin -- <e-mail>
+```
+
+- **Rede.** A aplicação escuta em `PORT` dentro do container; o compose publica só em
+  `BIND_ADDRESS:PORT` do servidor (`127.0.0.1` se o nginx está no mesmo servidor; o IP da
+  rede local se está em outra máquina). O nginx precisa repassar o `Host` original
+  (`proxy_set_header Host $http_host`, que mantém a porta) — sem isso todo POST, inclusive o login, recebe 403 —,
+  terminar o https e aceitar corpos de até 13 MB (`client_max_body_size`).
+- **Uma instância só.** O SQLite é um arquivo escrito por um processo. Não escale o serviço.
+- **Dados.** Tudo o que persiste está no volume `usina-data` (`/data`): `usina.sqlite` e os
+  arquivos `-wal`/`-shm`, que fazem parte do banco. Recriar o container mantém o volume;
+  `docker compose down -v` **apaga** o volume.
+- **Backup.** `docker compose exec app npm run backup` grava `/data/backups/usina-<momento>.sqlite`
+  e confere a integridade da cópia. O backup fica no mesmo volume: copie-o para fora do
+  servidor (ex.: `docker compose cp app:/data/backups ./backups`, agendado).
+  Copiar o `usina.sqlite` com o processo no ar **não** é backup (o WAL fica de fora).
+- **Restauração.** `docker compose stop app`; copie o backup para o volume como
+  `/data/usina.sqlite` e remova `usina.sqlite-wal` e `usina.sqlite-shm`; `docker compose start app`.
+  Exemplo com um container auxiliar:
+  `docker run --rm -v usina-seguro_usina-data:/data -v "$PWD/backups:/b" alpine sh -c 'cp /b/<arquivo>.sqlite /data/usina.sqlite && rm -f /data/usina.sqlite-wal /data/usina.sqlite-shm && chown 1000:1000 /data/usina.sqlite'`
+  (o nome do volume leva o prefixo do projeto do compose; confira com `docker volume ls`).
+- **PDFs no R2.** Com `DOCUMENT_STORAGE=r2`, os bytes dos PDFs estão no bucket e **não**
+  entram no backup do SQLite. A aplicação nunca apaga objetos; use um token restrito ao
+  bucket ("Object Read & Write") e mantenha o bucket privado. PDFs gravados antes de ligar
+  o R2 continuam no banco e são lidos de lá.
+- **Atualizar / voltar atrás.** Faça um backup; `docker compose up -d --build` com a nova
+  versão. Para voltar, faça o build da versão anterior e suba de novo; se a nova versão já
+  gravou dados que a anterior não entende, restaure o backup feito antes da atualização.
 
 ### Acesso (V2, seção 9C)
 
@@ -196,11 +254,15 @@ curl http://127.0.0.1:3000/policies/<apolice>
 curl http://127.0.0.1:3000/proposals/<proposta>/policy
 
 # 6. O controle das apólices vendidas (OUT-03), da renovação mais próxima
-#    para a mais distante (REQ-055).
-curl http://127.0.0.1:3000/policies
-# 200 [{"id":"<apolice>","policyNumber":"PRP-9001","proposalNumber":"PRP-9001",
+#    para a mais distante (REQ-055). Em páginas (REQ-330 a REQ-333): `page` (de 1)
+#    e `size` (25, 50 ou 100); sem eles, a primeira página de 50. Toda listagem
+#    paginada responde `{ items, total, page, size }`, com o total do resultado
+#    filtrado inteiro.
+curl 'http://127.0.0.1:3000/policies?page=2&size=25'
+# 200 {"items":[{"id":"<apolice>","policyNumber":"PRP-9001","proposalNumber":"PRP-9001",
 #       "status":"ACTIVE","premium":"1200.00","coverageStart":"2026-10-01",
-#       "coverageEnd":"2027-10-01","renewalDate":"2027-10-01",...}]
+#       "coverageEnd":"2027-10-01","renewalDate":"2027-10-01",...}],
+#      "total":26,"page":2,"size":25}
 
 #    As apólices a vencer (OUT-04, CA-032): as que renovam até o dia informado,
 #    ele inclusive. A janela é de quem pergunta — nenhum requisito define o que
@@ -211,11 +273,12 @@ curl 'http://127.0.0.1:3000/policies?renewalUntil=2027-06-30'
 #    POST: ela é efeito do passo 4b, não um ato do usuário. Sem recipientId
 #    lista todas; com ele, as de um corretor.
 curl 'http://127.0.0.1:3000/notifications?recipientId=broker-1'
-# 200 [{"event":"POLICY_ISSUED","recipientId":"broker-1","policyNumber":"PRP-9001",
+# 200 {"items":[{"event":"POLICY_ISSUED","recipientId":"broker-1","policyNumber":"PRP-9001",
 #       "client":{"id":"client-1","name":"Ana Lima"},
 #       "broker":{"id":"broker-1","name":"Corretora Alfa"},
 #       "product":{"id":"auto","name":"Automóvel"},
-#       "workedCommission":"40","netPremium":"1200.00","occurredAt":"..."}]
+#       "workedCommission":"40","netPremium":"1200.00","occurredAt":"..."}],
+#      "total":1,"page":1,"size":50}
 #
 # Os cinco campos de REQ-100 são gravados como foram notificados (REQ-105):
 # corrigir um nome em IN-01 depois não reescreve o que já foi dito.

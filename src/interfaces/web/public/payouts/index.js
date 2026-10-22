@@ -9,10 +9,18 @@
  * filter is a new reading.
  */
 
+import { fromAddress, rememberInAddress } from '/app/shared/address.js';
 import { ApiError, api } from '/app/shared/api.js';
 import { authorName, loadAuthors } from '/app/shared/authors.js';
 import { brokerName, loadBrokers } from '/app/shared/brokers.js';
 import { formatDate, formatInstant, formatMoney, formatPercentage } from '/app/shared/money.js';
+import {
+  firstPage,
+  pageToRetry,
+  pager,
+  pagingFromAddress,
+  rememberPaging,
+} from '/app/shared/pager.js';
 import { reportError } from '/app/shared/shell.js';
 import { statusChip } from '/app/shared/status.js';
 
@@ -85,21 +93,65 @@ function failure(region, title, error) {
   );
 }
 
+/* -------------------------------------------------------------- pages -- */
+
+// REQ-330, REQ-332: each of the three listings keeps its own page and size.
+const paging = {
+  withoutRate: pagingFromAddress('withoutRate'),
+  parcelled: pagingFromAddress('parcelled'),
+  eligible: pagingFromAddress('eligible'),
+};
+
+/** The navigation under one listing, reading it again on each choice. */
+function pagerOf(answer, name, reload) {
+  return pager(answer, {
+    onPage: (page) => {
+      paging[name] = { ...paging[name], page };
+      reload();
+    },
+    onSize: (size) => {
+      paging[name] = firstPage(size);
+      reload();
+    },
+  });
+}
+
+/** An answer for a page past the last one is read again on the last page. */
+function retried(answer, name, reload) {
+  const retry = pageToRetry(answer);
+  if (retry === null || answer.total === 0) {
+    return false;
+  }
+  paging[name] = { ...paging[name], page: retry };
+  reload();
+  return true;
+}
+
+const COUNT = new Intl.NumberFormat('pt-BR');
+
 /* ------------------------------------------------------- without CR -- */
 
 async function loadWithoutRate() {
-  let lines;
+  rememberPaging(paging.withoutRate, 'withoutRate');
+  let answer;
   try {
     // REQ-308: the lines carry the broker's id; the registry gives the name.
-    [lines] = await Promise.all([api.listPoliciesWithoutPayoutRate(), loadBrokers()]);
+    [answer] = await Promise.all([
+      api.listPoliciesWithoutPayoutRate(paging.withoutRate),
+      loadBrokers(),
+    ]);
   } catch (error) {
     failure(withoutRate, 'Não foi possível carregar as apólices sem CR', error);
     return;
   }
 
-  withoutSummary.replaceChildren(element('span', 'chip', `${lines.length} sem CR`));
+  if (retried(answer, 'withoutRate', loadWithoutRate)) {
+    return;
+  }
+  const lines = answer.items;
+  withoutSummary.replaceChildren(element('span', 'chip', `${COUNT.format(answer.total)} sem CR`));
 
-  if (lines.length === 0) {
+  if (answer.total === 0) {
     withoutRate.replaceChildren(
       emptyState(
         'task_alt',
@@ -133,6 +185,7 @@ async function loadWithoutRate() {
         return row;
       }),
     ),
+    pagerOf(answer, 'withoutRate', loadWithoutRate),
   );
 }
 
@@ -143,17 +196,24 @@ async function loadWithoutRate() {
  * a parcelled CT has no total (REJ-232).
  */
 async function loadParcelled() {
-  let lines;
+  rememberPaging(paging.parcelled, 'parcelled');
+  let answer;
   try {
-    [lines] = await Promise.all([api.listParcelledPolicies(), loadBrokers()]);
+    [answer] = await Promise.all([api.listParcelledPolicies(paging.parcelled), loadBrokers()]);
   } catch (error) {
     failure(parcelled, 'Não foi possível carregar as apólices parceladas', error);
     return;
   }
 
-  parcelledSummary.replaceChildren(element('span', 'chip', `${lines.length} parceladas`));
+  if (retried(answer, 'parcelled', loadParcelled)) {
+    return;
+  }
+  const lines = answer.items;
+  parcelledSummary.replaceChildren(
+    element('span', 'chip', `${COUNT.format(answer.total)} parceladas`),
+  );
 
-  if (lines.length === 0) {
+  if (answer.total === 0) {
     parcelled.replaceChildren(
       emptyState('inbox', 'Nenhuma apólice parcelada', 'Nenhuma apólice tem CT parcelada.'),
     );
@@ -185,6 +245,7 @@ async function loadParcelled() {
         return row;
       }),
     ),
+    pagerOf(answer, 'parcelled', loadParcelled),
   );
 }
 
@@ -199,6 +260,17 @@ function startOfDay(isoDate, plusDays = 0) {
   const [year, month, day] = isoDate.split('-').map((part) => Number.parseInt(part, 10));
   return new Date(year, month - 1, day + plusDays).toISOString();
 }
+
+/** The fields of the eligible filters, as the form and the address name them. */
+const ELIGIBLE_FILTERS = [
+  'policyNumber',
+  'broker',
+  'client',
+  'eligibleFrom',
+  'eligibleUntil',
+  'renewalFrom',
+  'renewalUntil',
+];
 
 /** Only the filters the operator informed. */
 function informedFilters() {
@@ -222,18 +294,31 @@ function informedFilters() {
 }
 
 async function loadEligible() {
-  let lines;
+  rememberPaging(paging.eligible, 'eligible');
+  rememberInAddress(
+    Object.fromEntries(ELIGIBLE_FILTERS.map((name) => [name, filters.elements[name].value])),
+  );
+  let answer;
   try {
     // REQ-216: who signed each eligibility is kept by id; the directory names it.
-    [lines] = await Promise.all([api.listEligiblePayouts(informedFilters()), loadAuthors()]);
+    [answer] = await Promise.all([
+      api.listEligiblePayouts(informedFilters(), paging.eligible),
+      loadAuthors(),
+    ]);
   } catch (error) {
     failure(eligible, 'Não foi possível carregar as comissões elegíveis', error);
     return;
   }
 
-  eligibleSummary.replaceChildren(element('span', 'chip', `${lines.length} elegíveis`));
+  if (retried(answer, 'eligible', loadEligible)) {
+    return;
+  }
+  const lines = answer.items;
+  eligibleSummary.replaceChildren(
+    element('span', 'chip', `${COUNT.format(answer.total)} elegíveis`),
+  );
 
-  if (lines.length === 0) {
+  if (answer.total === 0) {
     eligible.replaceChildren(
       emptyState(
         'inbox',
@@ -277,18 +362,30 @@ async function loadEligible() {
         return row;
       }),
     ),
+    pagerOf(answer, 'eligible', loadEligible),
   );
+}
+
+/** A new filter starts on the first page, with the same size (REQ-333). */
+function filterEligible() {
+  paging.eligible = firstPage(paging.eligible.size);
+  loadEligible();
 }
 
 filters.addEventListener('submit', (event) => {
   event.preventDefault();
-  loadEligible();
+  filterEligible();
 });
 
 document.querySelector('#clear-filters').addEventListener('click', () => {
   filters.reset();
-  loadEligible();
+  filterEligible();
 });
+
+// The filters of the eligible commissions the address asks for (REQ-284).
+for (const name of ELIGIBLE_FILTERS) {
+  filters.elements[name].value = fromAddress(name);
+}
 
 loadWithoutRate();
 loadParcelled();

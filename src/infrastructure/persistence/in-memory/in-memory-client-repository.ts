@@ -1,4 +1,6 @@
+import { type Page, type PageRequest, pageOf } from '../../../core/proposal/application/page.ts';
 import type { ClientRepository } from '../../../core/registry/application/client-repository.ts';
+import { matchesClientQuery } from '../../../core/registry/application/list-clients.ts';
 import type { Client } from '../../../core/registry/domain/client.ts';
 
 export class InMemoryClientRepository implements ClientRepository {
@@ -21,6 +23,13 @@ export class InMemoryClientRepository implements ClientRepository {
     return [...this.records.values()].sort(
       (a, b) => compare(a.name, b.name) || compare(a.id, b.id),
     );
+  }
+
+  async page(filter: { readonly query?: string }, page: PageRequest): Promise<Page<Client>> {
+    const matching = (await this.list()).filter((client) =>
+      matchesClientQuery(client.name, client.cpf.digits, filter.query),
+    );
+    return pageOf(matching, page);
   }
 }
 

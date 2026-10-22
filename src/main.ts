@@ -26,7 +26,15 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 
   await app.listen({ port: config.http.port, host: config.http.host });
-  app.log.info(`Persistence: ${config.persistence.driver} | Environment: ${config.env}`);
+  app.log.info(
+    `Persistence: ${config.persistence.driver} | Documents: ${config.documents.driver} | ` +
+      `E-mail: ${config.email.driver} | Environment: ${config.env}`,
+  );
+  if (config.env === 'production' && config.email.driver !== 'smtp') {
+    // REQ-436 allows it, but nothing reaches people and the reset links are
+    // written to this log.
+    app.log.warn('No SMTP configured: access e-mails are not delivered (set SMTP_HOST).');
+  }
 }
 
 main().catch((error) => {

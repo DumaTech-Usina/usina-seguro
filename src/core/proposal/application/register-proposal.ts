@@ -97,14 +97,36 @@ export class RegisterProposal {
   }
 
   async execute(input: RegisterProposalInput): Promise<ProposalView> {
-    return this.deps.transaction.run(() => this.register(input));
-  }
-
-  private async register(input: RegisterProposalInput): Promise<ProposalView> {
     const id = this.deps.newId();
-    const clientId = await this.deps.clients.resolve(input.client, input.author);
     const source = input.sourceDocument ?? null;
     const documentId = source === null ? null : this.deps.newId();
+
+    // The document is stored before the transaction, not inside it: its
+    // storage may be a network call (an object storage bucket), and a unit of
+    // work left open across that wait would take in other requests' writes.
+    // What refuses a registration is checked first, so a refused one leaves no
+    // document behind; only a client refused afterwards (REQ-317) would.
+    if (source !== null && documentId !== null) {
+      await this.build(input, id, CLIENT_TO_RESOLVE, documentId);
+      await this.deps.documents.save({ id: documentId, ...source });
+    }
+
+    return this.deps.transaction.run(async () => {
+      const clientId = await this.deps.clients.resolve(input.client, input.author);
+      const proposal = await this.build(input, id, clientId, documentId);
+      await this.deps.proposals.save(proposal);
+      return toProposalView(proposal);
+    });
+  }
+
+  /** The proposal, once the domain and the registries accept it. Writes nothing. */
+  private async build(
+    input: RegisterProposalInput,
+    id: string,
+    clientId: string,
+    documentId: string | null,
+  ): Promise<Proposal> {
+    const source = input.sourceDocument ?? null;
 
     const proposal = Proposal.register({
       id,
@@ -134,17 +156,12 @@ export class RegisterProposal {
 
     await ensureRegisteredIntermediary(proposal.receipt, this.deps.intermediaries);
 
-    // Only once the proposal was accepted: a refused registration leaves no
-    // document behind.
-    if (source !== null && documentId !== null) {
-      await this.deps.documents.save({ id: documentId, ...source });
-    }
-
-    await this.deps.proposals.save(proposal);
-
-    return toProposalView(proposal);
+    return proposal;
   }
 }
+
+/** Stands for the client in the checks made before it is resolved. */
+const CLIENT_TO_RESOLVE = 'client-to-resolve';
 
 /** Shared with `ReviseInstallments`: REQ-204, the due date is optional. */
 export function toInstallments(installments: readonly RegisterProposalInstallmentInput[]) {

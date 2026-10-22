@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifySchema } from 'fastify';
 import type { UseCases } from '../../../composition-root.ts';
 import type { ListCommissionsInput } from '../../../core/commission/application/list-commissions.ts';
 import { authorOf } from '../author.ts';
+import { PAGE_QUERY, filtersOf, pageOf, paged } from '../page-query.ts';
 
 /**
  * Request shape validation only. What the commission is worth and what an
@@ -41,6 +42,7 @@ const listCommissionsSchema: FastifySchema = {
         type: 'string',
         enum: ['FORECAST'],
       },
+      ...PAGE_QUERY,
     },
   },
 };
@@ -53,7 +55,13 @@ export function registerCommissionRoutes(app: FastifyInstance, useCases: UseCase
   // OUT-05: the agreed commission of every policy.
   app.get('/commissions', { schema: listCommissionsSchema }, async (request) => {
     // The schema already restricted the query to a known state or nothing.
-    return useCases.listCommissions.execute(request.query as ListCommissionsInput);
+    const query = request.query as Record<string, string>;
+    return paged(
+      await useCases.listCommissions.execute({
+        ...(filtersOf(query) as ListCommissionsInput),
+        ...pageOf(query),
+      }),
+    );
   });
 
   // REQ-236: the agreed commission of one policy.
