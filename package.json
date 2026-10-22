@@ -4,16 +4,16 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22.6.0"
+    "node": ">=22.9.0"
   },
   "scripts": {
-    "start": "node src/main.ts",
-    "dev": "node --watch src/main.ts",
-    "first-admin": "node src/first-administrator.ts",
-    "create-user": "node src/cli/create-user.ts",
-    "backup": "node src/cli/backup-sqlite.ts",
-    "smtp-check": "node src/cli/smtp-check.ts",
-    "storage-check": "node src/cli/storage-check.ts",
+    "start": "node --env-file-if-exists=.env src/main.ts",
+    "dev": "node --env-file-if-exists=.env --watch src/main.ts",
+    "first-admin": "node --env-file-if-exists=.env src/first-administrator.ts",
+    "create-user": "node --env-file-if-exists=.env src/cli/create-user.ts",
+    "backup": "node --env-file-if-exists=.env src/cli/backup-sqlite.ts",
+    "smtp-check": "node --env-file-if-exists=.env src/cli/smtp-check.ts",
+    "storage-check": "node --env-file-if-exists=.env src/cli/storage-check.ts",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",

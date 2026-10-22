@@ -59,7 +59,7 @@ documento de requisitos.
 
 ## Requisitos
 
-Node **>= 22.6** (usa execução nativa de TypeScript e `node:sqlite`; validado em 24.11).
+Node **>= 22.9** (usa execução nativa de TypeScript e `node:sqlite`; validado em 24.11).
 Nenhuma dependência nativa compilada, nenhum passo de build.
 
 ```bash
@@ -76,6 +76,10 @@ npm run dev        # mesmo, com reload em alteração de arquivo
 Configuração por ambiente: a lista completa, comentada, está em
 [`.env.example`](./.env.example). Em desenvolvimento todas têm default; em `production`
 a aplicação recusa iniciar sem `APP_BASE_URL` https.
+Os scripts `npm` (`start`, `dev`, `smtp-check`, `storage-check`, `backup`, `first-admin`,
+`create-user`) leem o `.env` da raiz quando ele existe (`--env-file-if-exists`); uma
+variável já definida no ambiente prevalece sobre o arquivo. No Docker quem lê o `.env` é o
+Compose (`env_file`), e o arquivo não entra na imagem.
 
 | Variável | Default | Descrição |
 |----------|---------|-----------|
