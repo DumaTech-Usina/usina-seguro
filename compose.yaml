@@ -3,11 +3,14 @@
 #   cp .env.example .env      # fill in the production values
 #   docker compose up -d --build
 #
-# The application reads its configuration from .env (env_file). The two values
-# that describe the container itself are fixed below and win over .env: the
-# process listens on every interface *inside* the container, and the database
-# is on the volume. What reaches the outside is decided by `ports`: only
-# BIND_ADDRESS:PORT on the server, which nginx proxies to.
+# The application reads its configuration from .env (env_file). The values
+# fixed below win over .env: the database is on the volume, and the process
+# listens on BIND_ADDRESS:PORT of the server, which nginx proxies to.
+#
+# Host network: the container goes out to the internet (SMTP, R2) the way the
+# server itself does — no NAT and no firewall rule per server, whatever
+# Docker's iptables setting. Nothing is published: what reaches the outside is
+# decided by BIND_ADDRESS (127.0.0.1 by default — only this server).
 #
 # A single instance on purpose: SQLite is one file, written by one process
 # (SQLITE-NOTES.md). Do not scale this service.
@@ -18,11 +21,10 @@ services:
     restart: unless-stopped
     env_file: .env
     environment:
-      HOST: 0.0.0.0
+      HOST: ${BIND_ADDRESS:-127.0.0.1}
       PERSISTENCE_DRIVER: sqlite
       SQLITE_FILE: /data/usina.sqlite
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
+    network_mode: host
     volumes:
       - usina-data:/data
     stop_grace_period: 30s

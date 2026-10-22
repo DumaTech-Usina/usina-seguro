@@ -128,8 +128,9 @@ docker compose exec app npm run storage-check -- --write
 docker compose exec app npm run first-admin -- <e-mail>
 ```
 
-- **Rede.** A aplicação escuta em `PORT` dentro do container; o compose publica só em
-  `BIND_ADDRESS:PORT` do servidor (`127.0.0.1` se o nginx está no mesmo servidor; o IP da
+- **Rede.** O container usa a rede do servidor (`network_mode: host`): sai para a internet
+  (SMTP, R2) como o próprio servidor, sem NAT nem regra de firewall. A aplicação escuta só
+  em `BIND_ADDRESS:PORT` do servidor (`127.0.0.1` se o nginx está no mesmo servidor; o IP da
   rede local se está em outra máquina). O nginx precisa repassar o `Host` original
   (`proxy_set_header Host $http_host`, que mantém a porta) — sem isso todo POST, inclusive o login, recebe 403 —,
   terminar o https e aceitar corpos de até 13 MB (`client_max_body_size`).
