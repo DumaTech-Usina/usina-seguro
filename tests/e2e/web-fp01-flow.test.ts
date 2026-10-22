@@ -345,7 +345,7 @@ describe('FP-01 through the web interface', () => {
     expect(snackbars()[0]).toContain(
       'Com intermediária, a CTU (comissão trabalhada da Usina) é obrigatória.',
     );
-    expect(snackbars()[0]).toContain('REQ-221');
+    expect(snackbars()[0]).not.toContain('REQ-221');
     expect(hidden('[data-panel="done"]')).toBe(true);
   });
 
@@ -389,7 +389,7 @@ describe('FP-01 through the web interface', () => {
     expect(snackbars()[0]).toContain(
       'Fim da vigência (2026-10-01) deve ser posterior ao início (2027-10-01).',
     );
-    expect(snackbars()[0]).toContain('REQ-202');
+    expect(snackbars()[0]).not.toContain('REQ-202');
   });
 
   it('shows the refusal the server rendered for an installment worth nothing (REJ-215)', async () => {
@@ -405,7 +405,7 @@ describe('FP-01 through the web interface', () => {
       expect(snackbars().length).toBeGreaterThan(0);
     });
     expect(snackbars()[0]).toContain('Valor da parcela 1 deve ser positivo.');
-    expect(snackbars()[0]).toContain('REQ-204');
+    expect(snackbars()[0]).not.toContain('REQ-204');
   });
 
   it('lists the proposals awaiting issuance with the expected value, and filters by state', async () => {
@@ -618,7 +618,7 @@ describe('FP-01 through the web interface', () => {
       expect(snackbars().length).toBeGreaterThan(0);
     });
     expect(snackbars()[0]).toContain('Recusa de proposta exige motivo.');
-    expect(snackbars()[0]).toContain('REQ-253');
+    expect(snackbars()[0]).not.toContain('REQ-253');
     expect((await callApi('GET', `/proposals/${id}`)).status).toBe('AWAITING_ISSUANCE');
 
     field('#form-rejection', 'reason').value = 'perfil de risco';

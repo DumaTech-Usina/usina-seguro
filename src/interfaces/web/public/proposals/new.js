@@ -177,7 +177,7 @@ const PDF_STATUS = {
 const PDF_FAILURE = {
   UNREADABLE: 'O arquivo não pôde ser lido como PDF.',
   NO_TEXT: 'O PDF não tem texto legível.',
-  UNRECOGNIZED_LAYOUT: 'O layout deste PDF ainda não é conhecido (hoje: proposta Allianz).',
+  UNRECOGNIZED_LAYOUT: 'O modelo deste PDF ainda não é conhecido (hoje: proposta Allianz).',
 };
 
 const pdfForm = document.querySelector('#form-pdf');

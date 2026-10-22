@@ -141,7 +141,7 @@ describe('HTTP application', () => {
 
     expect(response.status).toBe(422);
     const body = (await response.json()) as ErrorBody;
-    expect(body.message).toBe('Proposta exige o campo insurerId.');
+    expect(body.message).toBe('Informe a seguradora da proposta.');
   });
 
   it('refuses a client without name or with an invalid CPF with 422, in Portuguese (REJ-310, REJ-311)', async () => {

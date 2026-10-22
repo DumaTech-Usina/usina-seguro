@@ -17,10 +17,29 @@
 
 import { navigateTo } from '/app/shared/navigation.js';
 
+/**
+ * The sentence the operator reads. Only a message the server rendered through
+ * `src/i18n` carries a `messageKey`; anything else — a schema failure, a body
+ * too large, an unknown route — holds the framework's own English text, which
+ * stays in `body` for diagnosis and is never shown.
+ */
+function messageOf(status, body) {
+  if (typeof body?.messageKey === 'string' && typeof body?.message === 'string') {
+    return body.message;
+  }
+  if (status === 413) {
+    return 'O arquivo é grande demais para ser enviado.';
+  }
+  if (status >= 400 && status < 500) {
+    return 'Não foi possível completar a operação. Confira os dados informados e tente novamente.';
+  }
+  return 'Não foi possível completar a operação.';
+}
+
 /** A response the server refused: 400 (shape), 404 (absent) or 422 (rule). */
 export class ApiError extends Error {
   constructor(status, body) {
-    super(body?.message ?? 'Não foi possível completar a operação.');
+    super(messageOf(status, body));
     this.name = 'ApiError';
     this.status = status;
     /** Requirement id, e.g. 'REQ-040'. Present on a 422. */

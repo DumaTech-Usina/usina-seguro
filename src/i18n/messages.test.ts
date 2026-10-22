@@ -12,13 +12,25 @@ describe('translate', () => {
   });
 
   it('interpolates parameters', () => {
-    expect(translate(PROPOSAL_MESSAGES.FIELD_REQUIRED, { field: 'clientId' })).toBe(
-      'Proposta exige o campo clientId.',
+    expect(translate(COMMISSION_MESSAGES.INSTALLMENT_NOT_IN_POLICY, { number: '3' })).toBe(
+      'A apólice não tem a parcela 3.',
     );
   });
 
+  it('names a field in Portuguese, never by its identifier in the code', () => {
+    expect(translate(PROPOSAL_MESSAGES.FIELD_REQUIRED, { field: 'brokerId' })).toBe(
+      'Informe o corretor da proposta.',
+    );
+  });
+
+  it('names the state of an installment in Portuguese', () => {
+    expect(
+      translate(POLICY_MESSAGES.ONLY_PENDING_CAN_BE_PAID, { number: '2', status: 'PAID' }),
+    ).toBe('Somente parcela pendente pode ser confirmada como paga. Parcela 2 está paga.');
+  });
+
   it('keeps the marker when a parameter is missing, instead of printing undefined', () => {
-    expect(translate(PROPOSAL_MESSAGES.FIELD_REQUIRED)).toBe('Proposta exige o campo {field}.');
+    expect(translate(PROPOSAL_MESSAGES.FIELD_REQUIRED)).toBe('Informe {field} da proposta.');
   });
 
   it('falls back to the key when it has no translation', () => {

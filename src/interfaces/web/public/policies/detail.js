@@ -144,7 +144,7 @@ function policyCard(policy) {
   const body = element('div', 'card__body stack');
 
   // A apólice é a terceira etapa, e a tira diz de onde ela veio.
-  section.append(stageStrip('policy', 'Apólice registrada: a proposta foi emitida (REQ-251).'));
+  section.append(stageStrip('policy', 'Apólice registrada: a proposta foi emitida.'));
 
   const head = element('div', 'policy-head');
   const numbers = element('div', 'policy-head__numbers');
@@ -783,9 +783,9 @@ function payoutCard(policy, view) {
     header.append(actions);
     body.append(
       emptyState(
-        'block',
-        'Sem CR para CT parcelada',
-        'Apólice com CT parcelada não recebe CR nem tem comissão calculada ou elegível enquanto a regra do recebimento parcelado (DEC-210) não for definida.',
+        'info',
+        'Repasse por parcela',
+        'A comissão de repasse desta apólice é informada por parcela.',
       ),
     );
     section.append(body);
@@ -915,7 +915,7 @@ function notFound(message) {
 
 async function render() {
   if (policyId === null || policyId === '') {
-    notFound('Informe o identificador da apólice na URL.');
+    notFound('Abra a apólice a partir da lista de apólices.');
     return;
   }
 

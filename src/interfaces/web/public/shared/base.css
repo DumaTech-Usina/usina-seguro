@@ -937,12 +937,6 @@ select.field__input {
   background: var(--success);
 }
 
-.snackbar__rule {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  opacity: 0.85;
-}
-
 @keyframes snackbar-in {
   from {
     opacity: 0;

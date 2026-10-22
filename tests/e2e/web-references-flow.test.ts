@@ -272,8 +272,8 @@ describe('the reference registry (IN-01)', () => {
       expect(snackbars().length).toBeGreaterThan(0);
     });
 
-    expect(snackbars().join(' ')).toContain('Cadastro de referência');
-    expect(snackbars().join(' ')).toContain('IN-01');
+    expect(snackbars().join(' ')).toContain('Informe o nome do cadastro.');
+    expect(snackbars().join(' ')).not.toContain('IN-01');
     expect(rows('#list-references')).toHaveLength(before);
   });
 

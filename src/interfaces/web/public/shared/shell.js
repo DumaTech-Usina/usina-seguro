@@ -127,10 +127,6 @@ function buildAppBar() {
   const spacer = document.createElement('div');
   spacer.className = 'app-bar__spacer';
 
-  const environment = document.createElement('span');
-  environment.className = 'chip';
-  environment.textContent = 'MVP';
-
   const user = document.createElement('span');
   user.className = 'app-bar__user text-muted';
 
@@ -147,7 +143,7 @@ function buildAppBar() {
     }
   });
 
-  bar.append(mark, titles, spacer, environment, user, logout);
+  bar.append(mark, titles, spacer, user, logout);
   return bar;
 }
 
@@ -211,8 +207,8 @@ function buildNav(current) {
   return nav;
 }
 
-/** Feedback for one operation. `rule` shows the requirement that refused it. */
-export function showSnackbar(message, { tone = 'neutral', rule = null, timeout = 6000 } = {}) {
+/** Feedback for one operation. */
+export function showSnackbar(message, { tone = 'neutral', timeout = 6000 } = {}) {
   const host = document.querySelector('.snackbar-host');
   if (host === null) {
     return;
@@ -226,22 +222,18 @@ export function showSnackbar(message, { tone = 'neutral', rule = null, timeout =
   text.textContent = message;
   snackbar.append(text);
 
-  if (rule !== null) {
-    const badge = document.createElement('span');
-    badge.className = 'snackbar__rule';
-    badge.textContent = rule;
-    snackbar.append(badge);
-  }
-
   host.append(snackbar);
   setTimeout(() => snackbar.remove(), timeout);
 }
 
-/** Reports a rejected operation with the sentence the server rendered. */
+/**
+ * Reports a rejected operation with the sentence the server rendered. The
+ * requirement id (`error.rule`) stays on the error for diagnosis and is not
+ * shown to the operator.
+ */
 export function reportError(error) {
-  const rule = error?.rule ?? null;
   const message = error?.message ?? 'Não foi possível completar a operação.';
-  showSnackbar(message, { tone: 'danger', rule });
+  showSnackbar(message, { tone: 'danger' });
 }
 
 function mount() {

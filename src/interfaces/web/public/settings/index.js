@@ -194,7 +194,7 @@ const references = registry({
   empty: {
     icon: 'groups',
     title: 'Nenhum cadastro registrado',
-    description: 'Sem eles, a operação identifica cada negócio pelo código digitado na proposta.',
+    description: 'Sem eles, cada negócio aparece pelo identificador informado na proposta.',
   },
 });
 

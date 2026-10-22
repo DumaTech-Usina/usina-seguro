@@ -38,7 +38,7 @@ export const DEFAULT_LOCALE: Locale = 'pt-BR';
 const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
   'pt-BR': {
     'proposal.payment_method_required': 'Proposta exige forma de pagamento definida.',
-    'proposal.field_required': 'Proposta exige o campo {field}.',
+    'proposal.field_required': 'Informe {field} da proposta.',
     'proposal.net_premium_must_be_positive': 'Prêmio líquido da proposta deve ser positivo.',
     'proposal.coverage_end_must_follow_start':
       'Fim da vigência ({end}) deve ser posterior ao início ({start}).',
@@ -63,13 +63,14 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'proposal.rejection_reason_required': 'Recusa de proposta exige motivo.',
     'proposal.rejected_cannot_originate_policy': 'Proposta recusada não origina apólice.',
     'proposal.already_has_policy': 'Proposta já possui apólice registrada.',
-    'proposal.not_found': "Proposta não encontrada: '{id}'.",
+    'proposal.not_found': 'Proposta não encontrada.',
     'proposal.broker_not_registered': 'Escolha um corretor cadastrado.',
     'proposal.intermediary_not_registered': 'Escolha uma intermediária cadastrada.',
-    'proposal.source_document_not_found': 'A proposta {id} não tem documento de origem guardado.',
+    'proposal.source_document_not_found': 'Esta proposta não tem documento de origem guardado.',
     'money.invalid_format':
-      "Valor monetário inválido: '{value}'. Use string decimal com até {scale} casas, ex.: '1234.56'.",
-    'percentage.invalid_format': "Percentual inválido: '{value}'. Use string decimal, ex.: '32.5'.",
+      "Valor inválido: '{value}'. Informe um número com ponto decimal e até {scale} casas, ex.: 1234.56.",
+    'percentage.invalid_format':
+      "Percentual inválido: '{value}'. Informe um número com ponto decimal, ex.: 32.5.",
     'percentage.out_of_range': "Percentual fora da faixa de 0 a 100: '{value}'.",
     'policy.policy_number_required': 'Informe o número da apólice.',
     'policy.premium_must_be_positive': 'Prêmio da apólice deve ser positivo.',
@@ -79,10 +80,10 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
       'Parcelas devem ser numeradas em sequência a partir de 1. Recebido: {number}.',
     'policy.installment_amount_must_be_positive': 'Valor da parcela {number} deve ser positivo.',
     'policy.installment_belongs_to_another_policy': 'Parcela {number} pertence a outra apólice.',
-    'policy.not_found': "Apólice não encontrada: '{id}'.",
-    'policy.not_found_for_proposal': "Proposta '{proposalId}' ainda não possui apólice registrada.",
+    'policy.not_found': 'Apólice não encontrada.',
+    'policy.not_found_for_proposal': 'Esta proposta ainda não possui apólice registrada.',
     'calendar_date.invalid_format': "Data inválida: '{value}'. Use o formato AAAA-MM-DD.",
-    'policy.document_not_found': 'A apólice {id} não tem PDF guardado.',
+    'policy.document_not_found': 'Esta apólice não tem PDF guardado.',
     'policy.document_required': 'O reconhecimento da emissão exige o PDF da apólice.',
     'policy.installment_not_found': "Parcela {number} não encontrada na apólice '{policyNumber}'.",
     'policy.only_pending_can_be_paid':
@@ -90,20 +91,20 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'policy.payment_confirmation_user_required':
       'Confirmação de pagamento da parcela {number} exige a identificação do usuário.',
 
-    'registry.reference_field_required': 'Cadastro de referência exige o campo {field}.',
+    'registry.reference_field_required': 'Informe {field} do cadastro.',
     'registry.broker_name_required': 'O corretor precisa de um nome.',
     'registry.broker_cpf_required': 'O corretor precisa de um CPF.',
     'registry.broker_cpf_invalid':
       'CPF inválido: informe os 11 dígitos, com dígitos verificadores válidos.',
     'registry.broker_cpf_taken': 'Já existe um corretor cadastrado com este CPF.',
-    'registry.broker_not_found': "Corretor não encontrado: '{id}'.",
+    'registry.broker_not_found': 'Corretor não encontrado.',
     'registry.client_name_required': 'O cliente precisa de um nome.',
     'registry.client_cpf_required': 'O cliente precisa de um CPF.',
     'registry.client_cpf_invalid':
       'CPF do cliente inválido: informe os 11 dígitos, com dígitos verificadores válidos.',
     'registry.client_cpf_taken': 'Já existe um cliente cadastrado com este CPF.',
-    'registry.client_not_found': "Cliente não encontrado: '{id}'.",
-    'commission.not_found': "Apólice '{policyId}' não possui comissão calculada.",
+    'registry.client_not_found': 'Cliente não encontrado.',
+    'commission.not_found': 'Esta apólice não possui comissão calculada.',
     'commission.override_justification_required':
       'Ajuste de comissão por apólice exige justificativa.',
     'commission.override_user_required':
@@ -112,7 +113,7 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'commission.payout_rate_too_precise':
       "A CR aceita no máximo duas casas decimais. Recebido: '{value}'.",
     'commission.payout_requires_integral_ct':
-      'A CR só pode ser informada em apólice com CT integral; com CT parcelada ela ainda não está definida.',
+      'Uma CR única só existe em apólice com CT integral; com CT parcelada, informe as CRs da primeira parcela e das subsequentes.',
     'commission.payout_already_informed':
       'A apólice já tem CR. Para mudá-la, faça o recálculo com motivo.',
     'commission.payout_not_informed': 'A apólice ainda não tem CR informada.',
@@ -120,15 +121,15 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'commission.payout_eligible_is_final':
       'A comissão já é elegível: é definitiva e só pode ser consultada.',
     'commission.parcelled_payout_requires_parcelled_ct':
-      'Os CRs da primeira parcela e das subsequentes só existem em apólice com CT parcelada.',
+      'As CRs da primeira parcela e das subsequentes só existem em apólice com CT parcelada.',
     'commission.parcelled_first_rate_above_ct':
       'A CR da primeira parcela ({rate}%) não pode ser maior que a CT da primeira parcela ({ct}%).',
     'commission.parcelled_subsequent_rate_above_ct':
       'A CR das parcelas subsequentes ({rate}%) não pode ser maior que a CT das parcelas subsequentes ({ct}%).',
     'commission.parcelled_rates_frozen':
-      'Os CRs não podem mais ser alterados: já há parcela elegível.',
+      'As CRs não podem mais ser alteradas: já há parcela elegível.',
     'commission.installment_eligibility_requires_rates':
-      'A parcela só pode ser tornada elegível com os CRs informados (ainda que zero).',
+      'A parcela só pode ser tornada elegível com as CRs informadas (ainda que zero).',
     'commission.installment_already_eligible':
       'A parcela {number} já é elegível: a elegibilidade é definitiva.',
     'commission.installment_not_in_policy': 'A apólice não tem a parcela {number}.',
@@ -143,7 +144,8 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
     'identity.login_refused':
       'Não foi possível entrar. Confira o e-mail e a senha ou tente novamente mais tarde.',
     'identity.authentication_required': 'Entre no sistema para continuar.',
-    'identity.foreign_origin': 'Operação recusada: a requisição não veio do próprio sistema.',
+    'identity.foreign_origin':
+      'Operação recusada por segurança. Recarregue a página e tente novamente.',
     'identity.administrator_only': 'Somente um administrador pode fazer isto.',
     'identity.last_administrator':
       'O sistema precisa de ao menos um administrador ativo: esta alteração deixaria nenhum.',
@@ -175,6 +177,29 @@ const MESSAGES: Record<Locale, Record<MessageKey, string>> = {
 };
 
 /**
+ * How a parameter value the core emits as code reads in a sentence: the field
+ * a rule names (`brokerId`) and the state of an installment (`PAID`). A value
+ * not listed is printed as it came.
+ */
+const PARAM_LABELS: Record<Locale, Readonly<Record<string, Readonly<Record<string, string>>>>> = {
+  'pt-BR': {
+    field: {
+      clientId: 'o cliente',
+      brokerId: 'o corretor',
+      insurerId: 'a seguradora',
+      productId: 'o produto/ramo',
+      intermediaryId: 'a intermediária',
+      id: 'o identificador',
+      name: 'o nome',
+    },
+    status: {
+      PENDING: 'pendente',
+      PAID: 'paga',
+    },
+  },
+};
+
+/**
  * Renders a message key in the given locale, interpolating `{param}` markers.
  *
  * An unknown key falls back to the key itself: a missing translation must not
@@ -191,5 +216,11 @@ export function translate(
     return key;
   }
 
-  return template.replace(/\{(\w+)\}/g, (marker, name: string) => params[name] ?? marker);
+  return template.replace(/\{(\w+)\}/g, (marker, name: string) => {
+    const value = params[name];
+    if (value === undefined) {
+      return marker;
+    }
+    return PARAM_LABELS[locale][name]?.[value] ?? value;
+  });
 }

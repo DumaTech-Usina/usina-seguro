@@ -252,7 +252,7 @@ describe('requests from another site (REQ-417)', () => {
     expect(await response.json()).toEqual({
       error: 'forbidden_origin',
       messageKey: 'identity.foreign_origin',
-      message: 'Operação recusada: a requisição não veio do próprio sistema.',
+      message: 'Operação recusada por segurança. Recarregue a página e tente novamente.',
     });
   });
 

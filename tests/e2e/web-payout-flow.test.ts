@@ -330,7 +330,7 @@ describe('FP-02 on the policy page', () => {
 
     const message = await nextSnackbar(before);
     expect(message).toContain('no máximo duas casas decimais');
-    expect(message).toContain('REQ-272');
+    expect(message).not.toContain('REQ-272');
     expect((await callApi('GET', `/policies/${policyId}/payout`)).situation).toBe('WITHOUT_CR');
   });
 
@@ -371,7 +371,7 @@ describe('FP-02 on the policy page', () => {
     answerDialog('#dialog-payout-revision', { rate: '70.55', reason: '  ' });
     const refusal = await nextSnackbar(before);
     expect(refusal).toContain('A alteração da CR exige um motivo.');
-    expect(refusal).toContain('REQ-279');
+    expect(refusal).not.toContain('REQ-279');
 
     const beforeRevision = snackbars().length;
     clickIn(CR_CARD, 'Recalcular CR');

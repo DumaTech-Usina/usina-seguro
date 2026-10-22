@@ -625,7 +625,7 @@ function header() {
 
 async function render() {
   if (proposalId === null || proposalId === '') {
-    notFound('Informe o identificador da proposta na URL.');
+    notFound('Abra a proposta a partir da lista de propostas.');
     return;
   }
 

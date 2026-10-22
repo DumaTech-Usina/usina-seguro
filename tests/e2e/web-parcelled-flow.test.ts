@@ -394,7 +394,7 @@ describe('registering a parcelled proposal (REQ-290 to REQ-296)', () => {
 
     const message = await nextSnackbar(0);
     expect(message).toContain('não pode ser recebida através de intermediária');
-    expect(message).toContain('REQ-296');
+    expect(message).not.toContain('REQ-296');
     expect(hidden('[data-panel="done"]')).toBe(true);
   });
 });
@@ -485,7 +485,7 @@ describe('a parcelled proposal awaiting issuance (REQ-254, REQ-297, REQ-299)', (
 
     const message = await nextSnackbar(0);
     expect(message).toContain('ao menos duas parcelas');
-    expect(message).toContain('REQ-292');
+    expect(message).not.toContain('REQ-292');
     expect((await callApi('GET', `/proposals/${id}`)).installments).toHaveLength(2);
   });
 
@@ -505,7 +505,7 @@ describe('a parcelled proposal awaiting issuance (REQ-254, REQ-297, REQ-299)', (
     submit('#form-worked-commission');
 
     const message = await nextSnackbar(0);
-    expect(message).toContain('REQ-296');
+    expect(message).not.toContain('REQ-296');
     expect((await callApi('GET', `/proposals/${id}`)).workedCommissionMode).toBe('INTEGRAL');
   });
 
@@ -589,7 +589,7 @@ describe('a parcelled policy (V2 section 9B)', () => {
 
     const message = await nextSnackbar(before);
     expect(message).toContain('CT das parcelas subsequentes');
-    expect(message).toContain('REQ-263');
+    expect(message).not.toContain('REQ-263');
   });
 
   it('informs both CRs and shows the payout of each installment (REQ-287, REQ-264, CA-254)', async () => {

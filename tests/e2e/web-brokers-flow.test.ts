@@ -200,7 +200,7 @@ describe('the brokers page (V2 section 9D)', () => {
     await vi.waitFor(() => {
       expect(snackbars()).toContain('Já existe um corretor cadastrado com este CPF.');
     });
-    expect(snackbars()).toContain('REQ-302');
+    expect(snackbars()).not.toContain('REQ-302');
 
     // Nothing was registered, and what was typed stays for correction.
     expect(await callApi('GET', '/brokers')).toHaveLength(1);
@@ -280,7 +280,7 @@ describe('the broker of a proposal and of its policy (REQ-307, REQ-308)', () => 
     submit('#form-proposal');
 
     await vi.waitFor(() => {
-      expect(snackbars()).toContain('brokerId');
+      expect(snackbars()).toContain('Informe o corretor da proposta.');
     });
     expect((await callApi('GET', '/proposals')).items).toEqual([]);
   });

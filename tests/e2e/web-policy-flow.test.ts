@@ -286,7 +286,7 @@ describe('the policy screen', () => {
       expect(snackbars().length).toBeGreaterThan(beforeRefusal);
     });
     expect(lastSnackbar()).toContain('Ajuste de comissão por apólice exige justificativa.');
-    expect(lastSnackbar()).toContain('REQ-067');
+    expect(lastSnackbar()).not.toContain('REQ-067');
 
     clickIn('Comissão', 'Ajustar comissão');
     answerDialog('#dialog-override', {
@@ -334,8 +334,9 @@ describe('the policy screen', () => {
     await openPolicy('does-not-exist');
 
     expect(text()).toContain('Apólice não encontrada');
-    // The sentence is the one src/i18n rendered for the 404.
-    expect(text()).toContain('does-not-exist');
+    // The sentence is the one src/i18n rendered for the 404, without the id.
+    expect(text()).toContain('Apólice não encontrada.');
+    expect(text()).not.toContain('does-not-exist');
   });
 });
 

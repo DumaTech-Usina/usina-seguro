@@ -223,7 +223,7 @@ describe('the clients page (V2 section 9E)', () => {
     await vi.waitFor(() => {
       expect(snackbars()).toContain('Já existe um cliente cadastrado com este CPF.');
     });
-    expect(snackbars()).toContain('REQ-312');
+    expect(snackbars()).not.toContain('REQ-312');
 
     expect((await callApi('GET', '/clients')).items).toHaveLength(1);
     expect(field('#form-client', 'name').value).toBe('Outra Pessoa');
@@ -371,7 +371,7 @@ describe('the client of a new proposal (REQ-317)', () => {
 
     submit('#form-proposal');
     await vi.waitFor(() => {
-      expect(snackbars()).toContain('brokerId');
+      expect(snackbars()).toContain('Informe o corretor da proposta.');
     });
 
     expect((await callApi('GET', `/clients?q=${cpfOf(78)}`)).items).toEqual([]);
